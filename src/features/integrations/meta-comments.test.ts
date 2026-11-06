@@ -115,11 +115,11 @@ test("complaints receive a shorter SLA than sales and general comments", () => {
 });
 
 test("comment list filters keep active defaults and expose closed history for all", () => {
-  assert.deepEqual(facebookCommentStatusesForQuery(undefined), ["pending_review", "escalated", "publishing"]);
-  assert.deepEqual(facebookCommentStatusesForQuery("workbench"), ["pending_review", "escalated", "publishing", "dismissed"]);
+  assert.deepEqual(facebookCommentStatusesForQuery(undefined), ["pending_review", "escalated", "publishing", "publish_uncertain"]);
+  assert.deepEqual(facebookCommentStatusesForQuery("workbench"), ["pending_review", "escalated", "publishing", "publish_uncertain", "dismissed"]);
   assert.deepEqual(facebookCommentStatusesForQuery("replied"), ["replied"]);
   assert.equal(facebookCommentStatusesForQuery("all"), null);
-  assert.deepEqual(facebookCommentStatusesForQuery("unknown"), ["pending_review", "escalated", "publishing"]);
+  assert.deepEqual(facebookCommentStatusesForQuery("unknown"), ["pending_review", "escalated", "publishing", "publish_uncertain"]);
 });
 
 test("Facebook task titles fit the database limit even for long Unicode names", () => {
@@ -160,9 +160,11 @@ test("draft and publish paths use status compare-and-set before external side ef
   const service = readFileSync("src/features/integrations/meta-comments.ts", "utf8");
   assert.match(service, /status: "publishing"/);
   assert.match(service, /facebookComment\.updateMany\(\{[\s\S]*?status: comment\.status,[\s\S]*?draft was being generated/);
-  assert.match(service, /A timeout\/network failure is ambiguous:[\s\S]*?Keep the durable `publishing` claim/);
+  assert.match(service, /A timeout\/network failure is ambiguous:[\s\S]*?distinct reconciliation-only state/);
   assert.match(service, /if \(!metaGraphFailureIsDefinite\(response\.status\)\)[\s\S]*?Facebook reply status is uncertain/);
   assert.match(service, /action: "dismiss" \| "reopen" \| "confirm_published" \| "return_to_review"/);
   assert.match(service, /data: \{ status: "publishing", draft_reply: message \}/);
   assert.match(service, /Manager confirmed that the uncertain Facebook reply was published/);
+  assert.match(service, /status: "publishing"[\s\S]*?status: "publish_uncertain"/);
+  assert.match(service, /current\.status !== "publish_uncertain" && reconciliation/);
 });

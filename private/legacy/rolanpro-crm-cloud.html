@@ -23620,7 +23620,7 @@ function facebookCommentIntentLabel(intent) {
   return ({sales:'Покупка / расчёт',question:'Вопрос',complaint:'Жалоба',praise:'Похвала',spam:'Спам',other:'Другое'})[intent] || 'Другое';
 }
 function facebookCommentStatusLabel(status) {
-  return ({pending_review:'Ждёт ответа',escalated:'Срочно менеджеру',publishing:'Публикуется…',replied:'Ответ опубликован',dismissed:'Закрыт'})[status] || status;
+  return ({pending_review:'Ждёт ответа',escalated:'Срочно менеджеру',publishing:'Публикуется…',publish_uncertain:'Нужно сверить с Facebook',replied:'Ответ опубликован',dismissed:'Закрыт'})[status] || status;
 }
 async function fetchFacebookComments(options = {}) {
   try {
@@ -23664,8 +23664,9 @@ function facebookCommentsInboxHtml() {
     ${facebookComments.length ? `<div class="space-y-3 mt-3">${facebookComments.map(item => {
       const urgent = item.status === 'escalated';
       const closed = item.status === 'dismissed';
-      const uncertain = item.status === 'publishing';
-      return `<article class="rounded-xl border p-3 ${urgent ? 'border-red-300 bg-red-50' : closed ? 'border-gray-200 bg-gray-50' : uncertain ? 'border-amber-300 bg-amber-50' : 'border-blue-100 bg-blue-50/40'}">
+      const inFlight = item.status === 'publishing';
+      const uncertain = item.status === 'publish_uncertain';
+      return `<article class="rounded-xl border p-3 ${urgent ? 'border-red-300 bg-red-50' : closed ? 'border-gray-200 bg-gray-50' : inFlight || uncertain ? 'border-amber-300 bg-amber-50' : 'border-blue-100 bg-blue-50/40'}">
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <b class="text-sm">${academyEsc(item.author_name)}</b>
           <span class="tag ${urgent ? 'bg-red-100 text-red-800' : 'bg-white text-blue-700'}">${academyEsc(facebookCommentIntentLabel(item.intent))}</span>
@@ -23675,11 +23676,13 @@ function facebookCommentsInboxHtml() {
         </div>
         <div class="text-sm mt-2 whitespace-pre-wrap">${academyEsc(item.message || 'Комментарий без текста — проверьте вложение в Facebook.')}</div>
         <label class="text-xs font-semibold mt-3 block" for="fb-comment-draft-${academyEsc(item.facebook_comment_id)}">Черновик публичного ответа</label>
-        <textarea id="fb-comment-draft-${academyEsc(item.facebook_comment_id)}" rows="3" class="mt-1" maxlength="2000" ${closed || uncertain ? 'disabled' : ''} oninput="facebookCommentRememberDraft('${academyEsc(jsQuote(item.facebook_comment_id))}', this.value)">${academyEsc(facebookCommentDraftValue(item))}</textarea>
+        <textarea id="fb-comment-draft-${academyEsc(item.facebook_comment_id)}" rows="3" class="mt-1" maxlength="2000" ${closed || inFlight || uncertain ? 'disabled' : ''} oninput="facebookCommentRememberDraft('${academyEsc(jsQuote(item.facebook_comment_id))}', this.value)">${academyEsc(facebookCommentDraftValue(item))}</textarea>
         <div class="flex flex-wrap gap-2 mt-2">
           ${closed
             ? `<button class="btn-primary text-sm" onclick="facebookCommentReopen('${academyEsc(jsQuote(item.facebook_comment_id))}')">↩ Вернуть на проверку</button>`
-            : uncertain
+            : inFlight
+              ? `<button class="btn-primary text-sm" disabled>Публикуется…</button>`
+              : uncertain
               ? `${item.permalink_url ? `<a class="btn-ghost text-sm" href="${academyEsc(item.permalink_url)}" target="_blank" rel="noopener">Проверить в Facebook ↗</a>` : ''}
                  <button class="btn-primary text-sm" onclick="facebookCommentConfirmPublished('${academyEsc(jsQuote(item.facebook_comment_id))}')">Ответ опубликован</button>
                  <button class="btn-ghost text-sm" onclick="facebookCommentReturnToReview('${academyEsc(jsQuote(item.facebook_comment_id))}')">Ответа нет · вернуть</button>`

@@ -6,6 +6,7 @@ export const FACEBOOK_COMMENT_STATUSES = [
   "pending_review",
   "escalated",
   "publishing",
+  "publish_uncertain",
   "replied",
   "dismissed",
 ] as const;
@@ -24,12 +25,12 @@ export type FacebookCommentIntent = (typeof FACEBOOK_COMMENT_INTENTS)[number];
 export function facebookCommentStatusesForQuery(value: string | null | undefined) {
   if (value === "all") return null;
   if (value === "workbench") {
-    return ["pending_review", "escalated", "publishing", "dismissed"] satisfies FacebookCommentStatus[];
+    return ["pending_review", "escalated", "publishing", "publish_uncertain", "dismissed"] satisfies FacebookCommentStatus[];
   }
   if (FACEBOOK_COMMENT_STATUSES.includes(value as FacebookCommentStatus)) {
     return [value as FacebookCommentStatus];
   }
-  return ["pending_review", "escalated", "publishing"] satisfies FacebookCommentStatus[];
+  return ["pending_review", "escalated", "publishing", "publish_uncertain"] satisfies FacebookCommentStatus[];
 }
 
 export function facebookCommentTaskTitle(intent: FacebookCommentIntent, authorName: string) {

@@ -232,7 +232,7 @@ export async function generateFacebookCommentDraft(input: {
   if (comment.status === "replied" || comment.status === "dismissed") {
     throw new MetaCommentError("comment_closed", 409, "This Facebook comment is already closed.");
   }
-  if (comment.status === "publishing") {
+  if (comment.status === "publishing" || comment.status === "publish_uncertain") {
     throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
   }
   if (comment.status !== "pending_review" && comment.status !== "escalated") {
@@ -359,10 +359,13 @@ export async function updateFacebookComment(input: {
     throw new MetaCommentError("comment_closed", 409, "A replied comment cannot be changed.");
   }
   const reconciliation = input.action === "confirm_published" || input.action === "return_to_review";
-  if (current.status === "publishing" && !reconciliation) {
-    throw new MetaCommentError("reply_in_progress", 409, "Reconcile the Facebook reply before changing this comment.");
+  if (current.status === "publishing") {
+    throw new MetaCommentError("reply_in_progress", 409, "Wait until the Facebook publishing request finishes.");
   }
-  if (current.status !== "publishing" && reconciliation) {
+  if (current.status === "publish_uncertain" && !reconciliation) {
+    throw new MetaCommentError("reply_uncertain", 409, "Reconcile the uncertain Facebook reply before changing this comment.");
+  }
+  if (current.status !== "publish_uncertain" && reconciliation) {
     throw new MetaCommentError("reply_not_uncertain", 409, "Only an uncertain Facebook reply can be reconciled.");
   }
   const status = input.action === "dismiss"
@@ -537,6 +540,7 @@ export async function publishFacebookCommentReply(input: {
   }
   if (comment.status === "dismissed") throw new MetaCommentError("comment_closed", 409, "Dismissed comments must be reopened before replying.");
   if (comment.status === "publishing") throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+  if (comment.status === "publish_uncertain") throw new MetaCommentError("reply_uncertain", 409, "Reconcile the uncertain Facebook reply before retrying.");
   if (comment.status !== "pending_review" && comment.status !== "escalated") {
     throw new MetaCommentError("comment_closed", 409, "This Facebook comment is not ready for a public reply.");
   }
@@ -564,6 +568,9 @@ export async function publishFacebookCommentReply(input: {
     if (latest?.status === "publishing") {
       throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
     }
+    if (latest?.status === "publish_uncertain") {
+      throw new MetaCommentError("reply_uncertain", 409, "Reconcile the uncertain Facebook reply before retrying.");
+    }
     throw new MetaCommentError("comment_changed", 409, "This Facebook comment changed. Refresh it before publishing.");
   }
   const url = new URL(`https://graph.facebook.com/${config.graphVersion}/${comment.external_comment_id}/comments`);
@@ -582,7 +589,12 @@ export async function publishFacebookCommentReply(input: {
     });
   } catch {
     // A timeout/network failure is ambiguous: Facebook may have accepted the
-    // reply. Keep the durable `publishing` claim so a retry cannot duplicate it.
+    // reply. Move the durable claim to a distinct reconciliation-only state so
+    // nobody can unlock it while the Graph request is still in flight.
+    await prisma.facebookComment.updateMany({
+      where: { facebook_comment_id: comment.facebook_comment_id, status: "publishing" },
+      data: { status: "publish_uncertain" },
+    });
     throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
   }
   const result = await response.json().catch(() => null) as { id?: unknown } | null;
@@ -590,6 +602,10 @@ export async function publishFacebookCommentReply(input: {
     if (!metaGraphFailureIsDefinite(response.status)) {
       // A server, timeout or throttling response is ambiguous: Facebook may
       // already have applied the write before the error reached us.
+      await prisma.facebookComment.updateMany({
+        where: { facebook_comment_id: comment.facebook_comment_id, status: "publishing" },
+        data: { status: "publish_uncertain" },
+      });
       throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
     }
     // An explicit client-side Graph rejection is safe to retry after restoring
@@ -601,7 +617,11 @@ export async function publishFacebookCommentReply(input: {
     throw new MetaCommentError("facebook_publish_failed", 502, "Facebook did not publish the reply.");
   }
   if (typeof result?.id !== "string") {
-    // A success response without a usable id is also ambiguous; keep claimed.
+    // A success response without a usable id is also ambiguous.
+    await prisma.facebookComment.updateMany({
+      where: { facebook_comment_id: comment.facebook_comment_id, status: "publishing" },
+      data: { status: "publish_uncertain" },
+    });
     throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
   }
   const publishedReplyId = metaObjectId(result.id, "reply_id");

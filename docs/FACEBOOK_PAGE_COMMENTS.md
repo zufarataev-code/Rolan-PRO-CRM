@@ -75,8 +75,10 @@ then publish one reviewed reply and verify it on Facebook.
 - Page tokens stay server-side; Graph publishing uses `appsecret_proof` and a
   10-second timeout.
 - Publishing first atomically claims the comment. A double-click or a second
-  manager cannot create a duplicate reply. Ambiguous network outcomes remain in
-  `publishing` for manual Facebook reconciliation instead of being retried. The
+  manager cannot create a duplicate reply. While the Graph request is in flight,
+  `publishing` is locked and has no manual actions. Only after an ambiguous
+  network outcome does it move to `publish_uncertain` for manual Facebook
+  reconciliation instead of being retried. The
   workbench then requires the manager to open Facebook and choose either
   **Reply published** or **No reply — return to review**.
 - A replied comment cannot be published twice. A dismissed comment must be
