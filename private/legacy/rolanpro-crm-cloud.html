@@ -43727,7 +43727,10 @@ async function cloudServerLogout() {
 
 function cloudScheduleSave() {
   clearTimeout(cloudSaveTimer);
-  cloudSaveTimer = setTimeout(cloudPersist, 700);
+  // The handle is cleared when the timer fires: a stale handle made
+  // cloudHasPendingChanges() true for the rest of the session, which froze
+  // the live updates after the first save (found 2026-11-06).
+  cloudSaveTimer = setTimeout(() => { cloudSaveTimer = null; cloudPersist(); }, 700);
 }
 
 function cloneCloudWorkspaceValue(value) {
@@ -43940,6 +43943,7 @@ async function cloudPersist(options = {}) {
 
 async function cloudPersistConfirmed() {
   clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = null;
   for (let attempt=0;attempt<50&&cloudSaveInFlight;attempt++) await new Promise(resolve=>setTimeout(resolve,100));
   if (cloudSaveInFlight) return false;
   try { return await cloudPersist({throwOnFailure:true}); }
