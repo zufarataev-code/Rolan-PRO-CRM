@@ -1788,6 +1788,7 @@ Validation: full suite 625/625, focused voice/mobile/HTML tests 40/40, TypeScrip
 ## 2026-11-06 — Facebook Page comments with reviewed CRM replies (local implementation)
 
 - Branch `codex/facebook-comment-agent-20261106`, based on `origin/main` `2dde7bf`.
+- PR #475: `https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/475`.
 - Extended the existing signed Meta Page callback with `feed` comment intake instead of introducing a competing webhook. Page-authored replies, edits, removals and unrelated events are ignored; `(page_id, external_comment_id)` plus a transaction lock makes retries idempotent.
 - Added `facebook_comments`, migration and authenticated Owner/Manager endpoints for listing, safe draft generation, explicit Lead creation, dismiss/reopen and public reply publication. Page token and app secret remain server-only and Graph publishing uses `appsecret_proof`.
 - The existing «Новые лиды» screen now shows a Facebook comment review queue. Complaints are escalated, spam is dismissed, non-spam creates a task/notification, and a public answer requires the manager to confirm the exact text. A created `facebook_comment` Lead stays in the canonical inbox and can continue to Project creation.
