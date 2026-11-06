@@ -3535,7 +3535,26 @@ function quickEntryDefaultForm(keep = {}) {
     client: '', phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '', paid: '', complexity: 'standard',
     lines: [quickEntryNewLine(keep)],
+    // Owner, 2026-11-06: прямые расходы проекта — аренда, доставка, бензин, другое — списываются в этот проект.
+    expenses: [],
   };
+}
+function quickEntryExpenses() { const f = quickEntryState().form; if (!Array.isArray(f.expenses)) f.expenses = []; return f.expenses; }
+const QUICK_ENTRY_EXPENSE_TYPES = [['rent', 'Аренда'], ['delivery', 'Доставка'], ['gas', 'Бензин'], ['equipment', 'Оборудование'], ['other', 'Другое']];
+function quickEntryAddExpense(type = 'other') {
+  quickEntryReadForm();
+  quickEntryExpenses().push({ key: uid(), type, label: '', amount: '' });
+  preservePositionForNextRender();
+  render();
+}
+function quickEntryRemoveExpense(j) {
+  quickEntryReadForm();
+  quickEntryExpenses().splice(j, 1);
+  preservePositionForNextRender();
+  render();
+}
+function quickEntryExpensesTotal(f = quickEntryState().form) {
+  return (Array.isArray(f.expenses) ? f.expenses : []).reduce((sum, e) => sum + Math.max(0, Number(e.amount) || 0), 0);
 }
 function quickEntryNewLine(keep = {}) {
   return {
@@ -3580,6 +3599,9 @@ function quickEntryReadForm() {
       const sid = v(`qe-l${i}-s${j}-supplyId`); if (sid != null) item.supplyId = sid;
       const qty = v(`qe-l${i}-s${j}-qty`); if (qty != null) item.qty = qty;
     });
+  });
+  quickEntryExpenses().forEach((e, j) => {
+    ['type', 'label', 'amount'].forEach(k => { const val = v(`qe-x${j}-${k}`); if (val != null) e[k] = val; });
   });
   return f;
 }
@@ -3898,6 +3920,13 @@ function quickEntryCommit() {
       line.hiredExpenseId = expense.id;
     }
   });
+  // Прямые расходы проекта (аренда, доставка, бензин, другое) — как в карточке «Прямые расходы».
+  (Array.isArray(f.expenses) ? f.expenses : []).forEach(e => {
+    const amount = Math.max(0, Number(e.amount) || 0);
+    if (!amount) return;
+    const typeLabel = (QUICK_ENTRY_EXPENSE_TYPES.find(([value]) => value === e.type) || ['other', 'Другое'])[1];
+    o.extraExpenses.push({ id: uid(), type: QUICK_ENTRY_EXPENSE_TYPES.some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now });
+  });
   syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
   projectQuickSyncProjectInstallers(o);
@@ -3982,7 +4011,8 @@ function renderQuickEntry() {
     const calc = quickEntryLineCalc(line);
     const hiredOn = Number(line.hired) > 0;
     const calcParts = [];
-    if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty} ${calc.n > 1 ? `÷ ${calc.n}` : ''})</span>`);
+    const seniorInCrew = (line.installers || []).some(id => typeof teamIsSeniorInstaller === 'function' && teamIsSeniorInstaller(getUser(id)));
+    if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty} ${calc.n > 1 ? `÷ ${calc.n}` : ''}${seniorInCrew ? ` · ⭐ старшему +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} %` : ''})</span>`);
     if (hiredOn) calcParts.push(`Наёмный: <b>${fmtMoney(calc.hired)}</b>`);
     if (calc.film > 0) calcParts.push(`Плёнка: <b>${fmtMoney(calc.film)}</b> <span>(с отходом, по закупке)</span>`);
     if (calc.supplies > 0) calcParts.push(`Расходники: <b>${fmtMoney(calc.supplies)}</b>${!sized && offering && serviceOfferingHasSupplies(offering) ? ` <span>(по норме услуги: ${academyEsc(serviceOfferingSupplies(offering).filter(x => x.supply).map(x => `${x.supply.name} ${x.qtyPerUnit} ${supplyUnitLabel(x.supply.unit)}/${serviceOfferingUnitShort(offering)}`).join(', '))})</span>` : ''}`);
@@ -4018,7 +4048,8 @@ function renderQuickEntry() {
   const manager = getUser(f.manager);
   const managerPct = manager?.payConfig?.type === 'commission' ? Math.max(0, Number(manager.payConfig.commissionPct) || 0) : Math.max(0, Number(db.settings.pricingDefaults?.managerPct) || 0);
   const managerPay = total * managerPct / 100;
-  const previewMargin = total - material - labor - managerPay;
+  const projectExpenses = quickEntryExpensesTotal(f);
+  const previewMargin = total - material - labor - managerPay - projectExpenses;
   const dates = lines.map(l => projectQuickDateValue(l.date)).filter(Boolean).sort();
   const paidShown = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
   const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'){event.preventDefault();quickEntryCommit();}">
@@ -4034,6 +4065,16 @@ function renderQuickEntry() {
     <div class="qe-form-head"><span class="qe-kicker">Услуги проекта · ${lines.length}</span><span class="qe-muted">направление → услуга → материал прикреплён к услуге · ставки из «Ставки и расходы», цены из «Услуги и цены»</span></div>
     ${lines.map(lineHtml).join('')}
     <button type="button" class="qe-add" onclick="quickEntryAddLine()">+ Добавить услугу</button>
+    <div class="qe-expenses">
+      <div class="qe-expenses-head"><span>Расходы проекта</span><small>аренда туры, доставка, бензин — списываются в этот проект и уменьшают маржу</small></div>
+      ${quickEntryExpenses().map((e, j) => `<div class="qe-expense">
+        <select id="qe-x${j}-type">${QUICK_ENTRY_EXPENSE_TYPES.map(([value, label]) => opt(value, label, e.type)).join('')}</select>
+        <input id="qe-x${j}-label" value="${academyEsc(e.label || '')}" placeholder="что именно · например, тура 2 дня">
+        <input id="qe-x${j}-amount" type="number" min="0" step="1" value="${academyEsc(e.amount)}" placeholder="$" onchange="quickEntryReadForm(); preservePositionForNextRender(); render();">
+        <button type="button" class="qe-x" onclick="quickEntryRemoveExpense(${j})" title="Убрать">×</button>
+      </div>`).join('')}
+      <div class="qe-expense-add">${QUICK_ENTRY_EXPENSE_TYPES.map(([value, label]) => `<button type="button" class="qe-link" onclick="quickEntryAddExpense('${value}')">+ ${label.toLowerCase()}</button>`).join('')}</div>
+    </div>
     <div class="qe-grid qe-grid-c">
       <label>Менеджер<select id="qe-manager" ${owner ? '' : 'disabled title="Менеджер создаёт исторический проект только на себя"'} onchange="quickEntrySet('manager', this.value)">${managerChoices.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, f.manager)).join('')}</select></label>
       <label>Замерщик<select id="qe-measurer" onchange="quickEntrySet('measurer', this.value)"><option value="">не было замера</option>${measurers.map(u => opt(u.id, `${u.name}${u.role === 'owner' ? ' · владелец' : ''}`, f.measurer)).join('')}</select></label>
@@ -4047,6 +4088,7 @@ function renderQuickEntry() {
     <div class="qe-bill">
       <div><small>Чек проекта</small><b class="qe-bill-big">${fmtMoney(total)}</b></div>
       <div><small>Материалы</small><b>${fmtMoney(material)}</b></div>
+      ${projectExpenses > 0 ? `<div><small>Расходы проекта</small><b>${fmtMoney(projectExpenses)}</b></div>` : ''}
       <div><small>Зарплата</small><b>${fmtMoney(labor + managerPay)}</b><small>монтаж и наём ${fmtMoney(labor)}${managerPay > 0 ? ` · менеджер ${fmtMoney(managerPay)}` : ''}</small></div>
       <div><small>Маржа</small><b class="${total > 0 && previewMargin / total >= 0.2 ? 'qe-ok' : 'qe-warn'}">${fmtMoney(previewMargin)}${total > 0 ? ` · ${(previewMargin / total * 100).toFixed(0)} %` : ''}</b></div>
       <div><small>Срок</small><b>${dates.length ? `${fmtDate(dates[0])}${dates.length > 1 && dates[dates.length - 1] !== dates[0] ? ` → ${fmtDate(dates[dates.length - 1])}` : ''} · ${lines.length} ${projectPlural(lines.length, 'выезд', 'выезда', 'выездов')}` : '—'}</b></div>
@@ -4156,6 +4198,7 @@ function renderQuickEntry() {
           <div class="qe-row"><span>Наёмный</span><b>фикс на строке услуги → прямой расход</b></div>
           <div class="qe-row"><span>Менеджер на проценте</span><b>% от выручки проекта${!(Number(pd.managerPct) > 0) ? '' : ` (по умолчанию ${pd.managerPct} %)`}</b></div>
           <div class="qe-row"><span>Оклады</span><b>в постоянных, не на проекте</b></div>
+          <div class="qe-row"><span>Расходы проекта</span><b>аренда, доставка, бензин, другое — прямо в проект</b></div>
           <div class="qe-row"><span>Плёнка</span><b>объём + отход плёнки × закупка склада</b></div>
           <div class="qe-row"><span>Расходники</span><b>количество × цена со склада</b></div>
           <div class="qe-muted">Все ставки — «Ставки и расходы», цены и коридоры — «Услуги и цены», закупка — «Склад».</div>

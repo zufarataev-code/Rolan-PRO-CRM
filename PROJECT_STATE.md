@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Быстрый ввод: прямые расходы проекта, подпись старшего (Claude, PR pending)
+
+- Owner (screenshot): the senior's 10 % was not in the crew payout — because nobody was marked senior; and the one-screen form had no place for project expenses («аренда, доставка и ещё что-нибудь — списываем прямо в этот проект, так точнее»).
+- Done on `claude/quick-entry-project-expenses`: form model `expenses[]` (`QUICK_ENTRY_EXPENSE_TYPES`: rent, delivery, gas, equipment, other; `quickEntryAddExpense/RemoveExpense/ExpensesTotal`, read via `qe-x{j}-type/label/amount`); block «Расходы проекта» under the services with quick «+ аренда / + доставка / + бензин / + оборудование / + другое»; the bill shows «Расходы проекта» and the preview margin subtracts them; `quickEntryCommit` writes them to `o.extraExpenses` as `projectDirect` (an explicit rent replaces the complexity default via `orderRentExpense`, gas via its own function, the rest through `orderManualExpensesTotal` — no double count); the crew line says «⭐ старшему +N %» when a senior is in the crew; «Как считает CRM» gained the row. `quickEntryLineCalc` already applied `installerSeniorFactor` — the owner's $750 case simply had no senior.
+- Verification: `quick-entry-panel.test.ts` 24/24 (+1), supply-norms and no-film suites green; `node --check` both legacy files.
+
 ## 2026-11-06 — «Старший монтажник» как видимая роль (Claude, PR pending)
 
 - Owner: «у нас нет роли старшего монтажника — как система поймёт, кто есть кто». The senior flag existed but nothing showed it.
