@@ -1964,8 +1964,7 @@ function projectFeedHtml(o, c, u, ctx) {
 
   return `<div class="project-feed">
     ${o.canonicalLeadId ? `<div data-project-website-updates="${academyEsc(o.canonicalLeadId)}">${websiteLeadUpdatesHtml(o.canonicalLeadId)}</div>` : ''}
-    ${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}
-    ${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}
+    ${primary || money ? `<div class="project-feed-top">${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}</div>` : ''}
     ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
     ${projectFeedSection('Замер', measureBody, { id: 'measure', chip: measureChip, button: projectFeedBtn(windows.length ? 'Проверить размеры' : 'Внести размеры', measureAction, windows.length ? 'ghost' : 'primary') })}
     ${money && filmRows.length ? projectFeedSection('Материалы', filmRows.join(''), { id: 'film', button: projectFeedBtn('Склад и закупка', 'openProjectPurchaseRequests()') }) : ''}

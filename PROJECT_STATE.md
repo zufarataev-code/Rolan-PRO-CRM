@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Карточка проекта: яркие этапы, компактный «Следующий шаг» и «Состав» (Claude, PR pending)
+
+- Owner (screenshot): stage buttons looked pale/translucent; below them the old layout stayed — a full-width blue «Назначить замер» band, then «До монтажа», then a loose «Состав проекта».
+- Done on `claude/project-card-color-compact` (CSS + one markup wrap): `.order-clean-stage-btn` — next = 10 % tint of its colour, done = 22 % tint with a dense border, current = fully filled with white text, disabled buttons keep colour; `.project-feed-top` grid puts «Следующий шаг» (compact row, 44 px action card, readable sub-line) and the collapsed «До монтажа» (`<details>`, ≤260 px, full width when opened) side by side, stacked on phones; `.project-feed-services` tightened — cashier map, direction tile, service rows and footer paddings reduced.
+- Verification: `project-feed.test.ts`, `project-stages.test.ts` 10/10; `node --check` both legacy files.
+
 ## 2026-11-06 — Живое обновление замирало после первого сохранения (Claude, PR pending)
 
 - Found while changing the tax profile on production: `cloudScheduleSave` never cleared `cloudSaveTimer` after the debounce fired, so `cloudHasPendingChanges()` stayed true for the rest of the session and `cloudCheckForUpdates` (#469) treated the tab as busy forever — no remote pulls, no release reload after the first save.
