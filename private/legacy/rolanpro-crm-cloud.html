@@ -22704,6 +22704,10 @@ function openTeamMemberEdit(userId) {
              ? 'Свою роль владельца менять нельзя, чтобы не потерять доступ к CRM.'
              : 'Роль сотрудника может изменить только владелец.'}</div>`}
 
+      ${isOwner && u.role === 'installer' ? `<!-- Owner, 2026-11-06: старший монтажник виден и ставится в карточке, не только в «Ставках». -->
+      <label class="text-sm mt-3" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="tm-edit-senior" style="width:auto" ${u.installerLevel === 'senior' ? 'checked' : ''}> Старший монтажник · +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к его доле</label>
+      <div class="text-xs text-gray-400 mt-1">Отвечает за приём объекта и сдачу. Процент надбавки — в «Ставки и расходы».</div>` : ''}
+
       ${isOwner ? `<button class="btn-ghost text-sm w-full mt-2" onclick="openTeamMemberAccess('${u.id}')">🔑 Изменить пароль и доступ</button>` : ''}
 
       <div id="tm-edit-error" class="text-sm text-red-600 mt-3 hidden"></div>
@@ -22888,6 +22892,8 @@ async function submitTeamMemberEdit(userId) {
   u.name = name;
   u.phone = phone;
   u.notifySms = document.getElementById('tm-edit-sms')?.checked !== false;
+  const seniorBox = document.getElementById('tm-edit-senior');
+  if (seniorBox && isOwner) { if (seniorBox.checked) u.installerLevel = 'senior'; else delete u.installerLevel; }
   if (photo) u.photo = photo;
   else delete u.photo;
 

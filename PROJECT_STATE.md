@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — «Старший монтажник» в карточке сотрудника (Claude, PR pending)
+
+- Owner: «у нас нет роли старшего монтажника, которому 10 % начисляют от монтажного фонда». The role exists (`installerLevel: 'senior'`, `seniorInstallerBonusPct` 10 in «Ставки и расходы», `installerSeniorFactor` = own equal share + pct of it, 1000 → 500/550 per the owner's 2026-10-24 decision) but was invisible in «Команда»; nobody is marked senior on production.
+- Done on `claude/senior-installer-in-team-card`: the owner's installer card shows «Старший монтажник · +N % к его доле» (`tm-edit-senior`), saved by `submitTeamMemberEdit`. Formula unchanged — the owner is asked whether the bonus is 10 % of his share (550) or of the whole installation fund (600).
+- Verification: `staff-sms-notifications.test.ts` 3/3; HTML scripts `node --check`.
+
 ## 2026-11-06 — SMS-уведомления сотрудникам на телефон из карточки (Claude, PR pending)
 
 - Owner: «у каждого сотрудника должна быть форма — телефонный номер в карточке, на него он будет получать уведомления; сейчас этого нет». The phone field already existed in the team card; notifications went only in-app and to Telegram (chat ID, which most staff lack).
