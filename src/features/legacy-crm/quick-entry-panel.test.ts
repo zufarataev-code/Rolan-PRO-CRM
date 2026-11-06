@@ -115,7 +115,7 @@ test('canonical editor supports many services with their own dates, crew, suppli
   const updater = fn(html, 'projectEstimateUpdateQuickLine');
   assert.match(updater, /!serviceOfferingNeedsSizes\(offering\)/);
   assert.match(updater, /projectOfferingLine\(offering/);
-  assert.match(fn(html, 'projectQuickCompletionIssues'), /line\.unit === 'sqft' && !line\.catalogId/, 'only a film service requires warehouse film');
+  assert.match(fn(html, 'projectQuickCompletionIssues'), /projectLineUsesFilm\(line\) && !line\.catalogId/, 'only a film service requires warehouse film');
   assert.doesNotMatch(renderer, /openProjectEstimateWorkspace/, 'a historical import cannot enter the client proposal flow');
   assert.doesNotMatch(renderer, /сформировать КП/, 'the import UI must not advertise a retroactive proposal');
   const close = fn(html, 'closeQuickProjectAsCompletedWith');
