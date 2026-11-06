@@ -5,6 +5,7 @@ export const FACEBOOK_COMMENT_ACTION = "integration.facebook_comment.received";
 export const FACEBOOK_COMMENT_STATUSES = [
   "pending_review",
   "escalated",
+  "publishing",
   "replied",
   "dismissed",
 ] as const;

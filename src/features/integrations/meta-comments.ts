@@ -189,14 +189,14 @@ export async function listFacebookComments(input: {
   status?: string | null;
   limit?: number;
 }) {
-  const allowedStatuses = new Set(["pending_review", "escalated", "replied", "dismissed", "all"]);
+  const allowedStatuses = new Set(["pending_review", "escalated", "publishing", "replied", "dismissed", "all"]);
   const status = allowedStatuses.has(input.status || "") ? input.status : null;
   const items = await prisma.facebookComment.findMany({
     where: {
       ...(input.managerId ? { assigned_to: input.managerId } : {}),
       ...(status && status !== "all"
         ? { status }
-        : { status: { in: ["pending_review", "escalated"] } }),
+        : { status: { in: ["pending_review", "escalated", "publishing"] } }),
     },
     include: {
       assignee: { select: { user_id: true, full_name: true } },
@@ -335,22 +335,58 @@ export async function updateFacebookComment(input: {
 }) {
   const current = await prisma.facebookComment.findFirst({
     where: facebookCommentAccessWhere(input.commentId, input.managerId),
-    select: { facebook_comment_id: true, status: true },
+    select: {
+      facebook_comment_id: true,
+      status: true,
+      intent: true,
+      author_name: true,
+      message: true,
+      assigned_to: true,
+    },
   });
   if (!current) throw new MetaCommentError("not_found", 404, "Facebook comment was not found.");
   if (current.status === "replied") throw new MetaCommentError("comment_closed", 409, "A replied comment cannot be reopened or dismissed.");
+  if (current.status === "publishing") throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
   const status = input.action === "dismiss" ? "dismissed" : "pending_review";
   const now = new Date();
-  await prisma.$transaction([
-    prisma.facebookComment.update({
+  const dueAt = input.action === "reopen"
+    ? facebookCommentDueAt(current.intent as FacebookCommentIntent, now)
+    : null;
+  await prisma.$transaction(async (tx) => {
+    await tx.facebookComment.update({
       where: { facebook_comment_id: current.facebook_comment_id },
-      data: { status, dismissed_at: status === "dismissed" ? now : null },
-    }),
-    prisma.task.updateMany({
-      where: { entity_type: "facebook_comment", entity_id: current.facebook_comment_id, status: { in: ["open", "in_progress"] } },
-      data: status === "dismissed" ? { status: "done", completed_at: now } : { status: "open", completed_at: null },
-    }),
-    prisma.activityLog.create({
+      data: {
+        status,
+        due_at: dueAt,
+        dismissed_at: status === "dismissed" ? now : null,
+      },
+    });
+    const tasks = await tx.task.updateMany({
+      where: {
+        entity_type: "facebook_comment",
+        entity_id: current.facebook_comment_id,
+        status: { in: ["open", "in_progress", "done"] },
+      },
+      data: status === "dismissed"
+        ? { status: "done", completed_at: now }
+        : { status: "open", priority: taskPriority(current.intent as FacebookCommentIntent), due_at: dueAt, completed_at: null },
+    });
+    if (input.action === "reopen" && tasks.count === 0) {
+      await tx.task.create({
+        data: {
+          entity_type: "facebook_comment",
+          entity_id: current.facebook_comment_id,
+          title: taskTitle(current.intent as FacebookCommentIntent, current.author_name),
+          description: current.message || "Комментарий без текста — проверьте вложение в Facebook.",
+          status: "open",
+          priority: taskPriority(current.intent as FacebookCommentIntent),
+          due_at: dueAt,
+          assigned_to: current.assigned_to,
+          created_by: input.actorUserId,
+        },
+      });
+    }
+    await tx.activityLog.create({
       data: {
         actor_user_id: input.actorUserId,
         entity_type: "facebook_comment",
@@ -358,8 +394,8 @@ export async function updateFacebookComment(input: {
         action_key: `integration.facebook_comment.${input.action}`,
         message: `Facebook comment ${input.action === "dismiss" ? "dismissed" : "reopened"}.`,
       },
-    }),
-  ]);
+    });
+  });
   return { facebook_comment_id: current.facebook_comment_id, status };
 }
 
@@ -462,27 +498,64 @@ export async function publishFacebookCommentReply(input: {
     return { facebook_comment_id: comment.facebook_comment_id, status: "replied", duplicate: true };
   }
   if (comment.status === "dismissed") throw new MetaCommentError("comment_closed", 409, "Dismissed comments must be reopened before replying.");
+  if (comment.status === "publishing") throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+  if (comment.status !== "pending_review" && comment.status !== "escalated") {
+    throw new MetaCommentError("comment_closed", 409, "This Facebook comment is not ready for a public reply.");
+  }
 
   const config = metaCommentConfig();
   if (!config.publishingConfigured || comment.page_id !== config.pageId) {
     throw new MetaCommentError("integration_not_configured", 503, "Facebook comment publishing is not configured.");
   }
   metaObjectId(comment.external_comment_id, "comment_id");
+  const claim = await prisma.facebookComment.updateMany({
+    where: {
+      ...facebookCommentAccessWhere(input.commentId, input.managerId),
+      status: comment.status,
+    },
+    data: { status: "publishing" },
+  });
+  if (claim.count !== 1) {
+    const latest = await prisma.facebookComment.findFirst({
+      where: facebookCommentAccessWhere(input.commentId, input.managerId),
+      select: { status: true },
+    });
+    if (latest?.status === "replied") {
+      return { facebook_comment_id: comment.facebook_comment_id, status: "replied", duplicate: true };
+    }
+    throw new MetaCommentError("reply_in_progress", 409, "A Facebook reply is already being published.");
+  }
   const url = new URL(`https://graph.facebook.com/${config.graphVersion}/${comment.external_comment_id}/comments`);
   url.searchParams.set("appsecret_proof", createHmac("sha256", config.appSecret).update(config.pageAccessToken).digest("hex"));
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${config.pageAccessToken}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({ message }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.pageAccessToken}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ message }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // A timeout/network failure is ambiguous: Facebook may have accepted the
+    // reply. Keep the durable `publishing` claim so a retry cannot duplicate it.
+    throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
+  }
   const result = await response.json().catch(() => null) as { id?: unknown } | null;
-  if (!response.ok || typeof result?.id !== "string") {
+  if (!response.ok) {
+    // A definite Graph API rejection is safe to retry after restoring the queue.
+    await prisma.facebookComment.updateMany({
+      where: { facebook_comment_id: comment.facebook_comment_id, status: "publishing" },
+      data: { status: comment.status },
+    });
     throw new MetaCommentError("facebook_publish_failed", 502, "Facebook did not publish the reply.");
+  }
+  if (typeof result?.id !== "string") {
+    // A success response without a usable id is also ambiguous; keep claimed.
+    throw new MetaCommentError("facebook_publish_uncertain", 502, "Facebook reply status is uncertain and needs reconciliation.");
   }
   const publishedReplyId = metaObjectId(result.id, "reply_id");
   const now = new Date();

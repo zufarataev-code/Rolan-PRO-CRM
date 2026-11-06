@@ -21,12 +21,20 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const commentConfig = metaCommentConfig();
   const secret = commentConfig.appSecret;
-  const token = process.env.META_LEAD_ADS_PAGE_ACCESS_TOKEN?.trim()
-    || process.env.META_COMMENTS_PAGE_ACCESS_TOKEN?.trim()
-    || "";
+  const leadSecret = process.env.META_LEAD_ADS_APP_SECRET?.trim() || "";
+  const leadVerifyToken = process.env.META_LEAD_ADS_VERIFY_TOKEN?.trim() || "";
+  const leadToken = process.env.META_LEAD_ADS_PAGE_ACCESS_TOKEN?.trim() || "";
+  const leadPageId = process.env.META_LEAD_ADS_PAGE_ID?.trim() || "";
   const pageId = commentConfig.pageId;
   const forms = process.env.META_LEAD_ADS_FORM_IDS?.split(",").map(value => value.trim()).filter(Boolean) ?? [];
-  if (!secret || !pageId || (!token && forms.length > 0)) return NextResponse.json({ ok: false, error: "integration_not_configured" }, { status: 503 });
+  const leadValuesPresent = [leadSecret, leadVerifyToken, leadToken, leadPageId, ...forms].some(Boolean);
+  const leadConfigured = Boolean(leadSecret && leadVerifyToken && leadToken && leadPageId && forms.length);
+  if (
+    !secret ||
+    !pageId ||
+    (leadValuesPresent && !leadConfigured) ||
+    (!leadConfigured && !commentConfig.webhookConfigured)
+  ) return NextResponse.json({ ok: false, error: "integration_not_configured" }, { status: 503 });
   if (Number(request.headers.get("content-length")) > MAX_BODY) return new NextResponse(null, { status: 413 });
   const chunks: Uint8Array[] = [], reader = request.body?.getReader();
   let bytes = 0;
@@ -43,10 +51,10 @@ export async function POST(request: Request) {
   try { input = JSON.parse(raw.toString("utf8")); } catch { return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
   try {
     metaId(pageId); forms.forEach(metaId);
-    const notifications = metaLeadNotifications(input, pageId, forms);
+    const notifications = leadConfigured ? metaLeadNotifications(input, pageId, forms) : [];
     const comments = metaCommentNotifications(input, pageId);
     // shortcut: synchronous reads; use a durable queue if batches exceed Meta's response window.
-    for (const notification of notifications) await importMetaLead(notification, token, secret);
+    for (const notification of notifications) await importMetaLead(notification, leadToken, leadSecret);
     for (const comment of comments) await ingestMetaComment(comment);
     // Acknowledge only after every scoped lead commits; Meta can retry partial batches safely.
     return NextResponse.json({ ok: true, received: notifications.length, comments_received: comments.length });

@@ -73,8 +73,11 @@ then publish one reviewed reply and verify it on Facebook.
   retries idempotent.
 - Page tokens stay server-side; Graph publishing uses `appsecret_proof` and a
   10-second timeout.
+- Publishing first atomically claims the comment. A double-click or a second
+  manager cannot create a duplicate reply. Ambiguous network outcomes remain in
+  `publishing` for manual Facebook reconciliation instead of being retried.
 - A replied comment cannot be published twice. A dismissed comment must be
-  reopened before replying.
+  reopened before replying; reopening also restores or creates its manager task.
 - Public sending is an explicit manager action, never a background AI action.
 
 ## Release check

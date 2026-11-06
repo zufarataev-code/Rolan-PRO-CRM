@@ -23619,7 +23619,7 @@ function facebookCommentIntentLabel(intent) {
   return ({sales:'Покупка / расчёт',question:'Вопрос',complaint:'Жалоба',praise:'Похвала',spam:'Спам',other:'Другое'})[intent] || 'Другое';
 }
 function facebookCommentStatusLabel(status) {
-  return ({pending_review:'Ждёт ответа',escalated:'Срочно менеджеру',replied:'Ответ опубликован',dismissed:'Закрыт'})[status] || status;
+  return ({pending_review:'Ждёт ответа',escalated:'Срочно менеджеру',publishing:'Публикуется…',replied:'Ответ опубликован',dismissed:'Закрыт'})[status] || status;
 }
 async function fetchFacebookComments(options = {}) {
   try {
@@ -23665,7 +23665,7 @@ function facebookCommentsInboxHtml() {
           <button class="btn-ghost text-sm" onclick="facebookCommentGenerateDraft('${academyEsc(jsQuote(item.facebook_comment_id))}')">✨ Обновить черновик</button>
           ${item.lead ? `<span class="tag bg-emerald-50 text-emerald-700">Лид создан · ${academyEsc(item.lead.lead_code || item.lead.name)}</span>` : `<button class="btn-ghost text-sm" onclick="facebookCommentCreateLead('${academyEsc(jsQuote(item.facebook_comment_id))}')">➕ Создать лид</button>`}
           <button class="btn-ghost text-sm text-gray-500" onclick="facebookCommentDismiss('${academyEsc(jsQuote(item.facebook_comment_id))}')">Закрыть без ответа</button>
-          <button class="btn-primary text-sm" onclick="facebookCommentPublish('${academyEsc(jsQuote(item.facebook_comment_id))}')">Проверил · опубликовать</button>
+          <button class="btn-primary text-sm" ${item.status === 'publishing' ? 'disabled' : ''} onclick="facebookCommentPublish('${academyEsc(jsQuote(item.facebook_comment_id))}')">${item.status === 'publishing' ? 'Публикуется…' : 'Проверил · опубликовать'}</button>
         </div>
       </article>`;
     }).join('')}</div>` : `<div class="text-sm text-gray-500 mt-3">Новых комментариев для проверки нет.</div>`}

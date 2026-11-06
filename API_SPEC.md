@@ -1044,7 +1044,7 @@ Purpose:
 
 Query params:
 
-- `status`: `pending_review`, `escalated`, `replied`, `dismissed`, or `all`
+- `status`: `pending_review`, `escalated`, `publishing`, `replied`, `dismissed`, or `all`
 - `limit`: 1-100, default 50
 
 ### `POST /api/v1/integrations/facebook-comments/{commentId}/draft`
