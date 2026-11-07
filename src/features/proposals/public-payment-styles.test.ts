@@ -15,3 +15,11 @@ test('the payment and warranty sections are styled as part of the proposal docum
   assert.match(css, /\.proposal-page-shell \.proposal-payment-section button \{[^}]*background: var\(--rp-blue\);/);
   assert.match(css, /\.proposal-page-shell \.proposal-payment-section button:disabled \{[^}]*cursor: not-allowed;/);
 });
+
+test('a selected card payment shows one main «Pay $X by card» button into Stripe, not «Selected» plus a small link', () => {
+  const ui = readFileSync('src/components/public-payment-options.tsx', 'utf8');
+  assert.match(ui, /className="proposal-pay-link"/);
+  assert.match(ui, /`Pay \$\{formatMoney\(option\.payable_amount, data\.currency\)\} by card →`/);
+  assert.match(ui, /!paid && !\(selected && option\.method === "payment_system" && option\.payment_link\) \?/);
+  assert.match(css, /\.proposal-payment-section \.proposal-pay-link \{[^}]*background: var\(--rp-navy\);/);
+});

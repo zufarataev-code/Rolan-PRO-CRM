@@ -21,6 +21,13 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - The regression failed against the old workflow and passes with this fix. It runs the generated remote script against a disposable local environment file, verifies all four saved IDs, preserves unrelated configuration, checks mode 0600, and retains the secret-quoting checks. Full unit suite **1084/1084**, TypeScript, production build and `git diff --check` passed locally.
 - Runtime was separately repaired and verified earlier with these four IDs. This branch's deployment fix awaits PR review, published-head CI, merge and deployment. Full weekend-form import still requires a genuine enquiry. Next: review this PR, then follow the separately authorized release workflow and verify the deployed form list.
 
+## 2026-11-07 — КП клиента: оплата картой — одна главная кнопка (Claude, PR pending)
+
+- Live check of #479 in the browser pane: the payment block is now readable. Remaining snag — after choosing the card the card showed a big «Selected» button and the actual way into Stripe as a small «Continue to secure payment» link beside it.
+- Done on `claude/proposal-card-pay-button`: when the card method is selected and a Stripe link exists, the «Selected» button is hidden and the link becomes the main navy button «Pay $X by card →» / «Оплатить $X картой →» (`.proposal-pay-link`). Zelle and bank transfer unchanged.
+- Note: the browser pane showed the old CSS after deploy until a cache-busting reload — clients who opened the proposal earlier may need a refresh.
+- Verification: `public-payment-styles.test.ts` 2/2; `tsc --noEmit` clean for the component.
+
 ## 2026-11-06 — КП клиента: блок оплаты был почти невидим (Claude, PR pending)
 
 - Owner asked to see the proposal the way the client sees it. In the built-in browser the «Payment» and «Warranty» sections after the document rendered as pale text and unstyled buttons: `PublicPaymentOptions` / `PublicWarrantySummary` use `proposal-section`, `proposal-section-kicker`, `proposal-payment-section` classes that no stylesheet defined, so they inherited the landing page's light `--ink` on the light `#f2f5f7` shell.

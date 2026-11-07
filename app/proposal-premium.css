@@ -902,6 +902,16 @@
   cursor: pointer;
 }
 .proposal-page-shell .proposal-payment-section button:hover:not(:disabled) { background: #53c3ee; }
+.proposal-page-shell .proposal-payment-section .proposal-pay-link {
+  min-height: 46px;
+  padding: 13px 22px;
+  background: var(--rp-navy);
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-decoration: none;
+}
+.proposal-page-shell .proposal-payment-section .proposal-pay-link:hover { background: var(--rp-navy-deep); }
 .proposal-page-shell .proposal-payment-section button:disabled {
   background: #e6edf2;
   color: var(--rp-muted);
