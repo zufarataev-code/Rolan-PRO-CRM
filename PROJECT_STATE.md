@@ -7,7 +7,7 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Task owner: Codex, existing branch `codex/rolan-prime-catalog-20261107`, PR #481. Owner requested that every reflective privacy product remain in `Privacy Film` and also appear in the Solar catalog under the `Зеркальная` subtype, without duplicate product records.
 - BLACK SHADOW BS 05/15/25, SILVER VEIL SV 05/15/35/50/60, CHROME EDGE CE 20/35, BRONZE VEIL BV 20/35 and SILVER FORCE SF 20/35 now keep `privacy` as their home category and receive `solar` as an additional category. WHITE MATTE PRIME remains Privacy + Decorative and is not classified as Solar reflective.
 - Project/service selectors now honor a film's additional categories, so one stable film record can be selected from either Privacy or Solar. The relational catalog mirrors this with `additional_category_codes` and the `SOLAR_CONTROL` capability tag.
-- Verification: scoped catalog/service/roll tests **59/59**, full suite **1086/1086**, TypeScript, Prisma validation, production build, CSV structure and `git diff --check` pass. No production deployment or live database write was attempted.
+- Verification after synchronizing with current `origin/main`: scoped catalog/service/roll tests **59/59**, full suite **1089/1089**, TypeScript, Prisma validation, production build, CSV structure and `git diff --check` pass. No production deployment or live database write was attempted.
 
 ## 2026-11-07 — ROLANPRO PRIME product catalog
 
