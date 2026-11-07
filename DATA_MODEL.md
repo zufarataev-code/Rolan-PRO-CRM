@@ -300,6 +300,47 @@ Notes:
 - Activity log should support the project timeline and audit trail.
 - Important schedule, assignment, and status changes should generate activity records.
 
+### `Facebook_Comments`
+
+Stores one signed Meta Page comment and its manager-review lifecycle.
+
+Suggested fields:
+
+- `facebook_comment_id`
+- `page_id`
+- `external_comment_id`
+- `post_id`
+- `parent_comment_id`
+- `author_id`
+- `author_name`
+- `message`
+- `intent`
+- `status`
+- `draft_reply`
+- `published_reply_id`
+- `published_reply_text`
+- `permalink_url`
+- `assigned_to`
+- `lead_id`
+- `due_at`
+- `commented_at`
+- `replied_at`
+- `dismissed_at`
+- `metadata`
+- `created_at`
+- `updated_at`
+
+Notes:
+
+- `(page_id, external_comment_id)` is unique so Meta retries do not duplicate
+  comments, Leads, tasks or replies.
+- `assigned_to` points to the responsible Owner/Manager; `lead_id` stays nullable
+  until a manager explicitly converts the public enquiry.
+- `draft_reply` is internal. Only an authenticated confirmation action may set
+  the published reply fields.
+- Comments create ordinary `Tasks`, `Notifications` and `Activity_Log` records;
+  they do not create a second inbox or a second sales pipeline.
+
 ### `Service_Types`
 
 Stores allowed service offerings.

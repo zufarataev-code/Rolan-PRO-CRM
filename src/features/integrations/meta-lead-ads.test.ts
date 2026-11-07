@@ -44,10 +44,15 @@ test("provider data preserves service, ZIP and attribution without trusting webh
 });
 test("webhook verification, disabled configuration, raw signatures and streamed size limits fail closed", async () => {
   const keys = ["APP_SECRET", "VERIFY_TOKEN", "PAGE_ACCESS_TOKEN", "PAGE_ID", "FORM_IDS"].map(key => "META_LEAD_ADS_" + key);
-  const previous = keys.map(key => process.env[key]);
+  const commentKeys = ["APP_SECRET", "VERIFY_TOKEN", "PAGE_ACCESS_TOKEN", "PAGE_ID"].map(key => "META_COMMENTS_" + key);
+  const allKeys = [...keys, ...commentKeys];
+  const previous = allKeys.map(key => process.env[key]);
   try {
-    keys.forEach(key => delete process.env[key]);
+    allKeys.forEach(key => delete process.env[key]);
     assert.equal((await POST(new Request("http://localhost", { method: "POST" }))).status, 503);
+    process.env.META_LEAD_ADS_APP_SECRET = "offline-secret";
+    assert.equal((await POST(new Request("http://localhost", { method: "POST" }))).status, 503, "partial Lead Ads config must not acknowledge and lose leadgen events");
+    keys.forEach(key => delete process.env[key]);
     keys.forEach((key, i) => process.env[key] = ["offline-secret", "offline-verify", "offline-token", "100", "200"][i]);
     assert.equal((await GET(new Request("http://localhost/?hub.mode=subscribe&hub.verify_token=bad&hub.challenge=123"))).status, 403);
     const verified = await GET(new Request("http://localhost/?hub.mode=subscribe&hub.verify_token=offline-verify&hub.challenge=123"));
@@ -57,7 +62,7 @@ test("webhook verification, disabled configuration, raw signatures and streamed 
     const ignored = JSON.stringify({ ...payload, entry: [] });
     const signature = "sha256=" + createHmac("sha256", "offline-secret").update(ignored).digest("hex");
     assert.equal((await POST(new Request("http://localhost", { method: "POST", headers: { "x-hub-signature-256": signature }, body: ignored }))).status, 200);
-  } finally { keys.forEach((key, i) => { if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i]; }); }
+  } finally { allKeys.forEach((key, i) => { if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i]; }); }
 });
 test("canonical Meta enquiries appear in the existing inbox and closed leads stay out", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
