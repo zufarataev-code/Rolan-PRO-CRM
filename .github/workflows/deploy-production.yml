@@ -236,12 +236,24 @@ jobs:
               runcloud@143.110.136.211 \
               "head -n 1 /home/runcloud/.rolanpro-crm-active-release 2>/dev/null | cut -f 1 || true")"
             if [ "$deployed_sha" = "$EXPECTED_SHA" ]; then
-              curl --fail --silent --show-error --max-time 15 \
-                https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null
-              echo "Production is serving $EXPECTED_SHA"
-              exit 0
+              echo "Release $EXPECTED_SHA is active on the server. Checking that it answers."
+              # Первый запрос после переключения релиза приходит в холодный Next.js
+              # и может не уложиться в один короткий таймаут. Раньше единственный
+              # пятнадцатисекундный curl ронял весь деплой уже после активации
+              # релиза, и индикатор врал: код на сервере, а сборка помечена упавшей.
+              for health in $(seq 1 12); do
+                if curl --fail --silent --show-error --max-time 30 \
+                  https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null 2>&1; then
+                  echo "Production is serving $EXPECTED_SHA"
+                  exit 0
+                fi
+                echo "Health check $health/12 did not answer yet; retrying."
+                sleep 15
+              done
+              echo "Release $EXPECTED_SHA is active on the server, but the site did not answer within 6 minutes after activation. The code is deployed; investigate reachability, not the release." >&2
+              exit 1
             fi
             sleep 10
           done
-          echo "Production did not activate $EXPECTED_SHA within 10 minutes" >&2
+          echo "Production did not activate $EXPECTED_SHA within 10 minutes. The release never became active on the server." >&2
           exit 1
