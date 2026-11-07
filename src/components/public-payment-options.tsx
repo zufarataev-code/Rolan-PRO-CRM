@@ -172,8 +172,9 @@ export function PublicPaymentOptions({
               ) : null}
 
               {selected && option.method === "payment_system" && option.payment_link ? (
-                <a href={option.payment_link} style={{ display: "inline-block", marginTop: 12 }}>
-                  {ru ? "Перейти к безопасной оплате" : "Continue to secure payment"}
+                // Owner, 2026-11-07: the way into Stripe is the main button of the card, not a small link next to «Selected».
+                <a href={option.payment_link} className="proposal-pay-link" style={{ display: "inline-block", marginTop: 14 }}>
+                  {ru ? `Оплатить ${formatMoney(option.payable_amount, data.currency)} картой →` : `Pay ${formatMoney(option.payable_amount, data.currency)} by card →`}
                 </a>
               ) : null}
 
@@ -189,7 +190,7 @@ export function PublicPaymentOptions({
                 <div style={{ marginTop: 12, opacity: 0.72 }}>{ru ? "Этот способ оплаты пока не настроен." : "This payment method is not configured yet."}</div>
               ) : null}
 
-              {!paid ? (
+              {!paid && !(selected && option.method === "payment_system" && option.payment_link) ? (
                 <button
                   type="button"
                   onClick={() => selectMethod(option)}
