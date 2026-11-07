@@ -180,6 +180,7 @@ model FilmCatalog {
   appearance_code              String?           @db.VarChar(50)
   application_side             String?           @db.VarChar(30)
   capability_tags              Json?
+  additional_category_codes    Json?
   roll_widths_in               Json?
   roll_length_ft               Decimal?          @db.Decimal(8, 2)
   use_case_ru                  String?           @db.Text

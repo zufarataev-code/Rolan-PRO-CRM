@@ -20,6 +20,9 @@ test("ROLANPRO PRIME catalog contains the approved selectable architecture", () 
   assert.match(source, /\[20,35\]\.map\(vlt => \(\{ code:`SF/);
 
   assert.match(source, /selectableInProjects:true/);
+  assert.match(source, /reflectivePrivacy \? \['solar'\]/);
+  assert.match(source, /reflectivePrivacy \? 'Зеркальная'/);
+  assert.match(source, /const allowedCategories = \[film\.category, \.\.\.\(Array\.isArray\(film\.extraCategories\)/);
   assert.match(source, /pending factory confirmation/);
   assert.match(source, /Daytime one-way privacy depends on the lighting difference/);
   assert.doesNotMatch(source, /code:'BS35'/);

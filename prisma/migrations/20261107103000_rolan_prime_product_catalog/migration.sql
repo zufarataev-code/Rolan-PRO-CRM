@@ -1,6 +1,7 @@
 ALTER TABLE "film_catalog"
 ADD COLUMN "series_name" VARCHAR(120),
 ADD COLUMN "material_code" VARCHAR(80),
+ADD COLUMN "additional_category_codes" JSONB,
 ADD COLUMN "roll_widths_in" JSONB,
 ADD COLUMN "roll_length_ft" DECIMAL(8,2),
 ADD COLUMN "use_case_ru" TEXT,

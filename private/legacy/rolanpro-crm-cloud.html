@@ -8822,10 +8822,12 @@ function ensureRolanPrimeProductCatalog(catalog) {
     const stableId = `film_rolan_prime_${product.code.toLowerCase()}`;
     let item = catalog.find(candidate => candidate?.id === stableId || String(candidate?.modelCode || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === product.code);
     if (!item) { item = { id:stableId }; catalog.push(item); added++; }
+    const reflectivePrivacy = product.category === 'privacy' && product.code !== 'WMP';
     Object.assign(item, product, {
       id: item.id || stableId,
       brand:'Rolan PRO',
-      filmCategory: product.category === 'protective' ? 'Защитная' : 'Приватная',
+      filmCategory: product.category === 'protective' ? 'Защитная' : reflectivePrivacy ? 'Зеркальная' : 'Приватная',
+      extraCategories: reflectivePrivacy ? ['solar'] : (product.extraCategories || []),
       productName: product.series,
       modelCode: product.code,
       isPrime:true,
@@ -26235,7 +26237,9 @@ function canonicalServiceDirection(value) {
   return canonicalCatalogCategory(value);
 }
 function serviceDirectionAllowsFilm(direction, film) {
-  return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
+  if (!film) return false;
+  const allowedCategories = [film.category, ...(Array.isArray(film.extraCategories) ? film.extraCategories : [])];
+  return allowedCategories.some(category => canonicalServiceDirection(category) === canonicalServiceDirection(direction));
 }
 /**
  * Owner, 2026-11-05: a service may link a film from ANY catalog category —

@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-07 — Reflective Privacy products are also Solar / Reflective materials
+
+- BLACK SHADOW, SILVER VEIL, CHROME EDGE, BRONZE VEIL and SILVER FORCE keep `Privacy Film` as their canonical home direction because their primary sales promise is daytime privacy.
+- The same stable product records are additionally available under `Solar Film` with the subtype `Зеркальная`, because they also provide solar and glare control.
+- Cross-category availability is metadata on one film record, not a copied SKU. Projects, warehouse rolls, prices and historical references continue to use the same product identity.
+- WHITE MATTE PRIME remains Privacy + Decorative; it is not a Solar reflective product.
+- A selector that filters catalog materials by service direction must honor both the home category and the approved additional categories.
+
 ## 2026-11-07 — ROLANPRO = PRIME product architecture
 
 - Every own-brand architectural film is presented under the PRIME architecture. Customer-facing model codes are the product identity; old supplier names and internal MP/A-series labels are not new-sale names.
