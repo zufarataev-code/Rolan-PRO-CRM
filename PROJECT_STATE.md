@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — КП клиента: блок оплаты был почти невидим (Claude, PR pending)
+
+- Owner asked to see the proposal the way the client sees it. In the built-in browser the «Payment» and «Warranty» sections after the document rendered as pale text and unstyled buttons: `PublicPaymentOptions` / `PublicWarrantySummary` use `proposal-section`, `proposal-section-kicker`, `proposal-payment-section` classes that no stylesheet defined, so they inherited the landing page's light `--ink` on the light `#f2f5f7` shell.
+- Done on `claude/proposal-payment-visible` (`app/proposal-premium.css`): the sections get the document's width, ink, kicker, headings and muted copy; option cards are white paper with the document border; buttons are the blue `accent-button` style, disabled ones grey with `cursor: not-allowed`; warranty lists inherit ink.
+- Verification: `public-payment-styles.test.ts`; live check in the browser pane after deploy.
+
 ## 2026-11-06 — Быстрый ввод: прямые расходы проекта, подпись старшего (Claude, PR pending)
 
 - Owner (screenshot): the senior's 10 % was not in the crew payout — because nobody was marked senior; and the one-screen form had no place for project expenses («аренда, доставка и ещё что-нибудь — списываем прямо в этот проект, так точнее»).
