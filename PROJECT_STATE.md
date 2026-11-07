@@ -7,7 +7,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Task owner: Codex, branch `codex/rolan-prime-catalog-20261107`, PR #481. Owner showed the Warehouse «Новая модель плёнки» form and removed four misplaced inputs: customer price, purchase cost per sq ft, installer rate and fixed waste percent.
 - A new catalog model now stores identity, supplier, home/additional categories and one or more available roll widths in inches. Widths accept values such as `60` or `60, 72`; the selected model's widths are offered first when a real roll is received. The receipt still records the actual roll width.
 - Commercial price and installer pay remain in «Услуги и цены». A roll's material cost per sq ft remains `purchase price / actual roll area` at receipt. Project consumption and waste remain outputs of verified measurements and the existing cutting plan; no catalog-level guessed percentage is created.
-- The modal is one column on phones and two columns on desktop. Verification: focused Warehouse/rate/receipt tests **28/28**, full suite **1090/1090**, TypeScript, Prisma validation, production build and `git diff --check` pass. No production deployment or live database write was attempted.
+- Owner can now use «Убрать из списка» on a Warehouse model. The action archives the model rather than deleting its identity or history, is blocked while any roll has remaining stock, and is blocked while an active purchase request exists. Archived models disappear from active Warehouse lists but remain readable from historical records.
+- The modal is one column on phones and two columns on desktop. Verification after the archive action: focused Warehouse/reference/receipt tests **25/25**, full suite **1091/1091**, TypeScript, production build and `git diff --check` pass. No production deployment or live database write was attempted.
 
 ## 2026-11-07 — Reflective PRIME films mapped to Privacy and Solar
 

@@ -80,6 +80,19 @@ test('a new film model stores identity and widths, while money and waste belong 
   assert.match(html, /const presetWidth = Number\(request\?\.widthMm[^\n]+\|\| modelWidths\[0\] \|\| 0/);
 });
 
+test('the owner can archive an empty film model from Warehouse without deleting history', () => {
+  assert.match(html, /Убрать из списка/);
+  assert.match(html, /function deleteCatalogItem\(id\)[\s\S]*?currentUser\(\)\?\.role !== 'owner'/);
+  assert.match(html, /Нельзя убрать модель, пока на складе осталось/);
+  assert.match(html, /request\.kind === 'film'[\s\S]*?\['received','cancelled'\]/);
+  assert.match(html, /Старые проекты, движения и документы сохранятся/);
+  assert.match(html, /item\.archived = true/);
+  assert.doesNotMatch(html, /db\.settings\.catalog = db\.settings\.catalog\.filter\(c => c\.id !== id\)/);
+  assert.match(html, /const all = \(db\.settings\.catalog \|\| \[\]\)\.filter\(item => !item\.archived/);
+  assert.match(html, /Доступные ширины, in/);
+  assert.match(html, /updateCatalogRollWidths/);
+});
+
 test('film category navigation reuses existing catalog and inventory records', () => {
   assert.match(html, /function filmWarehouseRolls\(catalogId\)[\s\S]*?db\.inventory/);
   assert.match(html, /function renderFilmCategoryModels\(category\)[\s\S]*?db\.settings\.catalog/);

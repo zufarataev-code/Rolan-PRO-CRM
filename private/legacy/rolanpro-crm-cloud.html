@@ -24473,9 +24473,7 @@ function renderSettings() {
               <th class="px-2 py-2">Короткое название</th>
               <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
-              <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('waste')}</th>
+              <th class="px-2 py-2">Доступные ширины, in</th>
               <th></th>
             </tr>
           </thead>
@@ -24497,10 +24495,8 @@ function renderSettings() {
                     ${db.vendors.map(v => `<option value="${v.id}" ${c.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}
                   </select>
                 </td>
-                <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">✕</button></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogRollWidthsIn(c).join(', '))}" placeholder="60, 72" onchange="updateCatalogRollWidths('${c.id}',this.value)"></td>
+                <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">Убрать</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -34985,6 +34981,15 @@ function parseCatalogRollWidthsIn(value) {
 function catalogRollWidthsIn(item) {
   return parseCatalogRollWidthsIn(item?.rollWidthsIn?.length ? item.rollWidthsIn : [item?.rollWidthIn, item?.rollWidth].filter(Boolean));
 }
+function updateCatalogRollWidths(id, value) {
+  const item = getCatalogItem(id); if (!item) return;
+  const widths = parseCatalogRollWidthsIn(value);
+  if (!widths.length) return alert('Укажите ширину рулона в дюймах, например 60 или 60, 72.');
+  item.rollWidthsIn = widths;
+  item.rollWidthIn = widths.length === 1 ? widths[0] : null;
+  delete item.rollWidth;
+  save();
+}
 function catalogExtraCategories(c) {
   return Array.isArray(c?.extraCategories) ? c.extraCategories.map(canonicalCatalogCategory).filter(k => k && k !== canonicalCatalogCategory(c.category)) : [];
 }
@@ -35082,8 +35087,17 @@ function loadStandardCatalog() {
   render();
 }
 function deleteCatalogItem(id) {
-  if (!confirm('Удалить позицию каталога?')) return;
-  db.settings.catalog = db.settings.catalog.filter(c => c.id !== id);
+  if (currentUser()?.role !== 'owner') return alert('Убрать модель из каталога может только владелец.');
+  const item = getCatalogItem(id); if (!item) return;
+  const remaining = filmWarehouseRolls(id).reduce((sum, roll) => sum + Math.max(0, Number(roll.remainingLengthM) || 0), 0);
+  if (remaining > 0) return alert(`Нельзя убрать модель, пока на складе осталось ${remaining.toFixed(2)} м. Сначала спишите или перенесите остаток.`);
+  const activeRequest = (db.purchaseRequests || []).find(request => request.kind === 'film' && request.itemId === id && !['received','cancelled'].includes(request.status));
+  if (activeRequest) return alert(`Сначала завершите или отмените заявку на закупку ${activeRequest.number || ''}.`);
+  if (!confirm(`Убрать «${catalogLabel(item)}» из активного списка?\n\nСтарые проекты, движения и документы сохранятся. Модель будет перенесена в архив.`)) return;
+  item.archived = true;
+  item.archivedAt = new Date().toISOString();
+  item.archivedBy = currentUser()?.id || null;
+  state.inventoryFilmModel = null;
   save(); render();
 }
 
@@ -42725,7 +42739,7 @@ function renderFilmCategoryDirectory() {
   </div>`;
 }
 function renderFilmCategoryModels(category) {
-  const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category));
+  const all = (db.settings.catalog || []).filter(item => !item.archived && catalogItemInCategory(item, category));
   const blank = currentUser()?.role === 'owner' ? blankCatalogItems().filter(item => catalogItemInCategory(item, category)) : [];
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
   const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
@@ -42755,7 +42769,7 @@ function renderFilmModelStock(catalogId) {
   const vendor = item.vendorId ? db.vendors.find(v => v.id === item.vendorId) : null;
   return `<div class="card mb-4">
     <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmModel=null;render();">← ${academyEsc(catLabel(item.category))} · все модели</button>
-    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
+    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-700" onclick="deleteCatalogItem('${item.id}')">Убрать из списка</button>` : ''}</div></div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
   </div>
   <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Код</th><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Закупка / sq ft</th><th></th></tr></thead><tbody>${rolls.map(roll => {

@@ -9,6 +9,7 @@ This file records durable decisions. Current activity, blockers, and next steps 
 - Purchase price belongs to the received roll. Material cost per sq ft is calculated from that roll's total purchase price and actual width × length.
 - Project consumption and waste are calculated only after verified measurements and the cutting plan. They are not fixed on the film model.
 - Model widths are entered in inches and may contain several options. The actual received roll width remains authoritative for stock, costing and cutting.
+- Removing a model from active Warehouse lists is a reversible archive action, not a hard delete. It is prohibited while the model has remaining stock or an unfinished purchase request; historical Projects, movements and documents keep the stable model identity.
 
 ## 2026-11-07 — Reflective Privacy products are also Solar / Reflective materials
 
