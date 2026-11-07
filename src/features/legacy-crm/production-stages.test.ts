@@ -251,6 +251,25 @@ test('owner assigned as historical surveyor receives fixed survey pay',()=>{
   assert.equal(result.total,175);
   assert.equal(result.breakdown[0].date,'2026-01-10T12:00:00.000Z');
 });
+test('manager commission uses the final receipt when a fully paid project has no paidAt',()=>{
+  const manager:Row={id:'m',role:'manager',name:'Danil',payConfig:{type:'commission',commissionPct:5}};
+  const full:Row={id:'full',number:'R-FULL',managerId:'m',payments:[
+    {amount:1000,date:'2026-11-01'},
+    {amount:2306,date:'2026-11-06'},
+  ]};
+  const partial:Row={id:'partial',number:'R-PART',managerId:'m',paidAt:'2026-11-06T20:00:00Z',payments:[{amount:3000,date:'2026-11-06'}]};
+  const payload:Row={users:[manager],orders:[full,partial]};
+  const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+  const source=(name:string)=>{const start=html.indexOf(`function ${name}(`);return html.slice(start,html.indexOf('\n}',start)+2);};
+  const c=vm.createContext({db:payload,getUser:()=>manager,projectStages:()=>[],orderRevenue:()=>3306,fmtMoney:String});
+  vm.runInContext(['orderCommissionEarnedAt','calcUserPayoutForPeriod'].map(source).join('\n'),c);
+  assert.equal(c.orderCommissionEarnedAt(full),'2026-11-06T12:00:00');
+  assert.equal(c.orderCommissionEarnedAt(partial),'');
+  const result=JSON.parse(JSON.stringify(c.calcUserPayoutForPeriod('m',new Date('2026-11-01T00:00:00'),new Date('2026-11-30T23:59:59'))));
+  assert.equal(result.total,165.3);
+  assert.equal(result.breakdown.length,1);
+  assert.equal(result.breakdown[0].orderId,'full');
+});
 test('an unassigned internal stage retains a labor reserve; an external stage uses its invoice instead',()=>{
   const html=composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));const start=html.indexOf('function projectStageReferenceAmount(');
   const c=vm.createContext({db:{settings:{complexityCoefs:{standard:1}}},projectLines:()=>[{key:'service',unit:'sqft',installerPay:300}]});

@@ -73,6 +73,15 @@ test('the client signs the act on screen: name, signature, acceptance, then «А
   assert.equal(order.timeline[0].key, 'act_signature');
 });
 
+test('signing an act completes the installation before saving the signature', () => {
+  const order: Row = { id: 'o', number: 'R-2', status: 'installation_scheduled' };
+  const { c, calls } = signatureContext(order);
+  c.confirmActSignature('o');
+  assert.deepEqual(calls.filter((call: string) => call.startsWith('status:')), ['status:installation_done', 'status:act_signed']);
+  assert.ok(calls.indexOf('status:installation_done') < calls.indexOf('save'));
+  assert.equal(order.actSignature.name, 'Michael Brown');
+});
+
 test('both the installer and the manager reach the act through the signature; the card shows it', () => {
   const next = slice('function orderPrimaryNextAction(o)', 'function installerOrderPrimaryAction(o)');
   const installer = slice('function installerOrderPrimaryAction(o)', 'function renderOrderActionCard(a)');
