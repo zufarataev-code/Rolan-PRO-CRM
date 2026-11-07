@@ -586,8 +586,8 @@ async function seedServiceReferences() {
   }
 
   // Реальная линейка RolanPRO. MAGNITRONIC SOLAR PRIME — основная плёнка.
-  // Внутренние коды MP05…MP70 сохранены, чтобы не сломать старые заказы;
-  // клиентское название модели — SP-5%…SP-70%. Замеры прибором LS160A, 2026.
+  // Клиентские коды — SP05…SP70. Миграция сохраняет film_id прежних MP-строк,
+  // поэтому существующие проекты не теряют ссылку. Замеры прибором LS160A, 2026.
   //
   // Коды остекления: single_tempered, single_annealed, dual_pane,
   // low_e, skylight, panoramic. Стороны света: south, west, north, east.
@@ -596,27 +596,27 @@ async function seedServiceReferences() {
     // model_ru, model_en, thickness, unit, sort, vlt, uv, ir, tser,
     // allowed_glass, restricted_orientations, requires_review, note
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP05", "Magnitronic Solar Prime SP-5%", "Magnitronic Solar Prime SP-5%", null, "sqft", 1, "5.70", "100.00", "95.60", "93.30",
+     "SP05", "MAGNITRONIC PRIME SOLAR SP 05", "MAGNITRONIC PRIME SOLAR SP 05", null, "sqft", 1, "5.70", "100.00", "95.60", "93.30",
      ["single_tempered"], ["south", "west"], false,
      "Максимальное затемнение. Только закалённое одинарное стекло."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP15", "Magnitronic Solar Prime SP-15%", "Magnitronic Solar Prime SP-15%", null, "sqft", 2, "14.00", "99.90", "97.40", "88.50",
+     "SP15", "MAGNITRONIC PRIME SOLAR SP 15", "MAGNITRONIC PRIME SOLAR SP 15", null, "sqft", 2, "14.00", "99.90", "97.40", "88.50",
      ["single_tempered", "single_annealed"], ["south", "west"], false,
      "Тёмная. На стеклопакет не ставить."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP20", "Magnitronic Solar Prime SP-20%", "Magnitronic Solar Prime SP-20%", null, "sqft", 3, "23.50", "99.90", "98.30", "83.20",
+     "SP20", "MAGNITRONIC PRIME SOLAR SP 20", "MAGNITRONIC PRIME SOLAR SP 20", null, "sqft", 3, "23.50", "99.90", "98.30", "83.20",
      ["single_tempered", "single_annealed", "dual_pane", "panoramic"], ["south", "west"], false,
      "На стеклопакет и панораму только север и восток."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP35", "Magnitronic Solar Prime SP-35%", "Magnitronic Solar Prime SP-35%", null, "sqft", 4, "35.50", "99.80", "98.50", "77.10",
+     "SP35", "MAGNITRONIC PRIME SOLAR SP 35", "MAGNITRONIC PRIME SOLAR SP 35", null, "sqft", 4, "35.50", "99.80", "98.50", "77.10",
      ["single_tempered", "single_annealed", "dual_pane", "panoramic"], [], false,
      "Универсальный выбор для стеклопакета и панорамы."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP50", "Magnitronic Solar Prime SP-50%", "Magnitronic Solar Prime SP-50%", null, "sqft", 5, "58.10", "99.60", "99.20", "68.20",
+     "SP50", "MAGNITRONIC PRIME SOLAR SP 50", "MAGNITRONIC PRIME SOLAR SP 50", null, "sqft", 5, "58.10", "99.60", "99.20", "68.20",
      ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
      "Безопасен для Low-E и skylight. Для Low-E зафиксировать поверхность покрытия."],
     ["SOLAR", "Солнцезащитная", "Solar Film", "ROLANPRO", "Rolan PRO", "Rolan PRO",
-     "MP70", "Magnitronic Solar Prime SP-70%", "Magnitronic Solar Prime SP-70%", null, "sqft", 6, "68.00", "99.20", "99.40", "63.60",
+     "SP70", "MAGNITRONIC PRIME SOLAR SP 70", "MAGNITRONIC PRIME SOLAR SP 70", null, "sqft", 6, "68.00", "99.20", "99.40", "63.60",
      ["single_tempered", "single_annealed", "dual_pane", "low_e", "skylight", "panoramic"], [], false,
      "Максимально прозрачная. Подходит везде, включая skylight."],
 
@@ -694,6 +694,19 @@ async function seedServiceReferences() {
       restricted_orientations: restricted_orientations ? [...restricted_orientations] : undefined,
       requires_review,
       selection_note_ru,
+      series_name: category_code === "SOLAR" ? "MAGNITRONIC PRIME SOLAR" : undefined,
+      material_code: category_code === "SOLAR"
+        ? "MAGNETRON_SPUTTERED_POLYESTER"
+        : category_code === "SAFETY"
+          ? "MULTILAYER_SAFETY_POLYESTER"
+          : undefined,
+      use_case_ru: category_code === "SOLAR"
+        ? "Контроль солнечного тепла, бликов и UV для архитектурного остекления."
+        : undefined,
+      spec_status: category_code === "SOLAR" ? "confirmed_owner_measurement" : undefined,
+      technical_specs: category_code === "SOLAR"
+        ? { vlt_percent, uv_rejection_percent, ir_rejection_percent, tser_percent, measured_with: "LS160A", measured_year: 2026 }
+        : undefined,
       technology_code: category_code === "SOLAR"
         ? "MAGNETRON_SPUTTERED"
         : category_code === "SMART"
@@ -731,6 +744,93 @@ async function seedServiceReferences() {
       where: { model_code },
       update: technicalSpecs,
       create: { model_code, ...specs },
+    });
+  }
+
+  const primeProducts = [
+    // PRIME SAFETY / PROTECT. Six product-card variants are confirmed.
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF02", name: "SAF 2 PROTECT", thickness: "2 mil", sort: 31, material: "1-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "Basic shard retention and nearly invisible glass protection.", specs: { ply: 1, tensile_strength_psi: 19000, elongation_break_md_td_percent: [97, 46], pli_break_strength: 40 } },
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF04", name: "SAF 4 PROTECT", thickness: "4 mil", sort: 32, material: "1-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "Heavier-duty shard retention and impact protection.", specs: { ply: 1, tensile_strength_psi: 19000, elongation_break_md_td_percent: [84, 94], pli_break_strength: 74 } },
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF08", name: "SAF 8 PROTECT", thickness: "8 mil", sort: 33, material: "2-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "Higher-risk security glazing and stronger fragment retention.", specs: { ply: 2, tensile_strength_psi: 19250, elongation_break_md_td_percent: [125, 101], pli_break_strength: 157 } },
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF12", name: "SAF 12 PROTECT", thickness: "12 mil", sort: 34, material: "3-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "High-strength security glazing where greater forced-entry delay is required.", specs: { ply: 3, tensile_strength_psi: 23700, elongation_break_md_td_percent: [131, 74], pli_break_strength: 300 } },
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF14", name: "SAF 14 PROTECT", thickness: "14 mil", sort: 35, material: "3-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "High-strength multi-layer protection for demanding security projects.", specs: { ply: 3, tensile_strength_psi: 24700, elongation_break_md_td_percent: [131, 80], pli_break_strength: 320 } },
+    { category: "SAFETY", categoryRu: "Защитная", categoryEn: "Safety Film", series: "PRIME SAFETY / PROTECT", code: "SAF16", name: "SAF 16 PROTECT", thickness: "16 mil", sort: 36, material: "4-ply safety polyester", vlt: "98.00", uv: "98.00", ir: "18.00", useCase: "Maximum confirmed thickness in the current PROTECT range.", specs: { ply: 4, tensile_strength_psi: 24800, elongation_break_md_td_percent: [131, 80], pli_break_strength: 350 } },
+
+    // PRIME PRIVACY. Values not present in an approved source remain pending.
+    { category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "BLACK SHADOW", code: "BS05", name: "BLACK SHADOW BS 05", sort: 41, material: "Black-silver reflective polyester", vlt: "6.00", useCase: "Dark daytime one-way privacy and strong glare reduction.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: { solar_rejection_percent: 69, visible_light_reflectance_exterior_interior_percent: [12, 12], solar_absorption_percent: 61, glare_reduction_percent: 94, uv_rejection_percent: 99 }, status: "confirmed_catalog_values_roll_pending" },
+    { category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "BLACK SHADOW", code: "BS15", name: "BLACK SHADOW BS 15", sort: 42, material: "Black-silver reflective polyester", vlt: "14.00", useCase: "Balanced dark daytime one-way privacy for offices and residential glass.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: { solar_rejection_percent: 72, visible_light_reflectance_exterior_interior_percent: [40, 11], solar_absorption_percent: 45, glare_reduction_percent: 84, uv_rejection_percent: 99 }, status: "confirmed_catalog_values_roll_pending" },
+    { category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "BLACK SHADOW", code: "BS25", name: "BLACK SHADOW BS 25", sort: 43, material: "Black-silver reflective polyester", vlt: "25.00", useCase: "Lighter dark-reflective daytime privacy.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: {}, status: "pending_factory_confirmation" },
+    ...[5, 15, 35, 50, 60].map((vlt, index) => ({ category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "SILVER VEIL", code: `SV${String(vlt).padStart(2, "0")}`, name: `SILVER VEIL SV ${String(vlt).padStart(2, "0")}`, sort: 50 + index, material: "Silver reflective polyester", vlt: `${vlt}.00`, useCase: "Classic light reflective daytime privacy and solar-glare control.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: {}, status: "pending_factory_confirmation" })),
+    ...[20, 35].map((vlt, index) => ({ category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "CHROME EDGE", code: `CE${vlt}`, name: `CHROME EDGE CE ${vlt}`, sort: 60 + index, material: "Nickel + chrome reflective film", vlt: `${vlt}.00`, widths: [60], length: "100.00", useCase: "Premium neutral chrome daytime privacy and architectural solar control.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: {}, status: "confirmed_roll_and_material_per_supplier_vlt_pending" })),
+    ...[20, 35].map((vlt, index) => ({ category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "BRONZE VEIL", code: `BV${vlt}`, name: `BRONZE VEIL BV ${vlt}`, sort: 63 + index, material: "Copper reflective film", vlt: `${vlt}.00`, widths: [60], length: "100.00", useCase: "Warm bronze daytime privacy and solar control.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: {}, status: "confirmed_roll_and_material_per_supplier_vlt_pending" })),
+    ...[20, 35].map((vlt, index) => ({ category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "SILVER FORCE", code: `SF${vlt}`, name: `SILVER FORCE SF ${vlt}`, sort: 66 + index, material: "High-performance aluminium reflective film", vlt: `${vlt}.00`, widths: [60, 72], length: "100.00", useCase: "High-performance silver daytime privacy and solar control.", privacy: "Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.", specs: {}, status: "confirmed_roll_and_material_per_supplier_vlt_pending" })),
+    { category: "PRIVACY", categoryRu: "Приватная", categoryEn: "Privacy Film", series: "WHITE MATTE PRIME", code: "WMP", name: "WHITE MATTE PRIME", sort: 70, material: "White matte translucent polyester", vlt: "75.00", useCase: "Permanent two-way privacy for offices, bathrooms, partitions and doors while retaining diffuse daylight.", privacy: "Two-way frosted privacy; silhouettes can remain visible at close range or under strong backlighting.", specs: { solar_rejection_percent: 24, visible_light_reflectance_exterior_interior_percent: [18, 19], solar_absorption_percent: 11, glare_reduction_percent: 16 }, status: "confirmed_catalog_values_roll_pending" },
+  ] as const;
+
+  for (const product of primeProducts) {
+    await prisma.filmCatalog.upsert({
+      where: { model_code: product.code },
+      update: {
+        category_code: product.category,
+        category_name_en: product.categoryEn,
+        brand_code: "ROLANPRO",
+        brand_name_en: "Rolan PRO",
+        model_name_en: product.name,
+        technology_code: product.category === "SAFETY" ? "SAFETY_POLYESTER" : product.code === "WMP" ? "FROSTED_PRIVACY" : "REFLECTIVE_PRIVACY",
+        series_name: product.series,
+        material_code: product.material,
+        appearance_code: product.series,
+        application_side: "INTERIOR",
+        capability_tags: product.category === "SAFETY" ? ["SECURITY", "SHATTER_RETENTION"] : product.code === "WMP" ? ["TWO_WAY_PRIVACY", "DIFFUSED_DAYLIGHT"] : ["DAYTIME_ONE_WAY_PRIVACY", "GLARE_CONTROL", "SOLAR_CONTROL"],
+        additional_category_codes: product.category === "PRIVACY" && product.code !== "WMP" ? ["SOLAR"] : [],
+        roll_widths_in: "widths" in product ? [...product.widths] : undefined,
+        roll_length_ft: "length" in product ? product.length : undefined,
+        vlt_percent: product.vlt,
+        uv_rejection_percent: "uv" in product ? product.uv : product.code === "BS05" || product.code === "BS15" ? "99.00" : undefined,
+        ir_rejection_percent: "ir" in product ? product.ir : undefined,
+        use_case_ru: product.useCase,
+        privacy_note_ru: "privacy" in product ? product.privacy : undefined,
+        spec_status: "status" in product ? product.status : "confirmed_product_card_roll_pending",
+        technical_specs: product.specs,
+        selection_note_ru: product.category === "SAFETY"
+          ? "Характеристики карточки продукта; итоговая защита зависит от стекла, рамы и системы крепления. Размер рулона: pending factory confirmation."
+          : `ROLANPRO = PRIME. ${"privacy" in product ? product.privacy : ""} Неподтверждённые параметры: pending factory confirmation.`,
+        is_active: true,
+      },
+      create: {
+        category_code: product.category,
+        category_name_ru: product.categoryRu,
+        category_name_en: product.categoryEn,
+        brand_code: "ROLANPRO",
+        brand_name_ru: "Rolan PRO",
+        brand_name_en: "Rolan PRO",
+        model_code: product.code,
+        model_name_ru: product.name,
+        model_name_en: product.name,
+        thickness: "thickness" in product ? product.thickness : null,
+        unit: "sqft",
+        technology_code: product.category === "SAFETY" ? "SAFETY_POLYESTER" : product.code === "WMP" ? "FROSTED_PRIVACY" : "REFLECTIVE_PRIVACY",
+        series_name: product.series,
+        material_code: product.material,
+        appearance_code: product.series,
+        application_side: "INTERIOR",
+        capability_tags: product.category === "SAFETY" ? ["SECURITY", "SHATTER_RETENTION"] : product.code === "WMP" ? ["TWO_WAY_PRIVACY", "DIFFUSED_DAYLIGHT"] : ["DAYTIME_ONE_WAY_PRIVACY", "GLARE_CONTROL", "SOLAR_CONTROL"],
+        additional_category_codes: product.category === "PRIVACY" && product.code !== "WMP" ? ["SOLAR"] : [],
+        roll_widths_in: "widths" in product ? [...product.widths] : undefined,
+        roll_length_ft: "length" in product ? product.length : undefined,
+        vlt_percent: product.vlt,
+        uv_rejection_percent: "uv" in product ? product.uv : product.code === "BS05" || product.code === "BS15" ? "99.00" : undefined,
+        ir_rejection_percent: "ir" in product ? product.ir : undefined,
+        use_case_ru: product.useCase,
+        privacy_note_ru: "privacy" in product ? product.privacy : undefined,
+        spec_status: "status" in product ? product.status : "confirmed_product_card_roll_pending",
+        technical_specs: product.specs,
+        selection_note_ru: product.category === "SAFETY"
+          ? "Характеристики карточки продукта; итоговая защита зависит от стекла, рамы и системы крепления. Размер рулона: pending factory confirmation."
+          : `ROLANPRO = PRIME. ${"privacy" in product ? product.privacy : ""} Неподтверждённые параметры: pending factory confirmation.`,
+        sort_order: product.sort,
+        is_active: true,
+      },
     });
   }
 }

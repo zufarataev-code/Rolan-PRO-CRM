@@ -33,5 +33,6 @@ test("catalog cell edits keep the table in place", () => {
   assert.match(update, /save\(\);/);
   assert.doesNotMatch(update, /render\(\)/);
   assert.match(update, /field === 'category'[\s\S]*?control\.style\.background/);
-  assert.match(source, /updateCatalogItem\('\$\{c\.id\}','retailPerSqft',parseFloat\(this\.value\)\|\|0,this\)/);
+  assert.match(source, /updateCatalogRollWidths\('\$\{c\.id\}',this\.value\)/);
+  assert.doesNotMatch(source, /updateCatalogItem\('\$\{c\.id\}','retailPerSqft'/);
 });

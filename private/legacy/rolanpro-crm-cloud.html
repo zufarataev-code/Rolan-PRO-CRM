@@ -8703,12 +8703,12 @@ const MAGNITRONIC_SOLAR_PRIME_SPECS = {
   'SP70': { vlt: 68.0, tser: 63.6, uv: 99.2,  ir: 99.4 },
 };
 const MAGNITRONIC_SOLAR_PRIME_SERIES = [
-  { code:'SP05', model:'SP-5%' },
-  { code:'SP15', model:'SP-15%' },
-  { code:'SP20', model:'SP-20%' },
-  { code:'SP35', model:'SP-35%' },
-  { code:'SP50', model:'SP-50%' },
-  { code:'SP70', model:'SP-70%' },
+  { code:'SP05', model:'SP 05' },
+  { code:'SP15', model:'SP 15' },
+  { code:'SP20', model:'SP 20' },
+  { code:'SP35', model:'SP 35' },
+  { code:'SP50', model:'SP 50' },
+  { code:'SP70', model:'SP 70' },
 ];
 
 function magnitronicSolarPrimeSpecCode(item) {
@@ -8753,8 +8753,8 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
       item = {
         id: stableId,
         brand: 'Rolan PRO',
-        series: 'Magnitronic Solar Prime',
-        model: `Magnitronic Solar Prime ${entry.model}`,
+        series: 'MAGNITRONIC PRIME SOLAR',
+        model: `MAGNITRONIC PRIME SOLAR ${entry.model}`,
         category: 'solar',
         retailPerSqft: null,
         costPerSqft: null,
@@ -8767,10 +8767,10 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
       added++;
     }
     item.brand = 'Rolan PRO';
-    item.series = 'Magnitronic Solar Prime';
-    item.model = `Magnitronic Solar Prime ${entry.model}`;
+    item.series = 'MAGNITRONIC PRIME SOLAR';
+    item.model = `MAGNITRONIC PRIME SOLAR ${entry.model}`;
     item.filmCategory = item.filmCategory || 'Солнцезащитная';
-    item.productName = 'Magnitronic Solar Prime';
+    item.productName = 'MAGNITRONIC PRIME SOLAR';
     item.modelCode = entry.model;
     const spec = MAGNITRONIC_SOLAR_PRIME_SPECS[entry.code];
     item.category = 'solar';
@@ -8779,7 +8779,70 @@ function ensureMagnitronicSolarPrimeSeries(catalog) {
     item.uvBlock = spec.uv;
     item.irBlock = spec.ir;
     item.verifiedSpecs = true;
+    item.technology = 'Magnetron-sputtered multilayer polyester';
+    item.material = 'Architectural polyester';
+    item.useCase = 'Solar heat, glare and UV control for architectural glazing.';
+    item.specsStatus = 'confirmed_owner_measurement';
+    item.rollWidthIn = item.rollWidthIn || null;
+    item.rollLengthFt = item.rollLengthFt || null;
+    item.rollStatus = item.rollWidthIn && item.rollLengthFt ? 'confirmed' : 'pending factory confirmation';
     item.specSource = item.specSource || 'LS160A transmission meter · supplier photos · 2026-09';
+  });
+  return added;
+}
+
+const ROLAN_PRIME_PRODUCTS = [
+  { code:'SAF02', series:'PRIME SAFETY / PROTECT', model:'SAF 2 PROTECT', category:'protective', thickness:'2 mil', technology:'Safety polyester', material:'1-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'Basic shard retention and nearly invisible glass protection.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:1,tensileStrengthPsi:19000,elongationBreakMdTdPct:[97,46],pliBreakStrength:40} },
+  { code:'SAF04', series:'PRIME SAFETY / PROTECT', model:'SAF 4 PROTECT', category:'protective', thickness:'4 mil', technology:'Safety polyester', material:'1-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'Heavier-duty shard retention and impact protection.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:1,tensileStrengthPsi:19000,elongationBreakMdTdPct:[84,94],pliBreakStrength:74} },
+  { code:'SAF08', series:'PRIME SAFETY / PROTECT', model:'SAF 8 PROTECT', category:'protective', thickness:'8 mil', technology:'Safety polyester', material:'2-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'Higher-risk security glazing and stronger fragment retention.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:2,tensileStrengthPsi:19250,elongationBreakMdTdPct:[125,101],pliBreakStrength:157} },
+  { code:'SAF12', series:'PRIME SAFETY / PROTECT', model:'SAF 12 PROTECT', category:'protective', thickness:'12 mil', technology:'Safety polyester', material:'3-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'High-strength security glazing where greater forced-entry delay is required.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:3,tensileStrengthPsi:23700,elongationBreakMdTdPct:[131,74],pliBreakStrength:300} },
+  { code:'SAF14', series:'PRIME SAFETY / PROTECT', model:'SAF 14 PROTECT', category:'protective', thickness:'14 mil', technology:'Safety polyester', material:'3-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'High-strength multi-layer protection for demanding security projects.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:3,tensileStrengthPsi:24700,elongationBreakMdTdPct:[131,80],pliBreakStrength:320} },
+  { code:'SAF16', series:'PRIME SAFETY / PROTECT', model:'SAF 16 PROTECT', category:'protective', thickness:'16 mil', technology:'Safety polyester', material:'4-ply safety polyester', vlt:98, uvBlock:98, irBlock:18, useCase:'Maximum confirmed thickness in the current PROTECT range.', specsStatus:'confirmed product-card values; roll dimensions pending factory confirmation', technicalSpecs:{ply:4,tensileStrengthPsi:24800,elongationBreakMdTdPct:[131,80],pliBreakStrength:350} },
+  { code:'BS05', series:'BLACK SHADOW', model:'BLACK SHADOW BS 05', category:'privacy', technology:'Reflective privacy', material:'Black-silver reflective polyester', vlt:6, useCase:'Dark daytime one-way privacy and strong glare reduction.', specsStatus:'confirmed catalog values; roll dimensions pending factory confirmation', technicalSpecs:{solarRejectionPct:69,vlrExteriorInteriorPct:[12,12],solarAbsorptionPct:61,glareReductionPct:94,uvRejectionPct:99} },
+  { code:'BS15', series:'BLACK SHADOW', model:'BLACK SHADOW BS 15', category:'privacy', technology:'Reflective privacy', material:'Black-silver reflective polyester', vlt:14, useCase:'Balanced dark daytime one-way privacy.', specsStatus:'confirmed catalog values; roll dimensions pending factory confirmation', technicalSpecs:{solarRejectionPct:72,vlrExteriorInteriorPct:[40,11],solarAbsorptionPct:45,glareReductionPct:84,uvRejectionPct:99} },
+  { code:'BS25', series:'BLACK SHADOW', model:'BLACK SHADOW BS 25', category:'privacy', technology:'Reflective privacy', material:'Black-silver reflective polyester', vlt:25, useCase:'Lighter dark-reflective daytime privacy.', specsStatus:'pending factory confirmation' },
+  ...[5,15,35,50,60].map(vlt => ({ code:`SV${String(vlt).padStart(2,'0')}`, series:'SILVER VEIL', model:`SILVER VEIL SV ${String(vlt).padStart(2,'0')}`, category:'privacy', technology:'Reflective privacy', material:'Silver reflective polyester', vlt, useCase:'Classic light reflective daytime privacy and solar-glare control.', specsStatus:'pending factory confirmation' })),
+  ...[20,35].map(vlt => ({ code:`CE${vlt}`, series:'CHROME EDGE', model:`CHROME EDGE CE ${vlt}`, category:'privacy', technology:'Reflective privacy', material:'Nickel + chrome', vlt, rollWidthsIn:[60], rollLengthFt:100, useCase:'Premium neutral chrome daytime privacy and solar control.', specsStatus:'material and roll confirmed; optical performance pending factory confirmation' })),
+  ...[20,35].map(vlt => ({ code:`BV${vlt}`, series:'BRONZE VEIL', model:`BRONZE VEIL BV ${vlt}`, category:'privacy', technology:'Reflective privacy', material:'Copper', vlt, rollWidthsIn:[60], rollLengthFt:100, useCase:'Warm bronze daytime privacy and solar control.', specsStatus:'material and roll confirmed; optical performance pending factory confirmation' })),
+  ...[20,35].map(vlt => ({ code:`SF${vlt}`, series:'SILVER FORCE', model:`SILVER FORCE SF ${vlt}`, category:'privacy', technology:'High-performance reflective privacy', material:'Aluminium', vlt, rollWidthsIn:[60,72], rollLengthFt:100, useCase:'High-performance silver daytime privacy and solar control.', specsStatus:'material and roll confirmed; optical performance pending factory confirmation' })),
+  { code:'WMP', series:'WHITE MATTE PRIME', model:'WHITE MATTE PRIME', category:'privacy', extraCategories:['decorative'], technology:'Frosted privacy', material:'White matte translucent polyester', vlt:75, useCase:'Permanent two-way privacy for offices, bathrooms, partitions and doors while retaining diffuse daylight.', privacyNote:'Two-way frosted privacy; silhouettes can remain visible at close range or under strong backlighting.', specsStatus:'confirmed catalog values; roll dimensions pending factory confirmation', technicalSpecs:{solarRejectionPct:24,vlrExteriorInteriorPct:[18,19],solarAbsorptionPct:11,glareReductionPct:16} },
+];
+
+function ensureRolanPrimeProductCatalog(catalog) {
+  if (!Array.isArray(catalog)) return 0;
+  let added = 0;
+  const currentCodes = new Set(ROLAN_PRIME_PRODUCTS.map(product => product.code));
+  catalog.forEach(item => {
+    if (!item || !/ROLAN\s*PRO/i.test(String(item.brand || ''))) return;
+    const code = String(item.modelCode || item.sku || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const supersededOwnProduct = /SAFETY PRIME|TITAN PRIME|CERAMIC PRIME|CRYSTAL PRIME|NEUTRAL PRIME|BLACK PRIME|SILVER PRIME|DUAL PRIME/i.test(String(item.model || ''));
+    if (supersededOwnProduct && !currentCodes.has(code)) item.archived = true;
+  });
+  ROLAN_PRIME_PRODUCTS.forEach(product => {
+    const stableId = `film_rolan_prime_${product.code.toLowerCase()}`;
+    let item = catalog.find(candidate => candidate?.id === stableId || String(candidate?.modelCode || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === product.code);
+    if (!item) { item = { id:stableId }; catalog.push(item); added++; }
+    const reflectivePrivacy = product.category === 'privacy' && product.code !== 'WMP';
+    Object.assign(item, product, {
+      id: item.id || stableId,
+      brand:'Rolan PRO',
+      filmCategory: product.category === 'protective' ? 'Защитная' : reflectivePrivacy ? 'Зеркальная' : 'Приватная',
+      extraCategories: reflectivePrivacy ? ['solar'] : (product.extraCategories || []),
+      productName: product.series,
+      modelCode: product.code,
+      isPrime:true,
+      tier:'Prime',
+      archived:false,
+      retailPerSqft:item.retailPerSqft ?? null,
+      costPerSqft:item.costPerSqft ?? null,
+      installerRatePerSqft:item.installerRatePerSqft ?? null,
+      wastePct:item.wastePct ?? (product.category === 'protective' ? 10 : 12),
+      rollWidthIn: product.rollWidthsIn?.length === 1 ? product.rollWidthsIn[0] : null,
+      rollStatus: product.rollWidthsIn?.length && product.rollLengthFt ? 'confirmed' : 'pending factory confirmation',
+      privacyNote: product.privacyNote || (product.category === 'privacy' && product.code !== 'WMP' ? 'Daytime one-way privacy depends on the lighting difference; use blinds or shades for night privacy.' : ''),
+      selectableInProjects:true,
+      status:'active',
+    });
   });
   return added;
 }
@@ -9231,6 +9294,7 @@ function migrateSchema() {
   // Добавляем только модели каталога. Рулоны, цены и остатки не создаём:
   // они появятся только после реального прихода на склад.
   ensureMagnitronicSolarPrimeSeries(s.catalog);
+  ensureRolanPrimeProductCatalog(s.catalog);
   ensureRolanSmartCatalog(s.catalog);
   applyMagnitronicSpecs(s.catalog);
   (s.catalog || []).forEach(item => {
@@ -24409,9 +24473,7 @@ function renderSettings() {
               <th class="px-2 py-2">Короткое название</th>
               <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
-              <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('waste')}</th>
+              <th class="px-2 py-2">Доступные ширины, in</th>
               <th></th>
             </tr>
           </thead>
@@ -24433,10 +24495,8 @@ function renderSettings() {
                     ${db.vendors.map(v => `<option value="${v.id}" ${c.vendorId===v.id?'selected':''}>${v.name}</option>`).join('')}
                   </select>
                 </td>
-                <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">✕</button></td>
+                <td class="px-2 py-1"><input value="${academyEsc(catalogRollWidthsIn(c).join(', '))}" placeholder="60, 72" onchange="updateCatalogRollWidths('${c.id}',this.value)"></td>
+                <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">Убрать</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -26173,7 +26233,9 @@ function canonicalServiceDirection(value) {
   return canonicalCatalogCategory(value);
 }
 function serviceDirectionAllowsFilm(direction, film) {
-  return !!film && canonicalServiceDirection(film.category) === canonicalServiceDirection(direction);
+  if (!film) return false;
+  const allowedCategories = [film.category, ...(Array.isArray(film.extraCategories) ? film.extraCategories : [])];
+  return allowedCategories.some(category => canonicalServiceDirection(category) === canonicalServiceDirection(direction));
 }
 /**
  * Owner, 2026-11-05: a service may link a film from ANY catalog category —
@@ -34912,6 +34974,22 @@ function updateCatalogItem(id, field, val, control = null) {
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   openNewCatalogItemModal(presetVendorId, presetCategory);
 }
+function parseCatalogRollWidthsIn(value) {
+  const values = Array.isArray(value) ? value : String(value || '').split(/[;,\s]+/);
+  return [...new Set(values.map(Number).filter(width => Number.isFinite(width) && width > 0 && width <= 120))].sort((a, b) => a - b);
+}
+function catalogRollWidthsIn(item) {
+  return parseCatalogRollWidthsIn(item?.rollWidthsIn?.length ? item.rollWidthsIn : [item?.rollWidthIn, item?.rollWidth].filter(Boolean));
+}
+function updateCatalogRollWidths(id, value) {
+  const item = getCatalogItem(id); if (!item) return;
+  const widths = parseCatalogRollWidthsIn(value);
+  if (!widths.length) return alert('Укажите ширину рулона в дюймах, например 60 или 60, 72.');
+  item.rollWidthsIn = widths;
+  item.rollWidthIn = widths.length === 1 ? widths[0] : null;
+  delete item.rollWidth;
+  save();
+}
 function catalogExtraCategories(c) {
   return Array.isArray(c?.extraCategories) ? c.extraCategories.map(canonicalCatalogCategory).filter(k => k && k !== canonicalCatalogCategory(c.category)) : [];
 }
@@ -34948,18 +35026,16 @@ function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width:36rem;">
       <h3 class="font-semibold text-lg mb-1">Новая модель плёнки</h3>
-      <p class="text-xs text-gray-500 mb-4">Карточка в каталоге склада. Рулоны принимаются отдельно — «Принять рулон».</p>
-      <div class="grid grid-cols-2 gap-3">
+      <p class="text-xs text-gray-500 mb-4">Здесь создаётся только модель плёнки. Конкретные рулоны, их длина и цена закупки фиксируются отдельно при приёмке.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div><label class="text-xs">Категория (дом)</label><select id="ncat-category">${categories.map(k => `<option value="${k}" ${k === category ? 'selected' : ''}>${academyEsc(catLabel(k))}</option>`).join('')}</select></div>
         <div><label class="text-xs">Бренд</label><input id="ncat-brand" list="ncat-brand-list" value="Rolan PRO" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="nc-brand-list">${brands.map(b => `<option value="${academyEsc(b)}"></option>`).join('')}</datalist></div>
-        <div class="col-span-2"><label class="text-xs">Название плёнки *</label><input id="ncat-name" placeholder="например, Privacy Prime Frost"></div>
+        <div class="md:col-span-2"><label class="text-xs">Название плёнки *</label><input id="ncat-name" placeholder="например, Privacy Prime Frost"></div>
         <div><label class="text-xs">Код / короткое имя</label><input id="ncat-code" placeholder="RP-PRV-FRS"></div>
         <div><label class="text-xs">Поставщик</label><select id="ncat-vendor"><option value="">не назначен</option>${vendors.map(v => `<option value="${academyEsc(v.id)}" ${v.id === presetVendorId ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
-        <div><label class="text-xs">Цена клиенту, $ / sq ft</label><input id="ncat-retail" type="number" min="0" step="0.01" value="10"></div>
-        <div><label class="text-xs">Закупка, $ / sq ft</label><input id="ncat-cost" type="number" min="0" step="0.01" value="2.5"></div>
-        <div><label class="text-xs">Ставка монтажнику, $ / sq ft</label><input id="ncat-rate" type="number" min="0" step="0.01" value="0.27"></div>
-        <div><label class="text-xs">Отход, %</label><input id="ncat-waste" type="number" min="0" step="1" value="12"></div>
-        <div class="col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
+        <div class="md:col-span-2"><label class="text-xs">Доступные ширины рулона, in *</label><input id="ncat-widths" inputmode="decimal" placeholder="например: 60 или 60, 72"><div class="text-xs text-gray-500 mt-1">Можно указать несколько ширин через запятую. При приёмке рулона выберите его фактическую ширину.</div></div>
+        <div class="md:col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
+        <div class="md:col-span-2 p-3 rounded-lg bg-blue-50 text-blue-900 text-sm"><b>Деньги и расход считаются в своих местах.</b><div class="mt-1">Цена клиенту и ставка монтажнику задаются в «Услуги и цены». Закупка за sq ft рассчитывается из цены и размеров принятого рулона. Расход и отход определяются после замера и раскроя проекта.</div></div>
       </div>
       <div class="flex gap-2 mt-5">
         <button class="btn-primary flex-1" onclick="createCatalogItemFromModal()">Добавить в каталог</button>
@@ -34972,20 +35048,21 @@ function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
 }
 function createCatalogItemFromModal() {
   const v = id => (document.getElementById(id)?.value || '').trim();
-  const num = (id, fallback) => { const n = parseFloat(v(id)); return Number.isFinite(n) && n >= 0 ? n : fallback; };
   const name = v('ncat-name');
   if (!name) { alert('Укажите название плёнки.'); document.getElementById('ncat-name')?.focus(); return; }
   const category = canonicalCatalogCategory(v('ncat-category')) || 'solar';
   const extraCategories = [...document.querySelectorAll('input[data-ncat-extra]:checked')].map(el => el.getAttribute('data-ncat-extra')).filter(k => k && k !== category);
   const brand = v('ncat-brand') || 'Rolan PRO';
   const code = v('ncat-code');
+  const rollWidthsIn = parseCatalogRollWidthsIn(v('ncat-widths'));
+  if (!rollWidthsIn.length) { alert('Укажите хотя бы одну ширину рулона в дюймах, например 60 или 60, 72.'); document.getElementById('ncat-widths')?.focus(); return; }
   if ((db.settings.catalog || []).some(c => !c.archived && String(c.brand || '').trim().toLowerCase() === brand.toLowerCase() && String(c.fullName || c.model || '').trim().toLowerCase() === name.toLowerCase())) {
     if (!confirm(`«${brand} — ${name}» уже есть в каталоге. Добавить ещё одну запись?`)) return;
   }
   const item = {
     id: uid(), brand, model: name, category, vendorId: v('ncat-vendor') || null,
     filmCategory: '', fullName: name, shortName: code, productName: name, modelCode: code, sku: code,
-    retailPerSqft: num('ncat-retail', 10), costPerSqft: num('ncat-cost', 2.5), installerRatePerSqft: num('ncat-rate', 0.27), wastePct: num('ncat-waste', 12),
+    rollWidthsIn, rollWidthIn: rollWidthsIn.length === 1 ? rollWidthsIn[0] : null,
     extraCategories, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
   };
   db.settings.catalog.push(item);
@@ -35010,8 +35087,17 @@ function loadStandardCatalog() {
   render();
 }
 function deleteCatalogItem(id) {
-  if (!confirm('Удалить позицию каталога?')) return;
-  db.settings.catalog = db.settings.catalog.filter(c => c.id !== id);
+  if (currentUser()?.role !== 'owner') return alert('Убрать модель из каталога может только владелец.');
+  const item = getCatalogItem(id); if (!item) return;
+  const remaining = filmWarehouseRolls(id).reduce((sum, roll) => sum + Math.max(0, Number(roll.remainingLengthM) || 0), 0);
+  if (remaining > 0) return alert(`Нельзя убрать модель, пока на складе осталось ${remaining.toFixed(2)} м. Сначала спишите или перенесите остаток.`);
+  const activeRequest = (db.purchaseRequests || []).find(request => request.kind === 'film' && request.itemId === id && !['received','cancelled'].includes(request.status));
+  if (activeRequest) return alert(`Сначала завершите или отмените заявку на закупку ${activeRequest.number || ''}.`);
+  if (!confirm(`Убрать «${catalogLabel(item)}» из активного списка?\n\nСтарые проекты, движения и документы сохранятся. Модель будет перенесена в архив.`)) return;
+  item.archived = true;
+  item.archivedAt = new Date().toISOString();
+  item.archivedBy = currentUser()?.id || null;
+  state.inventoryFilmModel = null;
   save(); render();
 }
 
@@ -42653,7 +42739,7 @@ function renderFilmCategoryDirectory() {
   </div>`;
 }
 function renderFilmCategoryModels(category) {
-  const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category));
+  const all = (db.settings.catalog || []).filter(item => !item.archived && catalogItemInCategory(item, category));
   const blank = currentUser()?.role === 'owner' ? blankCatalogItems().filter(item => catalogItemInCategory(item, category)) : [];
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
   const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
@@ -42669,7 +42755,7 @@ function renderFilmCategoryModels(category) {
     ${items.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Модель</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Ширины</th><th class="text-left p-2">Статус</th><th></th></tr></thead><tbody>${items.map(item => {
       const rolls = filmWarehouseRolls(item.id);
       const length = rolls.reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0);
-      const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || (item.rollWidth ? `${item.rollWidth}\"` : '—');
+      const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || catalogRollWidthsIn(item).map(width => `${width}\"`).join(', ') || '—';
       const low = length <= Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
       return `<tr class="border-t ${length <= 0 ? 'bg-red-50' : low ? 'bg-amber-50' : ''}" onclick="openFilmWarehouseModel('${item.id}')" style="cursor:pointer"><td class="p-2"><span style="width:8px;height:8px;border-radius:50%;background:${colors.dot};display:inline-block;margin-right:6px"></span><b>${academyEsc(item.brand)} — ${academyEsc(item.model)}</b><div class="text-xs text-gray-400">${catalogSpecLabel(item)}</div></td><td class="p-2">${rolls.length}</td><td class="p-2 font-bold ${length > 0 ? 'text-emerald-700' : 'text-red-700'}">${length.toFixed(1)} м</td><td class="p-2">${widths}</td><td class="p-2">${rpStockBadge(length <= 0 ? 'out' : low ? 'low' : 'ok')}</td><td class="p-2 text-blue-700 font-semibold">Открыть →</td></tr>`;
     }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">🔎</div><div>В этой категории модели не найдены.</div></div>`}
@@ -42683,7 +42769,7 @@ function renderFilmModelStock(catalogId) {
   const vendor = item.vendorId ? db.vendors.find(v => v.id === item.vendorId) : null;
   return `<div class="card mb-4">
     <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmModel=null;render();">← ${academyEsc(catLabel(item.category))} · все модели</button>
-    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
+    <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div></div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button>${currentUser()?.role === 'owner' ? `<button class="btn-ghost text-sm text-red-700" onclick="deleteCatalogItem('${item.id}')">Убрать из списка</button>` : ''}</div></div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
   </div>
   <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Код</th><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Закупка / sq ft</th><th></th></tr></thead><tbody>${rolls.map(roll => {
@@ -43488,8 +43574,9 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
   const preset = getCatalogItem(presetCatId || request?.itemId || '') || null;
   const category = canonicalCatalogCategory(preset?.category) || 'solar';
   const today = new Date().toISOString().slice(0, 10);
-  const widths = db.settings.filmRolls?.widths || [1524, 1829];
-  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || 0;
+  const modelWidths = catalogRollWidthsIn(preset).map(width => Math.round(width * 25.4));
+  const widths = [...new Set([...modelWidths, ...(db.settings.filmRolls?.widths || [1524, 1829])])];
+  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || modelWidths[0] || 0;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 40rem;">
@@ -44093,7 +44180,9 @@ async function cloudBoot() {
     }
     const persistClientNotificationMigration = !db._clientStageNotificationsV1;
     const persistOfficialSupplierMigration = !db._officialSupplierCatalogV1;
+    const persistRolanPrimeCatalogMigration = !db._rolanPrimeCatalogV1;
     migrateSchema();
+    db._rolanPrimeCatalogV1 = true;
     normalizeClientAccountData();
     const allowedCards = cloudAllowedLegacyIds.map(getUser).filter(Boolean);
     let rememberedCard = null;
@@ -44114,7 +44203,7 @@ async function cloudBoot() {
     // their film write-off and notices; they run once the claim is saved.
     const claimedFollowUps = projectClaimServiceFollowUps();
     projectSettleChangedServices(false);
-    if (persistClientNotificationMigration || persistOfficialSupplierMigration || roleWasSynchronized || claimedFollowUps) cloudScheduleSave();
+    if (persistClientNotificationMigration || persistOfficialSupplierMigration || persistRolanPrimeCatalogMigration || roleWasSynchronized || claimedFollowUps) cloudScheduleSave();
     parseHash();
     render();
     cloudStatus('Сохранено', 'green');

@@ -2,6 +2,29 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-07 — Film model, roll cost and project waste are separate
+
+- Task owner: Codex, branch `codex/rolan-prime-catalog-20261107`, PR #481. Owner showed the Warehouse «Новая модель плёнки» form and removed four misplaced inputs: customer price, purchase cost per sq ft, installer rate and fixed waste percent.
+- A new catalog model now stores identity, supplier, home/additional categories and one or more available roll widths in inches. Widths accept values such as `60` or `60, 72`; the selected model's widths are offered first when a real roll is received. The receipt still records the actual roll width.
+- Commercial price and installer pay remain in «Услуги и цены». A roll's material cost per sq ft remains `purchase price / actual roll area` at receipt. Project consumption and waste remain outputs of verified measurements and the existing cutting plan; no catalog-level guessed percentage is created.
+- Owner can now use «Убрать из списка» on a Warehouse model. The action archives the model rather than deleting its identity or history, is blocked while any roll has remaining stock, and is blocked while an active purchase request exists. Archived models disappear from active Warehouse lists but remain readable from historical records.
+- The modal is one column on phones and two columns on desktop. Verification after the archive action: focused Warehouse/reference/receipt tests **25/25**, full suite **1091/1091**, TypeScript, production build and `git diff --check` pass. No production deployment or live database write was attempted.
+
+## 2026-11-07 — Reflective PRIME films mapped to Privacy and Solar
+
+- Task owner: Codex, existing branch `codex/rolan-prime-catalog-20261107`, PR #481. Owner requested that every reflective privacy product remain in `Privacy Film` and also appear in the Solar catalog under the `Зеркальная` subtype, without duplicate product records.
+- BLACK SHADOW BS 05/15/25, SILVER VEIL SV 05/15/35/50/60, CHROME EDGE CE 20/35, BRONZE VEIL BV 20/35 and SILVER FORCE SF 20/35 now keep `privacy` as their home category and receive `solar` as an additional category. WHITE MATTE PRIME remains Privacy + Decorative and is not classified as Solar reflective.
+- Project/service selectors now honor a film's additional categories, so one stable film record can be selected from either Privacy or Solar. The relational catalog mirrors this with `additional_category_codes` and the `SOLAR_CONTROL` capability tag.
+- Verification after synchronizing with current `origin/main`: scoped catalog/service/roll tests **59/59**, full suite **1089/1089**, TypeScript, Prisma validation, production build, CSV structure and `git diff --check` pass. No production deployment or live database write was attempted.
+
+## 2026-11-07 — ROLANPRO PRIME product catalog
+
+- Task owner: Codex, branch `codex/rolan-prime-catalog-20261107`, based on `origin/main` `51e58e5`. No production deployment or live database write was attempted.
+- Canonical product architecture is now `ROLANPRO = PRIME`: `MAGNITRONIC PRIME SOLAR` SP 05/15/20/35/50/70; `PRIME SAFETY / PROTECT` SAF 2/4/8/12/14/16 PROTECT; and `PRIME PRIVACY` with BLACK SHADOW BS 05/15/25, SILVER VEIL SV 05/15/35/50/60, CHROME EDGE CE 20/35, BRONZE VEIL BV 20/35, SILVER FORCE SF 20/35 and WHITE MATTE PRIME. BS 35 was not added because no confirmed current CRM record exists.
+- Relational FilmCatalog now stores series, material, roll width(s)/length, use case, privacy note, specification status and structured technical specs. The migration preserves `film_id`, maps internal MP codes to customer SP codes and archives A1/A2/A3 placeholders from new selection without deleting historical references.
+- The active legacy workspace adds/updates the same stable own-brand records once, marks every new record selectable in Projects, archives superseded own-brand placeholder lines and persists the shared workspace migration. Unknown roll/optical values are explicitly `pending factory confirmation`; reflective products carry the daytime-only privacy note.
+- The customer-facing AI knowledge uses the same names and corrected SP 20/SP 70 IRR values. Verification: Prisma schema validation, TypeScript, production build, full suite **1086/1086**, scoped catalog/workspace/worker tests **31/31**, and `git diff --check` pass. Next: review PR and CI; merge/deploy only after Owner approval, then perform an authenticated CRM catalog/Project selector smoke check.
+
 ## 2026-11-07 — Почта удалённого сотрудника: объяснить, а не отшивать (Claude, PR pending)
 
 - Owner: «удаляю сотрудника, потом завожу нового с той же почтой — CRM пишет, что сотрудник с такой почтой есть, но я же его удалил». Удаление архивирует аккаунт вместе с историей работ (см. `safe-delete.test.ts`), поэтому почта остаётся занятой — поведение верное, а сообщение об этом молчало.

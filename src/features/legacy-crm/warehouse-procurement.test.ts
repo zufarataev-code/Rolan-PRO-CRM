@@ -63,6 +63,36 @@ test('film warehouse opens categories before models and rolls', () => {
   assert.match(html, /if \(model\) return renderFilmModelStock\(model\);/);
 });
 
+test('a new film model stores identity and widths, while money and waste belong to services, receipts and cutting', () => {
+  const modalStart = html.indexOf('function openNewCatalogItemModal(');
+  const modalEnd = html.indexOf('function loadStandardCatalog(', modalStart);
+  const modal = html.slice(modalStart, modalEnd);
+  assert.match(modal, /Доступные ширины рулона, in \*/);
+  assert.match(modal, /id="ncat-widths"/);
+  assert.match(modal, /rollWidthsIn = parseCatalogRollWidthsIn/);
+  assert.match(modal, /rollWidthsIn, rollWidthIn:/);
+  assert.doesNotMatch(modal, /ncat-retail|ncat-cost|ncat-rate|ncat-waste/);
+  assert.doesNotMatch(modal, /retailPerSqft:|costPerSqft:|installerRatePerSqft:|wastePct:/);
+  assert.match(modal, /Цена клиенту и ставка монтажнику задаются в «Услуги и цены»/);
+  assert.match(modal, /Закупка за sq ft рассчитывается из цены и размеров принятого рулона/);
+  assert.match(modal, /Расход и отход определяются после замера и раскроя проекта/);
+  assert.match(html, /const modelWidths = catalogRollWidthsIn\(preset\)\.map\(width => Math\.round\(width \* 25\.4\)\)/);
+  assert.match(html, /const presetWidth = Number\(request\?\.widthMm[^\n]+\|\| modelWidths\[0\] \|\| 0/);
+});
+
+test('the owner can archive an empty film model from Warehouse without deleting history', () => {
+  assert.match(html, /Убрать из списка/);
+  assert.match(html, /function deleteCatalogItem\(id\)[\s\S]*?currentUser\(\)\?\.role !== 'owner'/);
+  assert.match(html, /Нельзя убрать модель, пока на складе осталось/);
+  assert.match(html, /request\.kind === 'film'[\s\S]*?\['received','cancelled'\]/);
+  assert.match(html, /Старые проекты, движения и документы сохранятся/);
+  assert.match(html, /item\.archived = true/);
+  assert.doesNotMatch(html, /db\.settings\.catalog = db\.settings\.catalog\.filter\(c => c\.id !== id\)/);
+  assert.match(html, /const all = \(db\.settings\.catalog \|\| \[\]\)\.filter\(item => !item\.archived/);
+  assert.match(html, /Доступные ширины, in/);
+  assert.match(html, /updateCatalogRollWidths/);
+});
+
 test('film category navigation reuses existing catalog and inventory records', () => {
   assert.match(html, /function filmWarehouseRolls\(catalogId\)[\s\S]*?db\.inventory/);
   assert.match(html, /function renderFilmCategoryModels\(category\)[\s\S]*?db\.settings\.catalog/);
@@ -70,17 +100,17 @@ test('film category navigation reuses existing catalog and inventory records', (
 });
 
 test('Magnitronic Solar Prime series is seeded with verified meter readings', () => {
-  for (const model of ['SP-5%', 'SP-15%', 'SP-20%', 'SP-35%', 'SP-50%', 'SP-70%']) {
-    assert.match(html, new RegExp(model.replace('%', '%')));
-    assert.match(seed, new RegExp(model.replace('%', '%')));
+  for (const model of ['SP 05', 'SP 15', 'SP 20', 'SP 35', 'SP 50', 'SP 70']) {
+    assert.match(html, new RegExp(model));
+    assert.match(seed, new RegExp(model));
   }
   assert.match(html, /'SP05': \{ vlt: 5\.7,\s+tser: 93\.3, uv: 100\.0, ir: 95\.6 \}/);
   assert.match(html, /'SP70': \{ vlt: 68\.0, tser: 63\.6, uv: 99\.2,\s+ir: 99\.4 \}/);
   assert.match(html, /ensureMagnitronicSolarPrimeSeries\(s\.catalog\);/);
   assert.match(html, /brand: 'Rolan PRO'/);
-  assert.match(html, /series: 'Magnitronic Solar Prime'/);
+  assert.match(html, /series: 'MAGNITRONIC PRIME SOLAR'/);
   assert.match(seed, /"ROLANPRO", "Rolan PRO", "Rolan PRO"/);
-  assert.match(seed, /"Magnitronic Solar Prime SP-5%", "Magnitronic Solar Prime SP-5%"/);
+  assert.match(seed, /"MAGNITRONIC PRIME SOLAR SP 05", "MAGNITRONIC PRIME SOLAR SP 05"/);
   assert.match(html, /retailPerSqft: null/);
   assert.match(html, /costPerSqft: null/);
 });
@@ -109,7 +139,7 @@ test('official supplier cards and confirmed catalogs are seeded without invented
   assert.match(html, /if \(!item\.vendorId \|\| item\.vendorId===source\.vendorId\) item\.vendorId=vendorIds\.get\(source\.vendorId\)\|\|source\.vendorId/);
   assert.match(html, /db\._officialSupplierCatalogV1 = true/);
   assert.match(html, /persistOfficialSupplierMigration = !db\._officialSupplierCatalogV1/);
-  assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| roleWasSynchronized/);
+  assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| persistRolanPrimeCatalogMigration \|\| roleWasSynchronized/);
 });
 
 test('reorder creates one supplier-linked draft and explicit send is required', () => {

@@ -2,6 +2,32 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-07 — A film model is not a price, purchase or waste record
+
+- A film model in the Warehouse catalog stores product identity, supplier, categories and available roll widths. It does not own customer price, installer pay, purchase cost per sq ft or a guessed waste percentage.
+- Customer price and installer pay belong to the sellable service in «Услуги и цены».
+- Purchase price belongs to the received roll. Material cost per sq ft is calculated from that roll's total purchase price and actual width × length.
+- Project consumption and waste are calculated only after verified measurements and the cutting plan. They are not fixed on the film model.
+- Model widths are entered in inches and may contain several options. The actual received roll width remains authoritative for stock, costing and cutting.
+- Removing a model from active Warehouse lists is a reversible archive action, not a hard delete. It is prohibited while the model has remaining stock or an unfinished purchase request; historical Projects, movements and documents keep the stable model identity.
+
+## 2026-11-07 — Reflective Privacy products are also Solar / Reflective materials
+
+- BLACK SHADOW, SILVER VEIL, CHROME EDGE, BRONZE VEIL and SILVER FORCE keep `Privacy Film` as their canonical home direction because their primary sales promise is daytime privacy.
+- The same stable product records are additionally available under `Solar Film` with the subtype `Зеркальная`, because they also provide solar and glare control.
+- Cross-category availability is metadata on one film record, not a copied SKU. Projects, warehouse rolls, prices and historical references continue to use the same product identity.
+- WHITE MATTE PRIME remains Privacy + Decorative; it is not a Solar reflective product.
+- A selector that filters catalog materials by service direction must honor both the home category and the approved additional categories.
+
+## 2026-11-07 — ROLANPRO = PRIME product architecture
+
+- Every own-brand architectural film is presented under the PRIME architecture. Customer-facing model codes are the product identity; old supplier names and internal MP/A-series labels are not new-sale names.
+- Solar is `MAGNITRONIC PRIME SOLAR` with SP 05, SP 15, SP 20, SP 35, SP 50 and SP 70. Existing film rows keep their stable `film_id` while MP model codes migrate to SP codes.
+- Safety is `PRIME SAFETY / PROTECT` with confirmed thickness variants SAF 2, SAF 4, SAF 8, SAF 12, SAF 14 and SAF 16 PROTECT. Older A1/A2/A3 rows remain for history but are inactive for new selection.
+- Privacy is `PRIME PRIVACY`: BLACK SHADOW BS 05/15/25; SILVER VEIL SV 05/15/35/50/60; CHROME EDGE CE 20/35; BRONZE VEIL BV 20/35; SILVER FORCE SF 20/35; WHITE MATTE PRIME. BS 35 is added only when a confirmed current record exists; it was not confirmed for this release.
+- Reflective privacy is described as `DAYTIME ONE-WAY PRIVACY`; nighttime privacy is never promised. Any unverified optical or roll value stays empty and is labeled `pending factory confirmation`. Product-card or owner-meter values are not presented as whole-window guarantees.
+- Catalog rows are directly reusable in Projects/services and contain category, series, model code, VLT, technology/material, roll variants, use case, privacy note, structured specs and confirmation status. Superseded records are archived rather than deleted so historical Projects remain intact.
+
 ## 2026-11-06 — Review public Meta form scope in Git
 
 The approved Meta form IDs are public deployment configuration in

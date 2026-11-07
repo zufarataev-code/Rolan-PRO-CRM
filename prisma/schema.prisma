@@ -175,9 +175,18 @@ model FilmCatalog {
   thickness                    String?           @db.VarChar(50)
   unit                         String            @db.VarChar(30)
   technology_code              String?           @db.VarChar(50)
+  series_name                  String?           @db.VarChar(120)
+  material_code                String?           @db.VarChar(80)
   appearance_code              String?           @db.VarChar(50)
   application_side             String?           @db.VarChar(30)
   capability_tags              Json?
+  additional_category_codes    Json?
+  roll_widths_in               Json?
+  roll_length_ft               Decimal?          @db.Decimal(8, 2)
+  use_case_ru                  String?           @db.Text
+  privacy_note_ru              String?           @db.Text
+  spec_status                  String?           @db.VarChar(80)
+  technical_specs              Json?
 
   // Оптические параметры для подбора плёнки на замере.
   // Заполняются из спецификации производителя. Пустое значение
