@@ -24,11 +24,12 @@ test('status notifications also go by SMS to every recipient with a phone, witho
   assert.ok(notify.indexOf('options.skipSms') < notify.indexOf('if (!deliveries.length) return'), 'the SMS pass does not depend on Telegram being configured');
 });
 
-test('«Старший монтажник» is a visible role: in the role select, the new-member form, the team list and crew pickers', () => {
+test('«Старший монтажник» is a visible role: in role controls, the team list and crew pickers', () => {
   // Owner, 2026-11-06: «у нас нет роли старшего монтажника — как система поймёт, кто есть кто».
   assert.match(html, /function teamIsSeniorInstaller\(u\) \{ return !!u && u\.role === 'installer' && u\.installerLevel === 'senior'; \}/);
-  assert.match(html, /<option value="installer_senior" \$\{teamIsSeniorInstaller\(u\) \? 'selected' : ''\}>Старший монтажник/);
-  assert.match(html, /const requestedSenior = requestedRoleValue === 'installer_senior';\n\s*const requestedRole = requestedSenior \? 'installer' : requestedRoleValue;/);
+  assert.match(html, /value="INSTALLER_SENIOR"[\s\S]*?<span class="text-sm">Старший монтажник/);
+  assert.match(html, /const requestedSenior = checkedRoleValues\.includes\('INSTALLER_SENIOR'\);/);
+  assert.match(html, /const requestedRole = teamLegacyRoleFromServer\(requestedRoleCodes\) \|\| u\.role;/);
   assert.match(html, /if \(isOwner\) \{ if \(requestedSenior\) u\.installerLevel = 'senior'; else delete u\.installerLevel; \}/);
   assert.match(html, /value="INSTALLER_SENIOR"/);
   assert.match(html, /code === 'INSTALLER_SENIOR' \? 'INSTALLER' : code/, 'the server still sees an installer');

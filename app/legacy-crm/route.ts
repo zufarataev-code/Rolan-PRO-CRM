@@ -346,10 +346,9 @@ export async function GET(request: NextRequest) {
         }
 
         // The existing «Команда» section keeps phone, photo and pay settings.
-        // Roles are edited only in the canonical directory: the old
-        // single-role editor would drop secondary roles. The login email may be
-        // changed here too — it goes straight to the PostgreSQL account, so the
-        // card, the access dialog and the login all show the same address.
+        // The employee card and the canonical directory both edit the same
+        // PostgreSQL account. The card uses a multi-role selector, so changing
+        // one role never silently drops another one.
         const originalRenderTeam = window.renderTeam;
         if (typeof originalRenderTeam === 'function') {
           window.renderTeam = function renderTeamWithDirectory() {
@@ -360,29 +359,6 @@ export async function GET(request: NextRequest) {
               + originalRenderTeam();
           };
         }
-        const nativeTeamFetch = window.fetch.bind(window);
-        window.fetch = function teamSafeFetch(input, init) {
-          const url = typeof input === 'string' ? input : String(input?.url || '');
-          const method = String(init?.method || 'GET').toUpperCase();
-          const isTeamMemberPatch = method === 'PATCH' && url.includes('/api/v1/team/') && !url.includes('/api/v1/team/preview');
-          if (isTeamMemberPatch && typeof init?.body === 'string') {
-            try {
-              const body = JSON.parse(init.body);
-              delete body.roles;
-              init = { ...init, body: JSON.stringify(body) };
-            } catch (_) { /* not JSON: send as is */ }
-          }
-          return nativeTeamFetch(input, init);
-        };
-        new MutationObserver(() => {
-          ['tm-edit-role'].forEach((id) => {
-            const field = document.getElementById(id);
-            if (field && !field.disabled) {
-              field.disabled = true;
-              field.title = 'Меняется в разделе «Сотрудники»';
-            }
-          });
-        }).observe(document.documentElement, { childList: true, subtree: true });
         if (new URLSearchParams(location.search).get('panel') === 'team') {
           history.replaceState(null, '', location.pathname + location.hash);
           window.requestAnimationFrame(() => window.openRolanProTeam());

@@ -24,6 +24,8 @@ export type TeamMemberInput = {
   legacyUserId?: string;
 };
 
+type ResolvedRole = { role_id: string; code: string };
+
 export type TeamMember = {
   userId: string;
   legacyUserIds: string[];
@@ -84,6 +86,21 @@ function assertValidPassword(password: string) {
   }
 }
 
+async function resolveRoles(roles: RoleCode[]): Promise<ResolvedRole[]> {
+  const resolved = await prisma.role.findMany({
+    where: { code: { in: roles } },
+    select: { role_id: true, code: true },
+  });
+  const resolvedCodes = new Set(resolved.map((role) => role.code));
+  const missingRoles = roles.filter((role) => !resolvedCodes.has(role));
+
+  if (missingRoles.length) {
+    throw new Error(`Роли ${missingRoles.join(", ")} не настроены на сервере. Обновите справочник ролей и повторите.`);
+  }
+
+  return resolved;
+}
+
 export async function listTeamMembers(): Promise<TeamMember[]> {
   const users = await prisma.user.findMany({
     orderBy: [{ is_active: "desc" }, { full_name: "asc" }],
@@ -121,10 +138,10 @@ export async function createTeamMember(input: TeamMemberInput) {
 
   const existing = await prisma.user.findUnique({
     where: { email },
-    select: { full_name: true, is_active: true },
+    select: { user_id: true, full_name: true, is_active: true, legacy_user_ids: true },
   });
 
-  if (existing) {
+  if (existing?.is_active) {
     throw new Error(emailTakenMessage(existing));
   }
 
@@ -141,17 +158,41 @@ export async function createTeamMember(input: TeamMemberInput) {
     }
   }
 
-  const roles = await prisma.role.findMany({
-    where: { code: { in: input.roles } },
-    select: { role_id: true, code: true },
-  });
+  const roles = await resolveRoles(input.roles);
 
-  const resolvedCodes = new Set(roles.map((role) => role.code));
-  const missingRoles = input.roles.filter((role) => !resolvedCodes.has(role));
-  if (missingRoles.length) {
-    throw new Error(
-      `Роли ${missingRoles.join(", ")} не настроены на сервере. Обновите справочник ролей и повторите создание сотрудника.`,
-    );
+  // Повторное добавление удалённого сотрудника восстанавливает ту же запись.
+  // История проектов, начислений и действий остаётся на прежнем user_id.
+  if (existing) {
+    const shouldLinkLegacyUser = Boolean(legacyUserId && existing.legacy_user_ids.length === 0);
+    const restored = await prisma.$transaction(async (tx) => {
+      await tx.userAccess.deleteMany({ where: { user_id: existing.user_id } });
+      await tx.userAccess.createMany({
+        data: roles.map((role, index) => ({
+          user_id: existing.user_id,
+          role_id: role.role_id,
+          is_primary: index === 0,
+        })),
+      });
+
+      return tx.user.update({
+        where: { user_id: existing.user_id },
+        data: {
+          full_name: input.fullName.trim(),
+          password_hash: hashPassword(password),
+          must_change_password: true,
+          is_active: true,
+          legacy_user_ids: shouldLinkLegacyUser && legacyUserId ? { push: legacyUserId } : undefined,
+        },
+      });
+    });
+
+    return {
+      userId: restored.user_id,
+      legacyUserIds: restored.legacy_user_ids,
+      email: restored.email,
+      temporaryPassword: password,
+      restored: true,
+    };
   }
 
   const user = await prisma.user.create({
@@ -173,6 +214,7 @@ export async function createTeamMember(input: TeamMemberInput) {
     legacyUserIds: user.legacy_user_ids,
     email: user.email,
     temporaryPassword: password,
+    restored: false,
   };
 }
 
@@ -254,20 +296,7 @@ export async function updateTeamMember(
     }
   }
 
-  const roleIds = input.roles
-    ? await prisma.role.findMany({
-        where: { code: { in: input.roles } },
-        select: { role_id: true, code: true },
-      })
-    : null;
-
-  if (input.roles && roleIds) {
-    const resolved = new Set(roleIds.map((role) => role.code));
-    const missing = input.roles.filter((role) => !resolved.has(role));
-    if (missing.length) {
-      throw new Error(`Роли ${missing.join(", ")} не настроены на сервере.`);
-    }
-  }
+  const roleIds = input.roles ? await resolveRoles(input.roles) : null;
 
   // Roles and profile change together or not at all: a failure halfway used
   // to leave an employee with no roles.

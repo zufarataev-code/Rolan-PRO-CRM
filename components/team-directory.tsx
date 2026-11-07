@@ -278,8 +278,12 @@ function MemberForm({
     setBusy(true);
     try {
       if (!member) {
-        await api("/api/v1/team", "POST", { email, fullName, roles, password });
-        await onSaved(`${fullName} добавлен(а). Передайте почту и временный пароль лично — при первом входе CRM попросит его сменить.`);
+        const created = await api("/api/v1/team", "POST", { email, fullName, roles, password });
+        await onSaved(
+          created?.restored
+            ? `${fullName} восстановлен(а) из архива. История сохранена; передайте новый временный пароль лично.`
+            : `${fullName} добавлен(а). Передайте почту и временный пароль лично — при первом входе CRM попросит его сменить.`,
+        );
       } else {
         await api(`/api/v1/team/${member.userId}`, "PATCH", {
           email,

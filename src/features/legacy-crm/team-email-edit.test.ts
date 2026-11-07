@@ -8,19 +8,21 @@ test("owner edits the employee login email directly in the employee card", () =>
   assert.match(source, /id="tm-edit-email" type="email"/);
   assert.match(source, /async function submitTeamMemberEdit/);
   assert.match(source, /legacyUserIds\.includes\(userId\)/);
-  assert.match(source, /JSON\.stringify\(\{ email, fullName: name, roles: \[roleOption\.code\], legacyUserId: userId \}\)/);
+  assert.match(source, /JSON\.stringify\(\{ email, fullName: name, roles: requestedRoleCodes, legacyUserId: userId \}\)/);
   assert.doesNotMatch(source, /Почта — это логин на сервере\. Менять её здесь нельзя/);
 });
 
 test("owner changes an employee role directly in the employee card", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
-  assert.match(source, /<select id="tm-edit-role">/);
+  assert.match(source, /id="tm-edit-roles"/);
+  assert.match(source, /teamRoleCheckboxes\([\s\S]*?'tm-edit-role'\)/);
+  assert.match(source, /document\.querySelectorAll\('\.tm-edit-role:checked'\)/);
   assert.match(source, /legacyRole: 'manager'/);
   assert.match(source, /legacyRole: 'measurer'/);
   assert.match(source, /legacyRole: 'installer'/);
   assert.match(source, /legacyRole: 'owner'/);
-  assert.match(source, /roles: \[roleOption\.code\]/);
+  assert.match(source, /roles: requestedRoleCodes/);
   assert.match(source, /u\.role = requestedRole/);
   assert.match(source, /u\.id !== viewer\?\.id/);
   assert.match(source, /Свою роль владельца менять нельзя/);
@@ -31,7 +33,7 @@ test("employee card hydrates canonical email and role from the server account", 
 
   assert.match(source, /hydrateTeamMemberAccount\(userId\)/);
   assert.match(source, /emailInput\.value = member\.email/);
-  assert.match(source, /teamLegacyRoleFromServer\(member\.roles\)/);
+  assert.match(source, /const serverRoles = Array\.isArray\(member\.roles\)/);
   assert.match(source, /priority = \['OWNER', 'MANAGER', 'CONSULTANT', 'INSTALLER'\]/);
   assert.match(source, /emailWasEdited \? enteredEmail : \(canonicalEmail \|\| enteredEmail\)/);
 });
@@ -66,10 +68,10 @@ test("new employee is linked to the legacy card during creation", () => {
 test("login email edits reach the server account and the access dialog shows its email", () => {
   const route = readFileSync("app/legacy-crm/route.ts", "utf8");
 
-  // The owner's PATCH keeps the email; only roles stay with the canonical directory.
-  assert.match(route, /delete body\.roles;/);
+  // The owner's PATCH keeps both email and roles; both editors use the canonical account.
+  assert.doesNotMatch(route, /delete body\.roles/);
   assert.doesNotMatch(route, /delete body\.email/);
-  assert.match(route, /\['tm-edit-role'\]\.forEach/);
+  assert.doesNotMatch(route, /Меняется в разделе «Сотрудники»/);
   // The access dialog opens only with the PostgreSQL email (no stale value to save
   // back), keeps Save disabled without a server account, and reports success
   // only when the server saved the new email.

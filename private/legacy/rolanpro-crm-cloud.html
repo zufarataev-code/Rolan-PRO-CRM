@@ -22519,15 +22519,15 @@ function suggestTeamPassword() {
   return out;
 }
 
-function teamRoleCheckboxes(selected) {
+function teamRoleCheckboxes(selected, className = 'tm-role') {
   const rows = TEAM_ROLE_OPTIONS.map(r => `
     <label class="flex items-start gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
-      <input type="checkbox" class="tm-role mt-1" value="${r.code}" ${selected.includes(r.code) ? 'checked' : ''}>
+      <input type="checkbox" class="${className} mt-1" value="${r.code}" ${selected.includes(r.code) ? 'checked' : ''}>
       <span class="text-sm">${academyEsc(r.label)}</span>
     </label>`);
   rows.splice(3, 0, `
     <label class="flex items-start gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
-      <input type="checkbox" class="tm-role mt-1" value="INSTALLER_SENIOR" ${selected.includes('INSTALLER_SENIOR') ? 'checked' : ''}>
+      <input type="checkbox" class="${className} mt-1" value="INSTALLER_SENIOR" ${selected.includes('INSTALLER_SENIOR') ? 'checked' : ''}>
       <span class="text-sm">Старший монтажник — ведёт бригаду, приём и сдача объекта, +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к своей доле</span>
     </label>`);
   return rows.join('');
@@ -22715,10 +22715,11 @@ function openTeamMemberEdit(userId) {
 
       <label class="mt-3">Роль</label>
       ${isOwner && u.id !== viewer?.id
-        ? `<select id="tm-edit-role">
-            ${TEAM_ROLE_OPTIONS.map(option => `<option value="${option.legacyRole}" ${u.role === option.legacyRole && !teamIsSeniorInstaller(u) ? 'selected' : ''}>${academyEsc(option.name)}</option>${option.legacyRole === 'installer' ? `<option value="installer_senior" ${teamIsSeniorInstaller(u) ? 'selected' : ''}>Старший монтажник · +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} % к доле</option>` : ''}`).join('')}
-          </select>
-          <div class="text-xs text-gray-400 mt-1">Роль определяет разделы и данные, которые сотрудник увидит после сохранения.</div>`
+        ? `<div id="tm-edit-roles" class="grid grid-cols-1 gap-2">${teamRoleCheckboxes([
+            ...(teamRoleOptionByLegacy(u.role) ? [teamRoleOptionByLegacy(u.role).code] : []),
+            ...(teamIsSeniorInstaller(u) ? ['INSTALLER_SENIOR'] : []),
+          ], 'tm-edit-role')}</div>
+          <div class="text-xs text-gray-400 mt-1">Можно выбрать несколько ролей. Изменения сразу применятся к доступу сотрудника.</div>`
         : `<input id="tm-edit-role" value="${academyEsc(T(u.role) || u.role || '—')}" disabled
              style="opacity:.6;cursor:not-allowed;">
            <div class="text-xs text-gray-400 mt-1">${isOwner
@@ -22760,9 +22761,11 @@ async function hydrateTeamMemberAccount(userId) {
     // Edits are compared with the server login, not the (possibly stale) card email.
     if (emailInput) emailInput.dataset.serverEmail = String(member.email || '').trim().toLowerCase();
 
-    const roleSelect = document.getElementById('tm-edit-role');
-    const serverRole = teamLegacyRoleFromServer(member.roles);
-    if (roleSelect?.tagName === 'SELECT' && serverRole) roleSelect.value = serverRole;
+    const serverRoles = Array.isArray(member.roles) ? member.roles : [];
+    document.querySelectorAll('.tm-edit-role').forEach(input => {
+      const code = input.value === 'INSTALLER_SENIOR' ? 'INSTALLER' : input.value;
+      input.checked = serverRoles.includes(code) && (input.value !== 'INSTALLER_SENIOR' || teamIsSeniorInstaller(u));
+    });
   } catch (error) {
     console.error('[Team card] account hydration failed', error);
   }
@@ -22838,12 +22841,12 @@ async function submitTeamMemberEdit(userId) {
   const phone = (document.getElementById('tm-edit-phone')?.value || '').trim();
   const currentEmail = String(u.email || '').trim().toLowerCase();
   const enteredEmail = (document.getElementById('tm-edit-email')?.value || '').trim().toLowerCase();
-  const requestedRoleValue = isOwner
-    ? (document.getElementById('tm-edit-role')?.value || u.role)
-    : u.role;
-  // Owner, 2026-11-06: «Старший монтажник» — роль в списке; для сервера это монтажник, старшинство — в карточке.
-  const requestedSenior = requestedRoleValue === 'installer_senior';
-  const requestedRole = requestedSenior ? 'installer' : requestedRoleValue;
+  const checkedRoleValues = isOwner
+    ? Array.from(document.querySelectorAll('.tm-edit-role:checked')).map(input => input.value)
+    : [];
+  const requestedSenior = checkedRoleValues.includes('INSTALLER_SENIOR');
+  const requestedRoleCodes = [...new Set(checkedRoleValues.map(code => code === 'INSTALLER_SENIOR' ? 'INSTALLER' : code))];
+  const requestedRole = teamLegacyRoleFromServer(requestedRoleCodes) || u.role;
   const photo = document.getElementById('tm-photo-data')?.value || '';
   const err = document.getElementById('tm-edit-error');
 
@@ -22855,13 +22858,12 @@ async function submitTeamMemberEdit(userId) {
   if (!name) return fail('Укажите имя сотрудника.');
 
   if (isOwner) {
-    const roleOption = teamRoleOptionByLegacy(requestedRole);
-    if (!roleOption) return fail('Выберите корректную роль сотрудника.');
+    if (!requestedRoleCodes.length) return fail('Выберите хотя бы одну роль сотрудника.');
     if (enteredEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enteredEmail)) {
       return fail('Укажите корректную почту для входа.');
     }
 
-    if (requestedRole === 'owner' && u.role !== 'owner') {
+    if (requestedRoleCodes.includes('OWNER') && u.role !== 'owner') {
       const confirmed = confirm('Назначить сотруднику роль владельца? Он получит полный доступ, включая финансы и настройки.');
       if (!confirmed) return;
     }
@@ -22895,7 +22897,7 @@ async function submitTeamMemberEdit(userId) {
       const updateResponse = await fetch(`/api/v1/team/${member.userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, fullName: name, roles: [roleOption.code], legacyUserId: userId }),
+        body: JSON.stringify({ email, fullName: name, roles: requestedRoleCodes, legacyUserId: userId }),
       });
       const update = await updateResponse.json();
       if (!updateResponse.ok) return fail(apiMessage(update, 'Не удалось изменить данные и роль сотрудника.'));
@@ -23017,20 +23019,43 @@ async function submitTeamMember(quickOrderId = '', quickLineId = '') {
       return;
     }
 
+    const result = data?.data || {};
     const legacyRole = teamLegacyRoleFromServer(roles) || 'installer';
-    db.users.push({ id: legacyUserId, name: fullName, email: email.toLowerCase(), phone: '', role: legacyRole, active: true, ...(legacyRole === 'installer' && collectTeamSenior() ? { installerLevel: 'senior' } : {}), payConfig: legacyRole === 'installer' ? { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} } : {} });
+    const linkedIds = Array.isArray(result.legacyUserIds) && result.legacyUserIds.length
+      ? result.legacyUserIds
+      : [legacyUserId];
+    const desiredLegacyRoles = TEAM_ROLE_OPTIONS
+      .filter(option => roles.includes(option.code))
+      .map(option => option.legacyRole);
+    linkedIds.forEach((id, index) => {
+      let card = getUser(id);
+      if (!card) {
+        card = { id, name: fullName, email: email.toLowerCase(), phone: '', role: desiredLegacyRoles[index] || legacyRole, active: true, payConfig: {} };
+        db.users.push(card);
+      }
+      card.name = fullName;
+      card.email = email.toLowerCase();
+      card.active = true;
+      card.role = desiredLegacyRoles[index] || card.role || legacyRole;
+      if (card.role === 'installer') {
+        card.payConfig = card.payConfig || { type: 'per_sqft', ratePerSqft: 0, ratesByCategory: {}, ratesByWorkType: {} };
+        if (collectTeamSenior()) card.installerLevel = 'senior';
+        else delete card.installerLevel;
+      }
+    });
+    const assignmentLegacyUserId = linkedIds.find(id => getUser(id)?.role === 'installer') || linkedIds[0];
     if (quickOrderId && quickLineId && legacyRole === 'installer') {
       const order = getOrder(quickOrderId);
       const line = projectQuickLines(order).find(item => item.id === quickLineId);
       if (line) {
-        line.installerIds = [...new Set([...(line.installerIds || []), legacyUserId])];
+        line.installerIds = [...new Set([...(line.installerIds || []), assignmentLegacyUserId])];
         projectQuickSyncProjectInstallers(order);
         projectEstimateMarkChanged(order, 'Создан и назначен исполнитель услуги');
       }
-      state.quickTeamReturn = { orderId: quickOrderId, lineId: quickLineId, userId: legacyUserId };
+      state.quickTeamReturn = { orderId: quickOrderId, lineId: quickLineId, userId: assignmentLegacyUserId };
     }
     save();
-    showTeamPasswordResult('Сотрудник создан', fullName, email, password);
+    showTeamPasswordResult(result.restored ? 'Сотрудник восстановлен' : 'Сотрудник создан', fullName, email, password);
   } catch (error) {
     showTeamError('Сервер не ответил. Сотрудник не создан — попробуйте ещё раз.');
     setTeamSubmitBusy(false);
