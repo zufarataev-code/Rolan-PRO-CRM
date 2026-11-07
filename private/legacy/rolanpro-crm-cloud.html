@@ -34978,6 +34978,13 @@ function updateCatalogItem(id, field, val, control = null) {
 function addCatalogItem(presetVendorId, presetCategory = 'solar') {
   openNewCatalogItemModal(presetVendorId, presetCategory);
 }
+function parseCatalogRollWidthsIn(value) {
+  const values = Array.isArray(value) ? value : String(value || '').split(/[;,\s]+/);
+  return [...new Set(values.map(Number).filter(width => Number.isFinite(width) && width > 0 && width <= 120))].sort((a, b) => a - b);
+}
+function catalogRollWidthsIn(item) {
+  return parseCatalogRollWidthsIn(item?.rollWidthsIn?.length ? item.rollWidthsIn : [item?.rollWidthIn, item?.rollWidth].filter(Boolean));
+}
 function catalogExtraCategories(c) {
   return Array.isArray(c?.extraCategories) ? c.extraCategories.map(canonicalCatalogCategory).filter(k => k && k !== canonicalCatalogCategory(c.category)) : [];
 }
@@ -35014,18 +35021,16 @@ function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width:36rem;">
       <h3 class="font-semibold text-lg mb-1">Новая модель плёнки</h3>
-      <p class="text-xs text-gray-500 mb-4">Карточка в каталоге склада. Рулоны принимаются отдельно — «Принять рулон».</p>
-      <div class="grid grid-cols-2 gap-3">
+      <p class="text-xs text-gray-500 mb-4">Здесь создаётся только модель плёнки. Конкретные рулоны, их длина и цена закупки фиксируются отдельно при приёмке.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div><label class="text-xs">Категория (дом)</label><select id="ncat-category">${categories.map(k => `<option value="${k}" ${k === category ? 'selected' : ''}>${academyEsc(catLabel(k))}</option>`).join('')}</select></div>
         <div><label class="text-xs">Бренд</label><input id="ncat-brand" list="ncat-brand-list" value="Rolan PRO" placeholder="Rolan PRO, 3M, LLumar…"><datalist id="nc-brand-list">${brands.map(b => `<option value="${academyEsc(b)}"></option>`).join('')}</datalist></div>
-        <div class="col-span-2"><label class="text-xs">Название плёнки *</label><input id="ncat-name" placeholder="например, Privacy Prime Frost"></div>
+        <div class="md:col-span-2"><label class="text-xs">Название плёнки *</label><input id="ncat-name" placeholder="например, Privacy Prime Frost"></div>
         <div><label class="text-xs">Код / короткое имя</label><input id="ncat-code" placeholder="RP-PRV-FRS"></div>
         <div><label class="text-xs">Поставщик</label><select id="ncat-vendor"><option value="">не назначен</option>${vendors.map(v => `<option value="${academyEsc(v.id)}" ${v.id === presetVendorId ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
-        <div><label class="text-xs">Цена клиенту, $ / sq ft</label><input id="ncat-retail" type="number" min="0" step="0.01" value="10"></div>
-        <div><label class="text-xs">Закупка, $ / sq ft</label><input id="ncat-cost" type="number" min="0" step="0.01" value="2.5"></div>
-        <div><label class="text-xs">Ставка монтажнику, $ / sq ft</label><input id="ncat-rate" type="number" min="0" step="0.01" value="0.27"></div>
-        <div><label class="text-xs">Отход, %</label><input id="ncat-waste" type="number" min="0" step="1" value="12"></div>
-        <div class="col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
+        <div class="md:col-span-2"><label class="text-xs">Доступные ширины рулона, in *</label><input id="ncat-widths" inputmode="decimal" placeholder="например: 60 или 60, 72"><div class="text-xs text-gray-500 mt-1">Можно указать несколько ширин через запятую. При приёмке рулона выберите его фактическую ширину.</div></div>
+        <div class="md:col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
+        <div class="md:col-span-2 p-3 rounded-lg bg-blue-50 text-blue-900 text-sm"><b>Деньги и расход считаются в своих местах.</b><div class="mt-1">Цена клиенту и ставка монтажнику задаются в «Услуги и цены». Закупка за sq ft рассчитывается из цены и размеров принятого рулона. Расход и отход определяются после замера и раскроя проекта.</div></div>
       </div>
       <div class="flex gap-2 mt-5">
         <button class="btn-primary flex-1" onclick="createCatalogItemFromModal()">Добавить в каталог</button>
@@ -35038,20 +35043,21 @@ function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
 }
 function createCatalogItemFromModal() {
   const v = id => (document.getElementById(id)?.value || '').trim();
-  const num = (id, fallback) => { const n = parseFloat(v(id)); return Number.isFinite(n) && n >= 0 ? n : fallback; };
   const name = v('ncat-name');
   if (!name) { alert('Укажите название плёнки.'); document.getElementById('ncat-name')?.focus(); return; }
   const category = canonicalCatalogCategory(v('ncat-category')) || 'solar';
   const extraCategories = [...document.querySelectorAll('input[data-ncat-extra]:checked')].map(el => el.getAttribute('data-ncat-extra')).filter(k => k && k !== category);
   const brand = v('ncat-brand') || 'Rolan PRO';
   const code = v('ncat-code');
+  const rollWidthsIn = parseCatalogRollWidthsIn(v('ncat-widths'));
+  if (!rollWidthsIn.length) { alert('Укажите хотя бы одну ширину рулона в дюймах, например 60 или 60, 72.'); document.getElementById('ncat-widths')?.focus(); return; }
   if ((db.settings.catalog || []).some(c => !c.archived && String(c.brand || '').trim().toLowerCase() === brand.toLowerCase() && String(c.fullName || c.model || '').trim().toLowerCase() === name.toLowerCase())) {
     if (!confirm(`«${brand} — ${name}» уже есть в каталоге. Добавить ещё одну запись?`)) return;
   }
   const item = {
     id: uid(), brand, model: name, category, vendorId: v('ncat-vendor') || null,
     filmCategory: '', fullName: name, shortName: code, productName: name, modelCode: code, sku: code,
-    retailPerSqft: num('ncat-retail', 10), costPerSqft: num('ncat-cost', 2.5), installerRatePerSqft: num('ncat-rate', 0.27), wastePct: num('ncat-waste', 12),
+    rollWidthsIn, rollWidthIn: rollWidthsIn.length === 1 ? rollWidthsIn[0] : null,
     extraCategories, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
   };
   db.settings.catalog.push(item);
@@ -42735,7 +42741,7 @@ function renderFilmCategoryModels(category) {
     ${items.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Модель</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Ширины</th><th class="text-left p-2">Статус</th><th></th></tr></thead><tbody>${items.map(item => {
       const rolls = filmWarehouseRolls(item.id);
       const length = rolls.reduce((sum, roll) => sum + Number(roll.remainingLengthM || 0), 0);
-      const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || (item.rollWidth ? `${item.rollWidth}\"` : '—');
+      const widths = [...new Set(rolls.map(roll => Number(roll.widthMm || 0)).filter(Boolean))].sort((a,b)=>a-b).map(width => `${(width/1000).toFixed(2)} м`).join(', ') || catalogRollWidthsIn(item).map(width => `${width}\"`).join(', ') || '—';
       const low = length <= Number(db.settings.inventoryAlerts?.reorderBelowM || 5);
       return `<tr class="border-t ${length <= 0 ? 'bg-red-50' : low ? 'bg-amber-50' : ''}" onclick="openFilmWarehouseModel('${item.id}')" style="cursor:pointer"><td class="p-2"><span style="width:8px;height:8px;border-radius:50%;background:${colors.dot};display:inline-block;margin-right:6px"></span><b>${academyEsc(item.brand)} — ${academyEsc(item.model)}</b><div class="text-xs text-gray-400">${catalogSpecLabel(item)}</div></td><td class="p-2">${rolls.length}</td><td class="p-2 font-bold ${length > 0 ? 'text-emerald-700' : 'text-red-700'}">${length.toFixed(1)} м</td><td class="p-2">${widths}</td><td class="p-2">${rpStockBadge(length <= 0 ? 'out' : low ? 'low' : 'ok')}</td><td class="p-2 text-blue-700 font-semibold">Открыть →</td></tr>`;
     }).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="icon">🔎</div><div>В этой категории модели не найдены.</div></div>`}
@@ -43554,8 +43560,9 @@ function openAddRollModal(presetCatId, purchaseRequestId='') {
   const preset = getCatalogItem(presetCatId || request?.itemId || '') || null;
   const category = canonicalCatalogCategory(preset?.category) || 'solar';
   const today = new Date().toISOString().slice(0, 10);
-  const widths = db.settings.filmRolls?.widths || [1524, 1829];
-  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || 0;
+  const modelWidths = catalogRollWidthsIn(preset).map(width => Math.round(width * 25.4));
+  const widths = [...new Set([...modelWidths, ...(db.settings.filmRolls?.widths || [1524, 1829])])];
+  const presetWidth = Number(request?.widthMm || request?.requirements?.[0]?.widthMm) || modelWidths[0] || 0;
   state.modal = `
   <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
     <div class="modal-content workspace-modal p-6" style="max-width: 40rem;">

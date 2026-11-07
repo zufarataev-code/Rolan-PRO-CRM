@@ -63,6 +63,23 @@ test('film warehouse opens categories before models and rolls', () => {
   assert.match(html, /if \(model\) return renderFilmModelStock\(model\);/);
 });
 
+test('a new film model stores identity and widths, while money and waste belong to services, receipts and cutting', () => {
+  const modalStart = html.indexOf('function openNewCatalogItemModal(');
+  const modalEnd = html.indexOf('function loadStandardCatalog(', modalStart);
+  const modal = html.slice(modalStart, modalEnd);
+  assert.match(modal, /Доступные ширины рулона, in \*/);
+  assert.match(modal, /id="ncat-widths"/);
+  assert.match(modal, /rollWidthsIn = parseCatalogRollWidthsIn/);
+  assert.match(modal, /rollWidthsIn, rollWidthIn:/);
+  assert.doesNotMatch(modal, /ncat-retail|ncat-cost|ncat-rate|ncat-waste/);
+  assert.doesNotMatch(modal, /retailPerSqft:|costPerSqft:|installerRatePerSqft:|wastePct:/);
+  assert.match(modal, /Цена клиенту и ставка монтажнику задаются в «Услуги и цены»/);
+  assert.match(modal, /Закупка за sq ft рассчитывается из цены и размеров принятого рулона/);
+  assert.match(modal, /Расход и отход определяются после замера и раскроя проекта/);
+  assert.match(html, /const modelWidths = catalogRollWidthsIn\(preset\)\.map\(width => Math\.round\(width \* 25\.4\)\)/);
+  assert.match(html, /const presetWidth = Number\(request\?\.widthMm[^\n]+\|\| modelWidths\[0\] \|\| 0/);
+});
+
 test('film category navigation reuses existing catalog and inventory records', () => {
   assert.match(html, /function filmWarehouseRolls\(catalogId\)[\s\S]*?db\.inventory/);
   assert.match(html, /function renderFilmCategoryModels\(category\)[\s\S]*?db\.settings\.catalog/);

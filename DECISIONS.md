@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-07 — A film model is not a price, purchase or waste record
+
+- A film model in the Warehouse catalog stores product identity, supplier, categories and available roll widths. It does not own customer price, installer pay, purchase cost per sq ft or a guessed waste percentage.
+- Customer price and installer pay belong to the sellable service in «Услуги и цены».
+- Purchase price belongs to the received roll. Material cost per sq ft is calculated from that roll's total purchase price and actual width × length.
+- Project consumption and waste are calculated only after verified measurements and the cutting plan. They are not fixed on the film model.
+- Model widths are entered in inches and may contain several options. The actual received roll width remains authoritative for stock, costing and cutting.
+
 ## 2026-11-07 — Reflective Privacy products are also Solar / Reflective materials
 
 - BLACK SHADOW, SILVER VEIL, CHROME EDGE, BRONZE VEIL and SILVER FORCE keep `Privacy Film` as their canonical home direction because their primary sales promise is daytime privacy.
