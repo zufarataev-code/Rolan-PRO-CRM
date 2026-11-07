@@ -271,7 +271,7 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
       return;
     }
     let trigger, dateField;
-    if (pc.type === 'commission') { trigger = (u.id === o.managerId); dateField = o.paidAt; }
+    if (pc.type === 'commission') { trigger = (u.id === o.managerId); dateField = orderCommissionEarnedAt(o); }
     else if (pc.type === 'per_sqft') { trigger = (o.installerIds||[]).includes(u.id); dateField = o.installationDoneAt; }
     else if (pc.type === 'fixed_per_job') {
       // Assignment is the source of truth: the owner may also perform a survey
@@ -303,6 +303,28 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
     }
   });
   return { total, breakdown };
+}
+
+/**
+ * A manager earns commission when the customer has paid the project in full.
+ * Some valid payment flows record every receipt but do not move the project to
+ * `payment_received`, so `paidAt` may be empty. The last receipt that completed
+ * the total is still the authoritative earning date.
+ */
+function orderCommissionEarnedAt(o) {
+  const payments = Array.isArray(o?.payments) ? o.payments.filter(payment => Number(payment?.amount) > 0) : [];
+  // Legacy projects may have only the milestone and the old aggregate amount.
+  if (!payments.length) return o?.paidAt || '';
+  const paid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  if (paid + 0.01 < orderRevenue(o)) return '';
+  const completed = payments
+    .map((payment, index) => ({ payment, index, at: Date.parse(payment.date || payment.recordedAt || '') }))
+    .filter(entry => Number.isFinite(entry.at))
+    .sort((a, b) => a.at - b.at || a.index - b.index)
+    .at(-1)?.payment;
+  if (!completed) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(completed.date || '')) return `${completed.date}T12:00:00`;
+  return completed.date || completed.recordedAt || '';
 }
 
 function markPayoutPaid(userId, startISO, endISO) {

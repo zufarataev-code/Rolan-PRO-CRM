@@ -34824,6 +34824,11 @@ function confirmActSignature(oid) {
   if (!name) { alert('Введите имя клиента.'); return; }
   if (Number(canvas.dataset.strokes || 0) < 5) { alert('Попросите клиента расписаться в поле подписи.'); return; }
   if (!document.getElementById('act-sign-accept')?.checked) { alert('Клиент должен отметить, что работы приняты.'); return; }
+  // The signed certificate explicitly confirms that the listed work is done.
+  // Complete the installation first so service progress and installer payroll
+  // are stamped before the signature can advance the project to «Акт подписан».
+  if (!['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'].includes(o.status)
+      && !changeStatus(oid, 'installation_done', state.currentUserId)) return;
   const signedAt = new Date().toISOString();
   o.actSignature = {
     name: name.slice(0, 120),
@@ -42155,7 +42160,7 @@ function payrollPaidForPeriod(userId, startDate, endDate) {
     let allocations = p.allocations;
     if (!Array.isArray(allocations)) {
       allocations = (db.orders || []).flatMap(o => (o.payouts || []).filter(x => x.userId === userId && x.paid && x.paymentBatchId === p.id).map(x => ({
-        amount: x.amount, date: x.accruedAt || (x.type === 'commission' ? o.paidAt : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt),
+        amount: x.amount, date: x.accruedAt || (x.type === 'commission' ? orderCommissionEarnedAt(o) : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt),
       })));
       // A historical salary batch has no order details. Spread its amount over its earned period.
       if (!allocations.length || allocations.some(x => !x.date)) return sum + payrollPeriodAllocatedAmount(p.amount, p.periodStart || p.paidAt, p.periodEnd || p.paidAt, startDate, endDate);
@@ -42166,7 +42171,7 @@ function payrollPaidForPeriod(userId, startDate, endDate) {
   }, 0);
   const legacy = (db.orders || []).reduce((sum, o) => sum + (o.payouts || [])
     .filter(p => {
-      const earnedAt = p.accruedAt || (p.type === 'commission' ? o.paidAt : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt) || p.paidAt;
+      const earnedAt = p.accruedAt || (p.type === 'commission' ? orderCommissionEarnedAt(o) : getUser(userId)?.role === 'measurer' ? o.measurementDoneAt : o.installationDoneAt) || p.paidAt;
       return p.userId === userId && p.paid && !p.paymentBatchId && financeDate(earnedAt) >= startDate && financeDate(earnedAt) <= endDate;
     })
     .reduce((s, p) => s + (Number(p.amount) || 0), 0), 0);

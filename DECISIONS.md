@@ -880,3 +880,10 @@ This decision supersedes the 2026-10-26 four-direction grouping. Rolan PRO has f
 - Existing records created during the temporary period when Privacy was grouped under Decorative remain readable and writable. The server accepts an unchanged saved cross-category link, but it cannot be extended with another incompatible material.
 - «Общее по объекту» remains an internal size-free service bucket and does not count as a film direction.
 - No Project, warehouse, payroll or Proposal history is deleted or silently rewritten.
+
+## 2026-11-07 — Payroll follows accepted work and actual full payment (Owner)
+
+- A client-signed completion certificate is evidence that the listed installation work is complete. The CRM must close the Project services through the canonical installation workflow before it saves the signature and advances to `act_signed`.
+- Installer payroll remains tied to service/installation completion, not merely to payment or an uploaded signature.
+- Manager commission is earned only when recorded receipts cover the full Project revenue. `paidAt` remains a valid milestone, but its absence must not hide commission when the payment ledger itself proves full payment.
+- The earning date for such a commission is the date of the final receipt that completed the total. A deposit or other partial payment does not create commission.
