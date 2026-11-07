@@ -37,7 +37,9 @@ test("employee creation shows canonical API errors and prevents inaccessible acc
   assert.match(crm, /Добавлять сотрудников может только владелец CRM/);
   assert.match(crm, /function setTeamSubmitBusy\(busy\)/);
   assert.match(crm, /Сотрудник не создан/);
-  assert.match(service, /const missingRoles = input\.roles\.filter/);
+  assert.match(service, /async function resolveRoles/);
+  assert.match(service, /const missingRoles = roles\.filter/);
   assert.match(service, /не настроены на сервере/);
-  assert.match(service, /if \(missingRoles\.length\)[\s\S]*?prisma\.user\.create/);
+  assert.match(service, /if \(missingRoles\.length\)[\s\S]*?return resolved/);
+  assert.match(service, /const roles = await resolveRoles\(input\.roles\)[\s\S]*?prisma\.user\.create/);
 });

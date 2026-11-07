@@ -880,3 +880,13 @@ This decision supersedes the 2026-10-26 four-direction grouping. Rolan PRO has f
 - Existing records created during the temporary period when Privacy was grouped under Decorative remain readable and writable. The server accepts an unchanged saved cross-category link, but it cannot be extended with another incompatible material.
 - «Общее по объекту» remains an internal size-free service bucket and does not count as a film direction.
 - No Project, warehouse, payroll or Proposal history is deleted or silently rewritten.
+
+## 2026-11-07 — Re-adding an archived employee restores identity (Owner)
+
+An employee's login email identifies the same person across projects, payroll and the audit trail. Removing somebody from the team disables access but does not erase that identity.
+
+- Adding the same email again restores the archived PostgreSQL user and its original `user_id`; the CRM must not create a second employee or require an artificial replacement email.
+- Restoration applies the newly entered name, roles and temporary password, sets `must_change_password`, and re-enables access in one transaction while preserving historical links.
+- An email belonging to an active employee remains unavailable for a new employee.
+- The Owner can change another employee's one or several roles directly in the employee card. Both the legacy card and the canonical directory write the same server role set; no production wrapper may disable the control or silently remove roles from the request.
+- The current Owner cannot remove their own Owner role from this card, and the server continues to protect the last active Owner.
