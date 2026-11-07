@@ -58,6 +58,26 @@ function assertValidRoles(roles: RoleCode[]) {
   }
 }
 
+/**
+ * Почта занята. Владелец должен понять, кем именно и что делать дальше.
+ *
+ * Удалённый сотрудник не стирается, а уходит в архив вместе со своей историей
+ * работ, поэтому его почта остаётся занятой. Без этого объяснения владелец
+ * видит «почта уже есть» про человека, которого сам же удалил, и считает это
+ * ошибкой системы.
+ */
+function emailTakenMessage(existing: { full_name: string; is_active: boolean }) {
+  if (existing.is_active) {
+    return `Эта почта уже у сотрудника «${existing.full_name}».`;
+  }
+
+  return (
+    `Эта почта занята сотрудником «${existing.full_name}»: он отключён и лежит в архиве ` +
+    `вместе со своей историей работ, поэтому почта остаётся за ним. ` +
+    `Восстановите его в разделе «Архив сотрудников» или заведите нового с другой почтой.`
+  );
+}
+
 function assertValidPassword(password: string) {
   if (password.trim().length < MIN_PASSWORD_LENGTH) {
     throw new Error(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов.`);
@@ -99,10 +119,13 @@ export async function createTeamMember(input: TeamMemberInput) {
   assertValidRoles(input.roles);
   assertValidPassword(password);
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { full_name: true, is_active: true },
+  });
 
   if (existing) {
-    throw new Error("Пользователь с такой почтой уже есть.");
+    throw new Error(emailTakenMessage(existing));
   }
 
   if (legacyUserId) {
@@ -183,9 +206,12 @@ export async function updateTeamMember(
   }
 
   if (email !== undefined && email !== user.email) {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({
+      where: { email },
+      select: { user_id: true, full_name: true, is_active: true },
+    });
     if (existing && existing.user_id !== userId) {
-      throw new Error("Пользователь с такой почтой уже есть.");
+      throw new Error(emailTakenMessage(existing));
     }
   }
 
