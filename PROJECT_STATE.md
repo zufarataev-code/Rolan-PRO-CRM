@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-06 — Preserve the approved Meta form list across deployments
+
+- Task owner: Codex, branch `codex/meta-form-allowlist-20261106`, based on `origin/main` `6804d210240296ee751586a0daf2b7208015bd3e`. The owner requested a PR after the deployed protected setting was found to contain only the oldest form.
+- The deployment workflow now versions the four approved public form IDs: `1126644350232479`, `1805660454094850`, `2227922148076022`, `1330965225736016` (weekend Quote + Chat). The app credentials and Page ID use the existing protected settings. Counting only those four settings preserves the all-absent skip and partial-config rejection.
+- The regression failed against the old workflow and passes with this fix. It runs the generated remote script against a disposable local environment file, verifies all four saved IDs, preserves unrelated configuration, checks mode 0600, and retains the secret-quoting checks. Full unit suite **1084/1084**, TypeScript, production build and `git diff --check` passed locally.
+- Runtime was separately repaired and verified earlier with these four IDs. This branch's deployment fix awaits PR review, published-head CI, merge and deployment. Full weekend-form import still requires a genuine enquiry. Next: review this PR, then follow the separately authorized release workflow and verify the deployed form list.
+
 ## 2026-11-06 — КП клиента: блок оплаты был почти невидим (Claude, PR pending)
 
 - Owner asked to see the proposal the way the client sees it. In the built-in browser the «Payment» and «Warranty» sections after the document rendered as pale text and unstyled buttons: `PublicPaymentOptions` / `PublicWarrantySummary` use `proposal-section`, `proposal-section-kicker`, `proposal-payment-section` classes that no stylesheet defined, so they inherited the landing page's light `--ink` on the light `#f2f5f7` shell.

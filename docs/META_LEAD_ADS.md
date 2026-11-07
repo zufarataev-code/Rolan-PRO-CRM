@@ -18,15 +18,27 @@ Keep these values only in protected server configuration, never in the UI or Git
   `leads_retrieval` and the Page's lead access. Subscription also requires
   `pages_manage_metadata` and an authorized Page advertiser.
 - `META_LEAD_ADS_PAGE_ID`: `140034465868291` (Rolan&PRO).
-- `META_LEAD_ADS_FORM_IDS`: comma-separated, explicitly approved form IDs.
-  Add only the created quote form, not every historical form on the Page.
-  Its fields are single-value name/email/phone/ZIP and single-select service.
-  Multiline and multi-select forms need parser changes before being allowlisted.
 
-Set these five protected secrets in the GitHub `production` environment. Deployment
+Set these four protected settings in the GitHub `production` environment. Deployment
 ships them over SSH stdin, backs up the prior mode-600 environment and atomically
-updates only these assignments. With all five absent the sync is skipped; partial
+updates the Meta assignments. With all four absent the sync is skipped; partial
 configuration stops deployment. Existing runtime values are retained when skipped.
+
+The public form allowlist, `META_LEAD_ADS_FORM_IDS`, is versioned in
+`.github/workflows/deploy-production.yml` and deployed with those settings.
+The legacy GitHub secret of the same name is ignored, so it cannot replace the
+approved list with an older form. The approved forms are:
+
+| Form | ID |
+| --- | --- |
+| Quote v1 | `1126644350232479` |
+| Quote + Call v2 | `1805660454094850` |
+| Quote + Call + Chat | `2227922148076022` |
+| Weekend No Calls Test, Quote + Chat | `1330965225736016` |
+
+Review form additions and removals through a PR. These forms use single-value
+contact/ZIP fields and a single-select service question. Multiline and multi-select
+forms need parser changes before being allowlisted.
 
 Missing configuration returns 503. GET verifies `hub.verify_token` and returns
 the challenge; POST requires the exact raw-body `X-Hub-Signature-256` HMAC.
