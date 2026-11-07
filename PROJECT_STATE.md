@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-07 — ROLANPRO PRIME product catalog
+
+- Task owner: Codex, branch `codex/rolan-prime-catalog-20261107`, based on `origin/main` `51e58e5`. No production deployment or live database write was attempted.
+- Canonical product architecture is now `ROLANPRO = PRIME`: `MAGNITRONIC PRIME SOLAR` SP 05/15/20/35/50/70; `PRIME SAFETY / PROTECT` SAF 2/4/8/12/14/16 PROTECT; and `PRIME PRIVACY` with BLACK SHADOW BS 05/15/25, SILVER VEIL SV 05/15/35/50/60, CHROME EDGE CE 20/35, BRONZE VEIL BV 20/35, SILVER FORCE SF 20/35 and WHITE MATTE PRIME. BS 35 was not added because no confirmed current CRM record exists.
+- Relational FilmCatalog now stores series, material, roll width(s)/length, use case, privacy note, specification status and structured technical specs. The migration preserves `film_id`, maps internal MP codes to customer SP codes and archives A1/A2/A3 placeholders from new selection without deleting historical references.
+- The active legacy workspace adds/updates the same stable own-brand records once, marks every new record selectable in Projects, archives superseded own-brand placeholder lines and persists the shared workspace migration. Unknown roll/optical values are explicitly `pending factory confirmation`; reflective products carry the daytime-only privacy note.
+- The customer-facing AI knowledge uses the same names and corrected SP 20/SP 70 IRR values. Verification: Prisma schema validation, TypeScript, production build, full suite **1086/1086**, scoped catalog/workspace/worker tests **31/31**, and `git diff --check` pass. Next: review PR and CI; merge/deploy only after Owner approval, then perform an authenticated CRM catalog/Project selector smoke check.
+
 ## 2026-11-06 — Preserve the approved Meta form list across deployments
 
 - Task owner: Codex, branch `codex/meta-form-allowlist-20261106`, based on `origin/main` `6804d210240296ee751586a0daf2b7208015bd3e`. The owner requested a PR after the deployed protected setting was found to contain only the oldest form.

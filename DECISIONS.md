@@ -2,6 +2,15 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-07 — ROLANPRO = PRIME product architecture
+
+- Every own-brand architectural film is presented under the PRIME architecture. Customer-facing model codes are the product identity; old supplier names and internal MP/A-series labels are not new-sale names.
+- Solar is `MAGNITRONIC PRIME SOLAR` with SP 05, SP 15, SP 20, SP 35, SP 50 and SP 70. Existing film rows keep their stable `film_id` while MP model codes migrate to SP codes.
+- Safety is `PRIME SAFETY / PROTECT` with confirmed thickness variants SAF 2, SAF 4, SAF 8, SAF 12, SAF 14 and SAF 16 PROTECT. Older A1/A2/A3 rows remain for history but are inactive for new selection.
+- Privacy is `PRIME PRIVACY`: BLACK SHADOW BS 05/15/25; SILVER VEIL SV 05/15/35/50/60; CHROME EDGE CE 20/35; BRONZE VEIL BV 20/35; SILVER FORCE SF 20/35; WHITE MATTE PRIME. BS 35 is added only when a confirmed current record exists; it was not confirmed for this release.
+- Reflective privacy is described as `DAYTIME ONE-WAY PRIVACY`; nighttime privacy is never promised. Any unverified optical or roll value stays empty and is labeled `pending factory confirmation`. Product-card or owner-meter values are not presented as whole-window guarantees.
+- Catalog rows are directly reusable in Projects/services and contain category, series, model code, VLT, technology/material, roll variants, use case, privacy note, structured specs and confirmation status. Superseded records are archived rather than deleted so historical Projects remain intact.
+
 ## 2026-11-06 — Review public Meta form scope in Git
 
 The approved Meta form IDs are public deployment configuration in

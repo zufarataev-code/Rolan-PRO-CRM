@@ -70,17 +70,17 @@ test('film category navigation reuses existing catalog and inventory records', (
 });
 
 test('Magnitronic Solar Prime series is seeded with verified meter readings', () => {
-  for (const model of ['SP-5%', 'SP-15%', 'SP-20%', 'SP-35%', 'SP-50%', 'SP-70%']) {
-    assert.match(html, new RegExp(model.replace('%', '%')));
-    assert.match(seed, new RegExp(model.replace('%', '%')));
+  for (const model of ['SP 05', 'SP 15', 'SP 20', 'SP 35', 'SP 50', 'SP 70']) {
+    assert.match(html, new RegExp(model));
+    assert.match(seed, new RegExp(model));
   }
   assert.match(html, /'SP05': \{ vlt: 5\.7,\s+tser: 93\.3, uv: 100\.0, ir: 95\.6 \}/);
   assert.match(html, /'SP70': \{ vlt: 68\.0, tser: 63\.6, uv: 99\.2,\s+ir: 99\.4 \}/);
   assert.match(html, /ensureMagnitronicSolarPrimeSeries\(s\.catalog\);/);
   assert.match(html, /brand: 'Rolan PRO'/);
-  assert.match(html, /series: 'Magnitronic Solar Prime'/);
+  assert.match(html, /series: 'MAGNITRONIC PRIME SOLAR'/);
   assert.match(seed, /"ROLANPRO", "Rolan PRO", "Rolan PRO"/);
-  assert.match(seed, /"Magnitronic Solar Prime SP-5%", "Magnitronic Solar Prime SP-5%"/);
+  assert.match(seed, /"MAGNITRONIC PRIME SOLAR SP 05", "MAGNITRONIC PRIME SOLAR SP 05"/);
   assert.match(html, /retailPerSqft: null/);
   assert.match(html, /costPerSqft: null/);
 });
@@ -109,7 +109,7 @@ test('official supplier cards and confirmed catalogs are seeded without invented
   assert.match(html, /if \(!item\.vendorId \|\| item\.vendorId===source\.vendorId\) item\.vendorId=vendorIds\.get\(source\.vendorId\)\|\|source\.vendorId/);
   assert.match(html, /db\._officialSupplierCatalogV1 = true/);
   assert.match(html, /persistOfficialSupplierMigration = !db\._officialSupplierCatalogV1/);
-  assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| roleWasSynchronized/);
+  assert.match(html, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| persistRolanPrimeCatalogMigration \|\| roleWasSynchronized/);
 });
 
 test('reorder creates one supplier-linked draft and explicit send is required', () => {

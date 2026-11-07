@@ -65,5 +65,5 @@ test("authenticated server role overrides a stale editable employee-card role", 
 
   assert.match(source, /authenticatedLegacyRole = teamLegacyRoleFromServer\(cloudCurrentUser\.roles\)/);
   assert.match(source, /firstAllowed\.role = authenticatedLegacyRole/);
-  assert.match(source, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| roleWasSynchronized/);
+  assert.match(source, /persistClientNotificationMigration \|\| persistOfficialSupplierMigration \|\| persistRolanPrimeCatalogMigration \|\| roleWasSynchronized/);
 });
