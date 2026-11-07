@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-07 — Почта удалённого сотрудника: объяснить, а не отшивать (Claude, PR pending)
+
+- Owner: «удаляю сотрудника, потом завожу нового с той же почтой — CRM пишет, что сотрудник с такой почтой есть, но я же его удалил». Удаление архивирует аккаунт вместе с историей работ (см. `safe-delete.test.ts`), поэтому почта остаётся занятой — поведение верное, а сообщение об этом молчало.
+- Done on `claude/team-archived-email-hint` (`src/features/team/service.ts`): `emailTakenMessage(existing)` — обе проверки почты (`createTeamMember` и смена почты в `updateTeamMember`) читают `is_active` и называют сотрудника по имени. Для отключённого: «занята сотрудником «X»: он отключён и лежит в архиве вместе со своей историей работ… Восстановите его в разделе «Архив сотрудников» или заведите нового с другой почтой». Раздел «Архив сотрудников» с восстановлением уже существует, UI не менялся — `app/api/v1/team/route.ts` отдаёт `error.message` как есть.
+- Verification: `archived-email.test.ts` 3/3 (новый) и `safe-delete.test.ts` 4/4. Полный прогон в облачном контейнере 931/962 — 31 падение одинаковые, `@prisma/client did not initialize`: `prisma generate` не проходит, `binaries.prisma.sh` недоступен из контейнера. Падают файлы, которых правка не касается (google-ads, gmail, zadarma, twilio). `npm run typecheck` по той же причине даёт «implicitly any» в `operations-agent` и `reference/pricing` — не в изменённых файлах. Next: прогнать полный набор и сборку там, где Prisma ставится, затем ревью и merge.
+
 ## 2026-11-06 — Preserve the approved Meta form list across deployments
 
 - Task owner: Codex, branch `codex/meta-form-allowlist-20261106`, based on `origin/main` `6804d210240296ee751586a0daf2b7208015bd3e`. The owner requested a PR after the deployed protected setting was found to contain only the oldest form.
