@@ -112,14 +112,16 @@ jobs:
           META_LEAD_ADS_VERIFY_TOKEN: ${{ secrets.META_LEAD_ADS_VERIFY_TOKEN }}
           META_LEAD_ADS_PAGE_ACCESS_TOKEN: ${{ secrets.META_LEAD_ADS_PAGE_ACCESS_TOKEN }}
           META_LEAD_ADS_PAGE_ID: ${{ secrets.META_LEAD_ADS_PAGE_ID }}
-          META_LEAD_ADS_FORM_IDS: ${{ secrets.META_LEAD_ADS_FORM_IDS }}
+          # Public, approved forms are reviewed in Git so a stale secret cannot remove them.
+          META_LEAD_ADS_FORM_IDS: "1126644350232479,1805660454094850,2227922148076022,1330965225736016"
         run: |
           set -euo pipefail
-          names=(META_LEAD_ADS_APP_SECRET META_LEAD_ADS_VERIFY_TOKEN META_LEAD_ADS_PAGE_ACCESS_TOKEN META_LEAD_ADS_PAGE_ID META_LEAD_ADS_FORM_IDS)
+          names=(META_LEAD_ADS_APP_SECRET META_LEAD_ADS_VERIFY_TOKEN META_LEAD_ADS_PAGE_ACCESS_TOKEN META_LEAD_ADS_PAGE_ID)
           supplied=0
           for name in "${names[@]}"; do if [ -n "${!name:-}" ]; then supplied=$((supplied + 1)); fi; done
           if [ "$supplied" -eq 0 ]; then echo 'Meta Lead Ads secrets not supplied; retaining server configuration.'; exit 0; fi
-          [ "$supplied" -eq 5 ]
+          [ "$supplied" -eq 4 ]
+          names+=(META_LEAD_ADS_FORM_IDS)
           [[ "$META_LEAD_ADS_APP_SECRET" =~ ^[a-f0-9]{32}$ ]]
           [ "${#META_LEAD_ADS_VERIFY_TOKEN}" -ge 32 ]
           [[ "$META_LEAD_ADS_PAGE_ID" =~ ^[0-9]+$ ]]

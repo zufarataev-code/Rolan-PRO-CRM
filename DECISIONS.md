@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-06 — Review public Meta form scope in Git
+
+The approved Meta form IDs are public deployment configuration in
+`.github/workflows/deploy-production.yml`. Version the four verified forms there
+so the old protected form-list value cannot overwrite a runtime repair on deploy.
+App secrets, verification token, Page access token and Page ID retain the existing
+protected-setting flow. Future form additions and removals require a reviewed PR.
+
 ## 2026-11-05 — A service may link films of any catalog category
 
 Owner decision (Zufar, 2026-11-05): the materials of a service are chosen from
