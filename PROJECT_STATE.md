@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-07 — Центр управления владельца `/owner/control-center` (Claude, PR pending)
+
+- Owner: one control center inside CRM for the whole RolanPRO ecosystem — every service with a live works/broken status, links, responsible person, project map, reachable from any device; must not slow the CRM.
+- Done on `claude/control-center-20261107`: `src/features/owner/control-center-core.ts` holds the registry (20 services in 6 groups + 8 projects; names, links, owners, statuses only — no secrets) and pure status helpers. `control-center.ts` runs live server-side checks in parallel with a 5 s timeout each and a 30 s cache: server disk/memory/load (`statfs`, `os`), PostgreSQL latency, release SHA, Meta form intake (config + last lead / 7-day count), Messenger worker liveness (expects 403 without verify token) + last chat lead, welcome SMS last success/failure, Twilio 7-day delivery share, Gmail connection/sync error, env presence for Zadarma, marketing email, Stripe, Zelle, Google Ads, AI keys, and HTTP pings of rolan-pro.com and the legal pages. Manual entries record known gaps: no automatic DB backups; photos stored inside order data with a 2 MB limit and no video upload.
+- Page `app/owner/control-center/page.tsx` (owner-only, mobile-first, auto-refresh every 60 s): totals, "что требует внимания", grouped service cards, project map. Owner-only "Центр управления" link added to the `/legacy-crm` sidebar.
+- Verification: full unit suite **1106/1106**, `tsc --noEmit` clean. Next: file storage (DigitalOcean Spaces with direct uploads) — needs the owner logged into DigitalOcean.
+
 ## 2026-11-07 — Лид из рекламы: бот не переспрашивает, SMS «спасибо за интерес», ночной сценарий (Claude, PR pending)
 
 - Owner showed a live Messenger chat (lead from a Meta instant form, commercial, 9 windows, old film peeling): the bot ignored the form data that Meta posts into the chat, sent two first replies, asked the same questions twice, and ended with «I couldn't load an available time». Owner: the form already discloses AI, so the bot must not announce it; a new lead with a phone must get a "thank you for your interest" SMS; at night the SMS should politely ask when a manager may call.
