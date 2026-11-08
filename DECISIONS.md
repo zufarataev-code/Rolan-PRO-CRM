@@ -889,5 +889,5 @@ Owner requires Claude and Codex to work as one team: same repository and project
 - The conflict radar labels open PRs that edit the same files (`conflict-risk`). Hot files (legacy CRM HTML, Prisma schema, package files) are changed in turn: the PR ready first merges, the other rebases and re-verifies.
 - Agents never push to, close or rewrite each other's branches; issues go into the other agent's PR. Each PR is reviewed by the other agent.
 - The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
-- The owner sees active, overlapping, stale and owner-blocked work in `/owner/control-center` → «Агенты».
+- The owner sees active, overlapping, stale and owner-blocked work in `/legacy-crm/control-center` → «Агенты».
 

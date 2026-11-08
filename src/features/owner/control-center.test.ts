@@ -56,7 +56,7 @@ test("human-readable ages and env status", () => {
 
 test("owner sees the control center link in the working CRM", () => {
   const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
-  assert.match(html, /href="\/owner\/control-center"/);
+  assert.match(html, /href="\/legacy-crm\/control-center"/);
 });
 
 test("cached project numbers are flagged as not live when the database fails", () => {
@@ -64,6 +64,11 @@ test("cached project numbers are flagged as not live when the database fails", (
   assert.match(source, /staleError: message/);
   // A missing workspace row must not look like a healthy empty business.
   assert.match(source, /if \(!rows\[0\]\) throw new Error\("workspace_not_initialized"\)/);
-  const page = readFileSync("app/owner/control-center/page.tsx", "utf8");
+  const page = readFileSync("app/legacy-crm/control-center/page.tsx", "utf8");
   assert.match(page, /Цифры по проектам не живые/);
+});
+
+test("control center lives inside the /legacy-crm namespace so it is not redirected away", async () => {
+  const { canonicalRolePath } = await import("@/lib/auth/canonical-route");
+  assert.equal(canonicalRolePath("/legacy-crm/control-center"), "/legacy-crm/control-center");
 });
