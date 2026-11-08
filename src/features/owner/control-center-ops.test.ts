@@ -80,7 +80,7 @@ test("agent board groups open PRs by branch and flags stale and overlapping work
   const board = buildAgentBoard(
     [
       { number: 1, title: "A", head: { ref: "claude/a" }, updated_at: iso(-1), html_url: "u1", labels: [{ name: "conflict-risk" }] },
-      { number: 2, title: "B", head: { ref: "codex/b" }, updated_at: iso(-30), html_url: "u2" },
+      { number: 2, title: "B", head: { ref: "codex/b" }, updated_at: iso(-30), html_url: "u2", labels: [{ name: "stale" }] },
       { number: 3, title: "C", head: { ref: "codex/c" }, updated_at: iso(-2), html_url: "u3", labels: [{ name: "owner" }] },
     ],
     now,
@@ -90,4 +90,23 @@ test("agent board groups open PRs by branch and flags stale and overlapping work
   assert.equal(board.staleCount, 1);
   assert.equal(board.conflictCount, 1);
   assert.equal(board.ownerCount, 1);
+});
+
+test("once the radar has run, staleness comes from its commit-based label, not updated_at", () => {
+  const board = buildAgentBoard(
+    [
+      // Old branch whose updated_at was bumped by a radar comment: still stale.
+      { number: 4, title: "D", head: { ref: "codex/d" }, updated_at: iso(0), html_url: "u4", labels: [{ name: "stale" }] },
+      // Fresh commits, quiet discussion: not stale.
+      { number: 5, title: "E", head: { ref: "claude/e" }, updated_at: iso(-20), html_url: "u5", labels: [{ name: "conflict-risk" }] },
+    ],
+    now,
+  );
+  assert.equal(board.byAgent.Codex[0].stale, true);
+  assert.equal(board.byAgent.Claude[0].stale, false);
+});
+
+test("before the radar's first run, staleness falls back to updated_at", () => {
+  const board = buildAgentBoard([{ number: 6, title: "F", head: { ref: "codex/f" }, updated_at: iso(-30), html_url: "u6" }], now);
+  assert.equal(board.staleCount, 1);
 });

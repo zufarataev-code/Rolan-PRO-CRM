@@ -8,15 +8,18 @@
  * - На каждом пересекающемся PR (и на том, что запустил проверку) держит один
  *   обновляемый комментарий: с кем пересекается и по каким файлам. Старый PR
  *   тоже узнаёт, что кто-то начал править его файлы.
- * - PR без движения дольше STALE_DAYS не считаются «занятыми» — они в списке
- *   зависших, а не блокируют работу.
+ * - PR без нового коммита дольше STALE_DAYS получают метку `stale` и не
+ *   считаются «занятыми». Считаем по дате последнего коммита, а не по
+ *   `updated_at`: сами метки и комментарии радара сдвигают `updated_at`.
  *
  * Без зависимостей: Node 20+, fetch и GITHUB_TOKEN из Actions.
  */
 
 export const MARKER = "<!-- agent-conflict-radar -->";
 export const LABEL = "conflict-risk";
-export const STALE_DAYS = 30;
+export const STALE_LABEL = "stale";
+/** Days without a new commit after which an open PR is «stuck», not «busy». Same number as the control center. */
+export const STALE_DAYS = 14;
 /** Files where two agents at once almost always break each other. */
 export const HOT_FILES = ["private/legacy/rolanpro-crm-cloud.html", "prisma/schema.prisma", "package.json", "package-lock.json"];
 /** Files every PR touches by protocol — overlap there is expected, not a conflict. */
@@ -53,7 +56,7 @@ export function findOverlaps(prs) {
 export function renderComment(overlaps, staleSkipped) {
   if (!overlaps.length) {
     return `${MARKER}\n**Радар пересечений:** с другими активными PR файлы не пересекаются — можно работать.${
-      staleSkipped ? `\n\n_Не учтены ${staleSkipped} PR без движения дольше ${STALE_DAYS} дней._` : ""
+      staleSkipped ? `\n\n_Не учтены ${staleSkipped} PR без новых коммитов дольше ${STALE_DAYS} дней._` : ""
     }`;
   }
   const lines = overlaps
@@ -100,7 +103,13 @@ async function main() {
 
   const staleBefore = Date.now() - STALE_DAYS * 86_400_000;
   const open = await all("/pulls?state=open");
-  const active = open.filter((pr) => new Date(pr.updated_at).getTime() >= staleBefore || pr.number === current);
+  const lastCommit = new Map();
+  for (const pr of open) {
+    const commit = await api(`/commits/${pr.head.sha}`);
+    lastCommit.set(pr.number, new Date(commit?.commit?.committer?.date ?? commit?.commit?.author?.date ?? pr.created_at).getTime());
+  }
+  const isStale = (pr) => lastCommit.get(pr.number) < staleBefore && pr.number !== current;
+  const active = open.filter((pr) => !isStale(pr));
   const prs = [];
   for (const pr of active) {
     const files = await all(`/pulls/${pr.number}/files`);
@@ -109,12 +118,16 @@ async function main() {
   const overlaps = findOverlaps(prs);
 
   await api("/labels", { method: "POST", body: JSON.stringify({ name: LABEL, color: "d64545", description: "Правит те же файлы, что другой открытый PR" }) }).catch(() => null);
-  // Labels: every open PR, so a PR that went stale loses its old conflict-risk too.
+  await api("/labels", { method: "POST", body: JSON.stringify({ name: STALE_LABEL, color: "8a97a6", description: `Нет новых коммитов дольше ${STALE_DAYS} дней` }) }).catch(() => null);
+  // Labels on every open PR, so a PR that went stale loses its old conflict-risk too.
+  const sync = async (pr, name, should) => {
+    const has = pr.labels.some((label) => label.name === name);
+    if (should && !has) await api(`/issues/${pr.number}/labels`, { method: "POST", body: JSON.stringify({ labels: [name] }) });
+    if (!should && has) await api(`/issues/${pr.number}/labels/${name}`, { method: "DELETE" });
+  };
   for (const pr of open) {
-    const has = pr.labels.some((label) => label.name === LABEL);
-    const should = (overlaps.get(pr.number)?.length ?? 0) > 0;
-    if (should && !has) await api(`/issues/${pr.number}/labels`, { method: "POST", body: JSON.stringify({ labels: [LABEL] }) });
-    if (!should && has) await api(`/issues/${pr.number}/labels/${LABEL}`, { method: "DELETE" });
+    await sync(pr, LABEL, (overlaps.get(pr.number)?.length ?? 0) > 0);
+    await sync(pr, STALE_LABEL, isStale(pr));
   }
 
   // Comments: every active PR that overlaps or already has a radar comment,

@@ -1,5 +1,6 @@
 export const MARKER: string;
 export const LABEL: string;
+export const STALE_LABEL: string;
 export const STALE_DAYS: number;
 export const HOT_FILES: string[];
 export const IGNORED_FILES: string[];

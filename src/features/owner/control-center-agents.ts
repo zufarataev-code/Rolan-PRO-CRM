@@ -3,9 +3,10 @@
  *
  * Открытый пулл-реквест — это «занятая» задача (правило .agents/PROTOCOL.md).
  * Агент определяется по префиксу ветки: `claude/…` или `codex/…`.
- * Метка `conflict-risk` ставится радаром пересечений
- * (.github/workflows/agent-conflict-radar.yml), когда два открытых PR
- * правят одни и те же файлы.
+ * Метки ставит радар пересечений (.github/workflows/agent-conflict-radar.yml):
+ * `conflict-risk` — два открытых PR правят одни и те же файлы;
+ * `stale` — нет новых коммитов дольше 14 дней (по дате коммита, а не
+ * `updated_at`, который сдвигают сами метки и комментарии).
  */
 
 export type AgentName = "Claude" | "Codex" | "Другие";
@@ -55,6 +56,7 @@ type GitHubPull = {
 export function buildAgentBoard(pulls: GitHubPull[], now = new Date()): AgentBoard {
   const byAgent: Record<AgentName, AgentPr[]> = { Claude: [], Codex: [], Другие: [] };
   const staleBefore = now.getTime() - STALE_DAYS * 86_400_000;
+  const radarSeen = pulls.some((pull) => (pull.labels ?? []).some((label) => label.name === "stale" || label.name === "conflict-risk"));
   for (const pull of pulls) {
     const branch = pull.head?.ref ?? "";
     const labels = new Set((pull.labels ?? []).map((label) => label.name ?? ""));
@@ -66,7 +68,8 @@ export function buildAgentBoard(pulls: GitHubPull[], now = new Date()): AgentBoa
       draft: Boolean(pull.draft),
       updatedAt: pull.updated_at,
       url: pull.html_url,
-      stale: new Date(pull.updated_at).getTime() < staleBefore,
+      // The radar's commit-based label wins; updated_at is only a fallback before its first run.
+      stale: labels.has("stale") || (!radarSeen && new Date(pull.updated_at).getTime() < staleBefore),
       conflictRisk: labels.has("conflict-risk"),
       needsOwner: labels.has("owner"),
     };
