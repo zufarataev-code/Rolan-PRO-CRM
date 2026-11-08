@@ -21,6 +21,16 @@ Before handing work to another device, chat, or contributor:
 
 `PROJECT_STATE.md` is the canonical live handoff. Chat history, local files, browser state, and an agent's memory are not sources of truth.
 
+## Claude + Codex: working together without collisions
+
+Full rules: `.agents/PROTOCOL.md` → «Совместная работа без столкновений». In short:
+
+- An open PR from `claude/…` or `codex/…` is the claim on a task — open it (draft is fine) as soon as work starts.
+- Before starting, check open PRs; extend an existing task instead of duplicating it.
+- `.github/workflows/agent-conflict-radar.yml` labels PRs that edit the same files (`conflict-risk`) and comments with whom. Hot files (legacy CRM HTML, Prisma schema, package files) are edited in turn: the PR ready first merges, the other rebases and re-verifies.
+- Never push to, close, or rewrite another agent's branch; comment in their PR instead. Each PR is reviewed by the other agent.
+- The owner sees all of this in `/owner/control-center` → «Агенты».
+
 ## Workflow
 
 1. Start from the latest `main`.

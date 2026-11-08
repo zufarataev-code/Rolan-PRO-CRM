@@ -1,0 +1,82 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { agentForBranch, buildAgentBoard } from "./control-center-agents";
+import { summarizeLegacyOrders } from "./control-center-ops";
+
+const now = new Date("2026-11-08T12:00:00-08:00");
+const day = 86_400_000;
+const iso = (offsetDays: number) => new Date(now.getTime() + offsetDays * day).toISOString();
+
+const payload = {
+  clients: [
+    { id: "c1", name: "Ortiz" },
+    { id: "c2", name: "Avian Law" },
+  ],
+  orders: [
+    { id: "o1", number: "101", clientId: "c1", status: "new", updatedAt: iso(-1) },
+    { id: "o2", number: "102", clientId: "c2", status: "measurement_scheduled", updatedAt: iso(-2) },
+    {
+      id: "o3", clientId: "c1", status: "installation_scheduled", installationAt: iso(2),
+      projectEstimateSnapshot: { revenue: 5000 }, payments: [{ amount: 1000, date: iso(-5) }],
+    },
+    // Accepted without a fixed estimate: counted separately, never guessed.
+    { id: "o4", clientId: "c2", status: "proposal_accepted" },
+    // Fully paid and done: no debt, not active.
+    { id: "o5", clientId: "c1", status: "completed", projectEstimateSnapshot: { revenue: 2000 }, payments: [{ amount: 2000, date: iso(-40) }] },
+    // Done but unpaid: still a debtor.
+    { id: "o6", clientId: "c2", status: "completed", projectEstimateSnapshot: { revenue: 800 }, paid: 300 },
+    // Cancelled and unconfirmed historical drafts are ignored.
+    { id: "o7", clientId: "c1", status: "cancelled", projectEstimateSnapshot: { revenue: 9999 } },
+    { id: "o8", clientId: "c1", status: "proposal_accepted", quickEntryDraft: true, projectEstimateSnapshot: { revenue: 7777 } },
+    // Install far in the future is not in the 7-day list.
+    { id: "o9", clientId: "c1", status: "installation_scheduled", installationAt: iso(20) },
+  ],
+};
+
+test("ops summary counts active projects by stage from the working CRM", () => {
+  const ops = summarizeLegacyOrders(payload, now);
+  assert.equal(ops.active, 5); // o1, o2, o3, o4, o9
+  const counts = Object.fromEntries(ops.stages.map((stage) => [stage.key, stage.count]));
+  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 1, install: 2, closing: 0 });
+  assert.equal(ops.stages[0].cards[0].client, "Ortiz");
+  assert.equal(ops.stages[0].cards[0].link, "/legacy-crm#/order/o1");
+});
+
+test("receivables use only the approved estimate and skip cancelled or draft work", () => {
+  const ops = summarizeLegacyOrders(payload, now);
+  assert.equal(ops.receivable, 4000 + 500);
+  assert.equal(ops.receivableCount, 2);
+  assert.equal(ops.debtors[0].id, "o3");
+  assert.equal(ops.withoutEstimate, 2); // o4 and o9
+  assert.equal(ops.received30, 1000);
+});
+
+test("installs list holds only the next seven days, soonest first", () => {
+  const ops = summarizeLegacyOrders(payload, now);
+  assert.deepEqual(ops.installsNext7.map((card) => card.id), ["o3"]);
+});
+
+test("empty or broken payload never throws", () => {
+  assert.equal(summarizeLegacyOrders(null, now).active, 0);
+  assert.equal(summarizeLegacyOrders({ orders: "x" }, now).receivable, 0);
+});
+
+test("agent board groups open PRs by branch and flags stale and overlapping work", () => {
+  assert.equal(agentForBranch("claude/control-center"), "Claude");
+  assert.equal(agentForBranch("codex/payroll"), "Codex");
+  assert.equal(agentForBranch("fix/stripe"), "Другие");
+  const board = buildAgentBoard(
+    [
+      { number: 1, title: "A", head: { ref: "claude/a" }, updated_at: iso(-1), html_url: "u1", labels: [{ name: "conflict-risk" }] },
+      { number: 2, title: "B", head: { ref: "codex/b" }, updated_at: iso(-30), html_url: "u2" },
+      { number: 3, title: "C", head: { ref: "codex/c" }, updated_at: iso(-2), html_url: "u3", labels: [{ name: "owner" }] },
+    ],
+    now,
+  );
+  assert.equal(board.byAgent.Claude.length, 1);
+  assert.deepEqual(board.byAgent.Codex.map((pr) => pr.number), [3, 2]);
+  assert.equal(board.staleCount, 1);
+  assert.equal(board.conflictCount, 1);
+  assert.equal(board.ownerCount, 1);
+});

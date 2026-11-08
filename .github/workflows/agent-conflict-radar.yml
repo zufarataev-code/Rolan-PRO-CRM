@@ -1,0 +1,40 @@
+name: Agent conflict radar
+
+# Claude и Codex работают в одном репозитории. Радар показывает, когда два
+# открытых PR правят одни и те же файлы, — до того, как один перепишет другого.
+# Ничего не сливает и не блокирует: только метка conflict-risk и комментарий.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: agent-conflict-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Fork PRs get a read-only token; the radar is for our own branches.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/agents
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Find overlapping pull requests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/agents/conflict-radar.mjs
