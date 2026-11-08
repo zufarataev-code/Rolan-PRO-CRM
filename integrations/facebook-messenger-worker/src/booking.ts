@@ -13,7 +13,89 @@ export type LeadData = {
   email?: string;
   goal?: string;
   windows?: string;
+  zip?: string;
+  callbackTime?: string;
 };
+
+const FORM_FIELD_ALIASES: Array<[RegExp, keyof LeadData]> = [
+  [/^(?:full\s*name|name|first\s*name|имя|nombre(?:\s+completo)?)$/i, "name"],
+  [/^(?:phone(?:\s*number)?|mobile|telephone|телефон|tel[eé]fono)$/i, "phone"],
+  [/^(?:e-?mail|почта|correo(?:\s+electr[oó]nico)?)$/i, "email"],
+  [/^(?:zip(?:\s*code)?|postal\s*code|post\s*code|индекс|c[oó]digo\s+postal)$/i, "zip"],
+  [/^(?:city|город|ciudad)$/i, "city"],
+  [/^(?:street\s*address|address|адрес|direcci[oó]n)$/i, "address"],
+  [/(?:service|film|considering|услуг|servicio)/i, "serviceType"],
+  [/(?:property|home or business|residential|commercial|объект|propiedad)/i, "propertyType"],
+  [/(?:windows|how many|окон|ventanas)/i, "windows"],
+];
+
+/**
+ * Meta drops the instant-form answers into Messenger as plain text
+ * ("Full name: …", "Phone number: …"). Read them deterministically so the
+ * assistant never asks the customer for facts the form already supplied.
+ */
+export function parseLeadFormMessage(text: string): LeadData {
+  const lead: LeadData = {};
+  if (!/:\s*\S/.test(text)) return lead;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const separator = line.indexOf(":");
+    if (separator <= 0) continue;
+    const label = line.slice(0, separator).replace(/[?*]+$/g, "").trim();
+    const value = line.slice(separator + 1).trim();
+    if (!label || !value || label.length > 120) continue;
+    const field = FORM_FIELD_ALIASES.find(([pattern]) => pattern.test(label))?.[1];
+    if (!field || lead[field]) continue;
+    lead[field] = value.slice(0, 300);
+  }
+  if (lead.serviceType) lead.serviceType = detectServiceType(lead.serviceType) || lead.serviceType;
+  if (lead.zip && !/^\d{5}(?:-\d{4})?$/.test(lead.zip)) delete lead.zip;
+  if (lead.phone && lead.phone.replace(/\D/g, "").length < 10) delete lead.phone;
+  // A lone "Name: x" line in a normal chat message is not a form.
+  return Object.keys(lead).length >= 2 ? lead : {};
+}
+
+const LEAD_FACT_LABELS: Array<[keyof LeadData, string]> = [
+  ["name", "Name"],
+  ["phone", "Phone"],
+  ["email", "Email"],
+  ["serviceType", "Service"],
+  ["propertyType", "Property type"],
+  ["goal", "Problem / goal"],
+  ["windows", "Approximate windows"],
+  ["zip", "ZIP from the lead form"],
+  ["city", "City / area"],
+  ["address", "Property address"],
+  ["callbackTime", "Preferred callback time"],
+];
+
+export function knownLeadFacts(lead: LeadData) {
+  const lines = LEAD_FACT_LABELS
+    .filter(([key]) => lead[key]?.trim())
+    .map(([key, label]) => `- ${label}: ${lead[key]!.trim()}`);
+  return lines.length
+    ? `Facts already collected about this customer (NEVER ask for any of these again; use them):\n${lines.join("\n")}`
+    : "No customer facts collected yet.";
+}
+
+/** Business hours in Los Angeles: Monday–Saturday, 08:00–18:00. */
+export function isBusinessHours(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: CRM_TIME_ZONE,
+      weekday: "short",
+      hour: "numeric",
+      hourCycle: "h23",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+  return parts.weekday !== "Sun" && Number(parts.hour) >= 8 && Number(parts.hour) < 18;
+}
+
+export function looksLikeCallbackTime(text: string) {
+  return /\d|morning|afternoon|evening|noon|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|anytime|any time|утр|днём|днем|вечер|завтра|сегодня|понедельник|вторник|сред|четверг|пятниц|суббот|любое|mañana|tarde|hoy|lunes|martes|miércoles|jueves|viernes|sábado/i.test(text);
+}
 
 export type CrmSlot = {
   start_at: string;
@@ -224,7 +306,7 @@ export function leadReadyForBooking(lead: LeadData) {
     leadReadyForCrm(lead) &&
     lead.serviceType?.trim() &&
     (lead.propertyType?.trim() || lead.objectType?.trim()) &&
-    (lead.address?.trim() || lead.city?.trim()),
+    (lead.address?.trim() || lead.city?.trim() || lead.zip?.trim()),
   );
 }
 
@@ -243,9 +325,13 @@ export function crmLeadPayload(
     email: lead.email?.trim() || undefined,
     service_type: lead.serviceType?.trim() || undefined,
     property_type: lead.propertyType?.trim() || lead.objectType?.trim() || undefined,
-    city: lead.city?.trim() || undefined,
+    city: [lead.city?.trim(), lead.zip?.trim()].filter(Boolean).join(", ") || undefined,
     address: lead.address?.trim() || undefined,
-    message: [lead.goal, lead.windows ? `Approximate windows: ${lead.windows}` : ""]
+    message: [
+      lead.goal,
+      lead.windows ? `Approximate windows: ${lead.windows}` : "",
+      lead.callbackTime ? `Preferred callback time: ${lead.callbackTime}` : "",
+    ]
       .filter(Boolean)
       .join("\n") || undefined,
   };

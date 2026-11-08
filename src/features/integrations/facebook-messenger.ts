@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { onConsultationScheduled } from "@/features/core/events";
 import { sendSms } from "@/features/twilio/service";
+import { notifyLeadCallbackRequest, sendLeadFirstTouch } from "@/features/sales/lead-first-touch";
 import { prisma } from "@/lib/db";
 
 import {
@@ -188,7 +189,8 @@ export async function captureFacebookMessengerLead(
   const eventKey = facebookMessengerEventKey("lead", payload);
   const payloadHash = facebookMessengerPayloadHash(payload);
 
-  return prisma.$transaction(async (tx: FacebookMessengerDbClient) => {
+  let managerUserId: string | null = null;
+  const captured = await prisma.$transaction(async (tx: FacebookMessengerDbClient) => {
     await acquireFacebookMessengerLock(tx, "rolanpro-facebook-event", eventKey);
     const receipt = await findFacebookMessengerReceipt(
       tx,
@@ -211,6 +213,7 @@ export async function captureFacebookMessengerLead(
       await acquireFacebookMessengerLock(tx, "rolanpro-facebook-contact", contactKey);
     }
     const { actor, manager } = await resolveFacebookMessengerActorAndManager(tx);
+    managerUserId = manager.user_id;
     const { lead, created } = await createOrReuseFacebookMessengerLead(
       tx,
       payload,
@@ -239,6 +242,28 @@ export async function captureFacebookMessengerLead(
     });
     return result;
   });
+
+  if (!captured.idempotent_replay) {
+    if (captured.created) {
+      await sendLeadFirstTouch({
+        leadId: captured.lead_id,
+        name: payload.name,
+        phone: payload.phone,
+        channel: "facebook_messenger",
+        managerUserId,
+      });
+    }
+    if (payload.callback_time) {
+      await notifyLeadCallbackRequest({
+        leadId: captured.lead_id,
+        name: payload.name,
+        phone: payload.phone,
+        callbackTime: payload.callback_time,
+        managerUserId,
+      });
+    }
+  }
+  return captured;
 }
 
 export async function listFacebookMessengerSlots(value: unknown) {

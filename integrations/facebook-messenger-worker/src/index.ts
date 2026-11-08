@@ -3,7 +3,11 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   formatSlot,
+  isBusinessHours,
+  knownLeadFacts,
   leadReadyForBooking,
+  looksLikeCallbackTime,
+  parseLeadFormMessage,
   leadReadyForCrm,
   normalizeLeadData,
   normalizeLanguage,
@@ -19,6 +23,7 @@ import { CrmRequestError, postToCrm, type CrmEnv } from "./crm";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 const HISTORY_LIMIT = 12;
+const BURST_WINDOW_MS = 2500;
 const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type KvNamespace = {
@@ -116,9 +121,26 @@ Use stage "qualifying" until those details are collected. Do not say that an app
 Consult before collecting: if the customer asks about a product, benefits, warranty, film choice, heat, glare, UV, privacy, or glass compatibility, answer that question first using the verified knowledge. Then ask only one relevant diagnostic or booking question. Never reply with a vague status such as "checking CRM"; the application itself will show real slots when ready.
 Return only JSON with reply, stage, escalate, escalateReason, and lead. Use an empty string for unknown lead fields and never infer customer facts.`;
 
-async function localizeOperationalMessage(env: Env, message: string, language?: string) {
+
+const CONVERSATION_RULES = `
+CONVERSATION RULES — these override anything above when they conflict:
+- The customer already agreed in the lead form that a virtual assistant replies. Do not announce or repeat that you are an AI or a bot. If the customer directly asks whether they are talking to a bot, a person, or AI, answer honestly in one short sentence (you are the Rolan PRO virtual assistant and a manager follows up personally), then continue helping. Never claim to be a human and never invent a personal name; when needed, sign as "the Rolan PRO team".
+- Read the collected facts block below before every reply. Never ask for a fact that is already known, and never repeat a question you already asked in this conversation. If an earlier answer was vague, acknowledge what the customer said and ask a narrower follow-up instead of the same question.
+- Acknowledge the customer's specific situation in your own words before the next question (for example: old film peeling on both sides means removal plus new film).
+- When the job involves replacing or removing old film, damaged film, or unusual glass, ask the customer to send 2-3 photos of the windows here in the chat — it helps prepare the visit.
+- If the form ZIP and the area the customer names do not match, do not ask for the city again; ask once for the property's street address.
+- Aim to get the customer to a booked free on-site measurement within 2-3 messages. Ask only what is still missing, one question per message, and keep each reply to 1-3 short sentences.
+- Never mention internal systems, errors, loading problems, calendars, or the CRM to the customer.`;
+
+async function localizeOperationalMessage(
+  env: Env,
+  message: string,
+  language?: string,
+  englishOnlySource = false,
+) {
   const languageTag = normalizeLanguage(language);
-  if (languageTag === "en" || languageTag === "ru" || languageTag === "es") return message;
+  if (languageTag === "en") return message;
+  if (!englishOnlySource && (languageTag === "ru" || languageTag === "es")) return message;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -165,14 +187,21 @@ function messengerEvents(body: unknown): MessengerEvent[] {
         text?: string;
         is_echo?: boolean;
         quick_reply?: { payload?: string };
+        attachments?: Array<{ type?: string }>;
       } | undefined;
       const sender = raw.sender as { id?: string } | undefined;
-      if (!message?.text || message.is_echo || !sender?.id) continue;
+      if (!message || message.is_echo || !sender?.id) continue;
+      const images = (message.attachments || []).filter((item) => item.type === "image").length;
+      const photoNote = images
+        ? `[The customer sent ${images} photo${images > 1 ? "s" : ""} of the windows in this chat.]`
+        : "";
+      const text = [message.text?.trim(), photoNote].filter(Boolean).join("\n");
+      if (!text) continue;
       events.push({
         platform,
         senderId: sender.id,
         eventId: message.mid || `${sender.id}:${Date.now()}`,
-        text: message.text.trim(),
+        text,
         quickReplyPayload: message.quick_reply?.payload,
       });
     }
@@ -217,7 +246,12 @@ async function sendMessage(
   });
 }
 
-async function askAssistant(env: Env, history: HistoryMessage[], applicationStage: string) {
+async function askAssistant(
+  env: Env,
+  history: HistoryMessage[],
+  applicationStage: string,
+  lead: LeadData,
+) {
   const storedPrompt = await env.CHAT.get("sys_prompt");
   const stateInstruction = applicationStage === "booked"
     ? "Application state: this customer already has a confirmed booking. Answer follow-up questions normally. Do not start another booking or say you are checking CRM unless the customer explicitly asks for another appointment or address."
@@ -233,7 +267,7 @@ async function askAssistant(env: Env, history: HistoryMessage[], applicationStag
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 500,
-      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${stateInstruction}`,
+      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${CONVERSATION_RULES}\n\n${knownLeadFacts(lead)}\n\n${stateInstruction}`,
       messages: history,
     }),
   });
@@ -290,11 +324,25 @@ function bookedPrompt(slot: CrmSlot, language?: string, smsSent = false) {
     : `You're booked for a free consultation on ${time}. The SMS could not be sent right now, so please keep this Messenger confirmation.`;
 }
 
-function noSlotsPrompt(language?: string) {
-  const normalized = normalizeLanguage(language);
-  if (normalized === "ru") return "Свободное время сейчас не загрузилось. Передаю заявку менеджеру — он свяжется с вами.";
-  if (normalized === "es") return "No pude cargar un horario disponible. Pasaré su solicitud al gerente para que se comunique con usted.";
-  return "I couldn't load an available time. I'll pass your request to the manager for a follow-up.";
+function firstName(lead: LeadData) {
+  return lead.name?.trim().split(/\s+/)[0] || "";
+}
+
+function callbackQuestion(lead: LeadData) {
+  const name = firstName(lead);
+  const greeting = name ? `Thank you, ${name}!` : "Thank you!";
+  const hours = isBusinessHours()
+    ? "Our manager will reach out personally to set up the visit."
+    : "Our office is closed right now, but your request is saved and our manager will reach out personally to set up the visit.";
+  if (!lead.phone?.trim()) {
+    return `${greeting} ${hours} What is the best phone number and time to call you?`;
+  }
+  return `${greeting} ${hours} What time works best for a quick call to ${lead.phone.trim()}?`;
+}
+
+function callbackConfirmed(lead: LeadData) {
+  const name = firstName(lead);
+  return `${name ? `Got it, ${name}` : "Got it"} — our manager will call you ${lead.callbackTime?.trim() || "soon"}. If anything changes, just message us here.`;
 }
 
 function qualificationPrompt(lead: LeadData, language?: string) {
@@ -346,18 +394,93 @@ async function persistState(env: Env, key: string, state: ConversationState) {
   await env.CHAT.put(key, JSON.stringify(state), { expirationTtl: CONVERSATION_TTL_SECONDS });
 }
 
-async function offerSlots(env: Env, event: MessengerEvent, key: string, state: ConversationState) {
-  const slots = await availableSlots(env);
+/**
+ * Graceful fallback when real slots cannot be offered (CRM unreachable, no free
+ * time, assistant failure). The customer never sees a technical error: we save
+ * what we have and ask when a manager may call.
+ */
+async function askForCallback(
+  env: Env,
+  event: MessengerEvent,
+  key: string,
+  state: ConversationState,
+  reason: string,
+) {
+  console.log(JSON.stringify({ event: "callback_requested", key, reason }));
+  state.stage = "callback_requested";
+  state.escalated = false;
+  try {
+    if (leadReadyForCrm(state.lead) && !state.leadCapturedEventId) {
+      const captureEventId = `${event.eventId}:lead`;
+      await postToCrm(
+        env,
+        "/api/integrations/facebook-messenger/leads",
+        crmLeadPayload(state.lead, captureEventId, event.senderId, env.PAGE_ID),
+      );
+      state.leadCapturedEventId = captureEventId;
+    }
+  } catch (error) {
+    console.error("crm_callback_capture", error);
+  }
+  const text = await localizeOperationalMessage(env, callbackQuestion(state.lead), state.lead.language, true);
+  state.history.push({ role: "assistant", content: JSON.stringify({ reply: text, stage: state.stage }) });
+  await persistState(env, key, state);
+  await sendMessage(env, event, text);
+}
+
+async function confirmCallback(
+  env: Env,
+  event: MessengerEvent,
+  key: string,
+  state: ConversationState,
+) {
+  state.lead.callbackTime = event.text.slice(0, 200);
+  state.stage = "callback_set";
+  state.escalated = false;
+  state.history.push({ role: "user", content: event.text });
+  if (leadReadyForCrm(state.lead)) {
+    try {
+      await postToCrm(
+        env,
+        "/api/integrations/facebook-messenger/leads",
+        {
+          ...crmLeadPayload(state.lead, `${event.eventId}:callback`, event.senderId, env.PAGE_ID),
+          callback_time: state.lead.callbackTime,
+        },
+      );
+    } catch (error) {
+      console.error("crm_callback_time", error);
+    }
+  }
+  const text = await localizeOperationalMessage(env, callbackConfirmed(state.lead), state.lead.language, true);
+  state.history.push({ role: "assistant", content: JSON.stringify({ reply: text, stage: state.stage }) });
+  await persistState(env, key, state);
+  await sendMessage(env, event, text);
+}
+
+async function offerSlots(
+  env: Env,
+  event: MessengerEvent,
+  key: string,
+  state: ConversationState,
+  leadIn?: string,
+) {
+  let slots: CrmSlot[] = [];
+  try {
+    slots = await availableSlots(env);
+  } catch (error) {
+    console.error("crm_slots", error);
+  }
   if (!slots.length) {
-    state.stage = "escalated";
-    state.escalated = true;
-    await persistState(env, key, state);
-    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
+    await askForCallback(env, event, key, state, "no_slots");
     return;
   }
   state.stage = "slot_offered";
   state.offeredSlots = slots;
   await persistState(env, key, state);
+  // Keep the assistant's acknowledgment of what the customer said, but drop it
+  // if it is another question — the slot buttons are the next step.
+  if (leadIn?.trim() && !leadIn.trim().endsWith("?")) await sendMessage(env, event, leadIn.trim());
   await sendMessage(
     env,
     event,
@@ -417,6 +540,14 @@ async function bookSelectedSlot(
         state.lead.language,
       ),
     );
+    const followUp = state.lead.address?.trim()
+      ? "If you can, send 2-3 photos of the windows here — it helps us prepare for the visit."
+      : "What is the street address of the property? And if you can, send 2-3 photos of the windows here — it helps us prepare for the visit.";
+    await sendMessage(
+      env,
+      event,
+      await localizeOperationalMessage(env, followUp, state.lead.language, true),
+    );
   } catch (error) {
     if (error instanceof CrmRequestError && error.code === "slot_unavailable") {
       await offerSlots(env, event, key, state);
@@ -441,6 +572,11 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     console.error("kv_read", error);
   }
   state.lead = normalizeLeadData(state.lead || {});
+  const formLead = parseLeadFormMessage(event.text);
+  if (Object.keys(formLead).length) {
+    state.lead = normalizeLeadData(mergeLead(state.lead, formLead));
+    console.log(JSON.stringify({ event: "lead_form_parsed", key, fields: Object.keys(formLead) }));
+  }
   if (state.stage === "booked" && startsNewBooking(event.text)) {
     state = {
       history: [],
@@ -454,6 +590,12 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     };
   }
   let alreadyBooked = state.stage === "booked";
+  // Once a manager callback is arranged, do not keep re-offering slots (and
+  // re-asking for a call time) on every message unless the customer asks.
+  const callbackMode =
+    (state.stage === "callback_requested" || state.stage === "callback_set") &&
+    !startsNewBooking(event.text);
+  const callbackStage = state.stage;
 
   const selectedSlot = parseBookingPayload(event.quickReplyPayload);
   if (selectedSlot) {
@@ -461,8 +603,13 @@ async function handleEvent(env: Env, event: MessengerEvent) {
       await bookSelectedSlot(env, event, key, state, selectedSlot);
     } catch (error) {
       console.error("crm_booking", error);
-      await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
+      await askForCallback(env, event, key, state, "booking_failed");
     }
+    return;
+  }
+
+  if (state.stage === "callback_requested" && looksLikeCallbackTime(event.text)) {
+    await confirmCallback(env, event, key, state);
     return;
   }
 
@@ -473,10 +620,10 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   let output: AssistantOutput;
   try {
-    output = await askAssistant(env, state.history, state.stage);
+    output = await askAssistant(env, state.history, state.stage, state.lead);
   } catch (error) {
     console.error("assistant", error);
-    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
+    await askForCallback(env, event, key, state, "assistant_failed");
     return;
   }
 
@@ -508,31 +655,97 @@ async function handleEvent(env: Env, event: MessengerEvent) {
       state.leadCapturedEventId = captureEventId;
     }
 
-    if (!alreadyBooked && !state.escalated && leadReadyForBooking(state.lead)) {
-      await offerSlots(env, event, key, state);
+    if (!alreadyBooked && !callbackMode && !state.escalated && leadReadyForBooking(state.lead)) {
+      await offerSlots(env, event, key, state, attemptedBookingClaim ? undefined : output.reply);
       return;
     }
   } catch (error) {
     console.error("crm", error);
-    state.stage = "escalated";
-    state.escalated = true;
-    await persistState(env, key, state);
-    await sendMessage(env, event, await localizeOperationalMessage(env, noSlotsPrompt(state.lead.language), state.lead.language));
+    await askForCallback(env, event, key, state, "crm_failed");
     return;
   }
 
   if (alreadyBooked && !state.escalated) state.stage = "booked";
+  if (callbackMode && !state.escalated) state.stage = callbackStage;
   await persistState(env, key, state);
   const missingFieldPrompt = qualificationPrompt(state.lead, state.lead.language);
   const reply = shouldUseQualificationPrompt(attemptedBookingClaim, alreadyBooked) && missingFieldPrompt
     ? await localizeOperationalMessage(env, missingFieldPrompt, state.lead.language)
     : output.reply || await localizeOperationalMessage(
         env,
-        noSlotsPrompt(state.lead.language),
+        callbackQuestion(state.lead),
         state.lead.language,
+        true,
       );
   await sendMessage(env, event, reply);
   console.log(JSON.stringify({ key, stage: state.stage, leadCaptured: Boolean(state.leadCapturedEventId) }));
+}
+
+
+/**
+ * Meta often delivers an ice-breaker ("Can I book an appointment?") and the
+ * lead-form summary as two messages at once. Answer them together, once.
+ */
+export function groupEventsBySender(events: MessengerEvent[]) {
+  const grouped = new Map<string, MessengerEvent>();
+  const result: MessengerEvent[] = [];
+  for (const event of events) {
+    if (event.quickReplyPayload) {
+      result.push(event);
+      continue;
+    }
+    const key = `${event.platform}:${event.senderId}`;
+    const current = grouped.get(key);
+    if (current) {
+      current.text = `${current.text}\n${event.text}`;
+      current.eventId = event.eventId;
+    } else {
+      const copy = { ...event };
+      grouped.set(key, copy);
+      result.push(copy);
+    }
+  }
+  return result;
+}
+
+type BurstItem = { id: string; text: string; at: number };
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Debounce separate webhook deliveries that arrive within a couple of seconds. */
+async function handleIncoming(env: Env, event: MessengerEvent) {
+  if (event.quickReplyPayload) return handleEvent(env, event);
+  const bufferKey = `burst:${event.platform}:${event.senderId}`;
+  const read = async (): Promise<BurstItem[]> => {
+    try {
+      const raw = await env.CHAT.get(bufferKey);
+      const items = raw ? JSON.parse(raw) as BurstItem[] : [];
+      return Array.isArray(items) ? items.filter((item) => Date.now() - item.at < 30_000) : [];
+    } catch {
+      return [];
+    }
+  };
+  try {
+    const buffer = await read();
+    buffer.push({ id: event.eventId, text: event.text, at: Date.now() });
+    await env.CHAT.put(bufferKey, JSON.stringify(buffer), { expirationTtl: 60 });
+  } catch (error) {
+    console.error("burst_write", error);
+    return handleEvent(env, event);
+  }
+  await sleep(BURST_WINDOW_MS);
+  const latest = await read();
+  const last = latest[latest.length - 1];
+  if (last && last.id !== event.eventId) return; // a newer message will answer for both
+  const texts = latest.length ? latest.map((item) => item.text) : [event.text];
+  try {
+    await env.CHAT.put(bufferKey, "[]", { expirationTtl: 60 });
+  } catch (error) {
+    console.error("burst_clear", error);
+  }
+  return handleEvent(env, { ...event, text: [...new Set(texts)].join("\n") });
 }
 
 export default {
@@ -552,7 +765,9 @@ export default {
     } catch {
       return new Response("bad", { status: 400 });
     }
-    for (const event of messengerEvents(body)) context.waitUntil(handleEvent(env, event));
+    for (const event of groupEventsBySender(messengerEvents(body))) {
+      context.waitUntil(handleIncoming(env, event));
+    }
     return new Response("EVENT_RECEIVED", { status: 200 });
   },
 };

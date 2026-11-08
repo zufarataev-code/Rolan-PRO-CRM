@@ -21,6 +21,7 @@ export type FacebookMessengerLeadPayload = {
   city?: string;
   address?: string;
   message?: string;
+  callback_time?: string;
 };
 
 export type FacebookMessengerBookingPayload = FacebookMessengerLeadPayload & {
@@ -129,6 +130,7 @@ export function parseFacebookMessengerLeadPayload(value: unknown): FacebookMesse
     city: optionalString(value, "city", 160),
     address: optionalString(value, "address", 1_000),
     message: optionalString(value, "message", MAX_NOTE_LENGTH),
+    callback_time: optionalString(value, "callback_time", 200),
   };
 }
 
@@ -277,6 +279,7 @@ export function buildFacebookMessengerLeadNotes(payload: FacebookMessengerLeadPa
     payload.city ? `City / Area: ${payload.city}` : null,
     payload.address ? `Address: ${payload.address}` : null,
     payload.message ? `Message: ${payload.message}` : null,
+    payload.callback_time ? `Preferred callback time: ${payload.callback_time}` : null,
   ]
     .filter(Boolean)
     .join("\n");

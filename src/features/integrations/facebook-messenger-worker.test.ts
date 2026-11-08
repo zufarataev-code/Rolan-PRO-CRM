@@ -204,3 +204,79 @@ test("Worker only promises SMS when CRM reports it", () => {
   assert.match(source, /state\.leadCapturedEventId = undefined/);
   assert.match(source, /event: "repeat_booking_started"/);
 });
+
+const WESLEY_FORM = `Hello! I filled out your form and would like to know more about your business.
+Which window film service are you considering?: Solar / heat control film
+Full name: Wesley Elsea
+Phone number: (213) 791-0122
+Email: wmelsea@example.org
+Zip code: 90023`;
+
+test("Worker reads the Meta instant-form summary instead of asking again", async () => {
+  const { parseLeadFormMessage, knownLeadFacts } = await import(
+    "../../../integrations/facebook-messenger-worker/src/booking"
+  );
+  const lead = parseLeadFormMessage(WESLEY_FORM);
+  assert.equal(lead.name, "Wesley Elsea");
+  assert.equal(lead.phone, "(213) 791-0122");
+  assert.equal(lead.email, "wmelsea@example.org");
+  assert.equal(lead.zip, "90023");
+  assert.equal(lead.serviceType, "Solar Film");
+  const facts = knownLeadFacts(lead);
+  assert.match(facts, /NEVER ask/);
+  assert.match(facts, /ZIP from the lead form: 90023/);
+  assert.deepEqual(parseLeadFormMessage("Can I book an appointment?"), {});
+  assert.deepEqual(parseLeadFormMessage("Note: call me after 5"), {});
+});
+
+test("Worker can offer slots once the form ZIP and property type are known", () => {
+  assert.equal(
+    leadReadyForBooking({
+      name: "Wesley Elsea",
+      phone: "(213) 791-0122",
+      serviceType: "Solar Film",
+      propertyType: "Business property",
+      zip: "90023",
+    }),
+    true,
+  );
+  const payload = crmLeadPayload(
+    { name: "A B", phone: "+12135550100", zip: "90023", city: "Mission Hills", callbackTime: "tomorrow 10am" },
+    "evt",
+    "psid",
+    "page",
+  );
+  assert.equal(payload.city, "Mission Hills, 90023");
+  assert.match(payload.message || "", /Preferred callback time: tomorrow 10am/);
+});
+
+test("Worker knows Los Angeles business hours and recognises a callback time", async () => {
+  const { isBusinessHours, looksLikeCallbackTime } = await import(
+    "../../../integrations/facebook-messenger-worker/src/booking"
+  );
+  assert.equal(isBusinessHours(new Date("2026-11-09T18:00:00.000Z")), true); // Mon 10:00 PT
+  assert.equal(isBusinessHours(new Date("2026-11-10T07:00:00.000Z")), false); // Mon 23:00 PT
+  assert.equal(isBusinessHours(new Date("2026-11-08T19:00:00.000Z")), false); // Sunday
+  assert.equal(looksLikeCallbackTime("tomorrow around 10"), true);
+  assert.equal(looksLikeCallbackTime("завтра утром"), true);
+  assert.equal(looksLikeCallbackTime("ok"), false);
+});
+
+test("Worker answers a same-delivery message burst once and never shows a technical error", async () => {
+  const { groupEventsBySender } = await import(
+    "../../../integrations/facebook-messenger-worker/src/index"
+  );
+  const grouped = groupEventsBySender([
+    { platform: "messenger", senderId: "1", eventId: "a", text: "Can I book an appointment?" },
+    { platform: "messenger", senderId: "1", eventId: "b", text: WESLEY_FORM },
+    { platform: "messenger", senderId: "2", eventId: "c", text: "hi" },
+  ]);
+  assert.equal(grouped.length, 2);
+  assert.equal(grouped[0].eventId, "b");
+  assert.match(grouped[0].text, /Can I book an appointment\?\n[\s\S]*Full name: Wesley Elsea/);
+
+  const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
+  assert.doesNotMatch(source, /couldn't load|не загрузилось|No pude cargar/i);
+  assert.match(source, /Do not announce or repeat that you are an AI/);
+  assert.match(source, /answer honestly/);
+});
