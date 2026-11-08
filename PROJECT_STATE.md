@@ -18,9 +18,10 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Second review round: radar also runs when a PR closes (partner freed at once); staleness is measured by the head commit date and marked with a `stale` label (14 days, same as the control center) — the radar's own labels/comments bump `updated_at`, so `updated_at` is only a fallback before the radar's first run.
 - Third review round: «Монтажи на неделю» lists only confirmed installation statuses (draft plans on `proposal_accepted` stay hidden, as in the CRM calendar); the day boundary is midnight in Los Angeles even on a UTC server; staleness is commit-date only, also for the PR that triggered the run.
 - Fourth review round: older orders with only `o.paid` + `paidAt` count in «получено за 30 дней»; LA midnight uses the offset at midnight (correct on DST switch days); a PR that goes stale gets its live conflict comment replaced with a stale notice.
-- Fifth review round: an unrelated earlier card payment of the same amount no longer hides a later Stripe receipt (match by Stripe session id or same amount within a day); when GitHub fails, the agents block keeps the last rows but says they are not live and shows their time.
+- Fifth review round: an unrelated earlier card payment of the same amount no longer hides a later Stripe receipt (superseded in round 8); when GitHub fails, the agents block keeps the last rows but says they are not live and shows their time.
 - Sixth review round: same for project/money numbers — on a database error the last snapshot stays but the page shows «Цифры по проектам не живые» with its time.
 - Seventh review round: a missing `primary` workspace row is an error («Рабочая CRM не найдена в базе»), not zero projects and $0.
+- Eighth review round: unrecorded Stripe = what `o.paid` holds above the itemized lines (capped by the Stripe amount) — the CRM's own books instead of an amount/date guess; the radar checks every stale PR's comment, so a failed update is retried.
 - Next: re-review and merge; owner decision on closing the 34 stale PRs (list in control center «Агенты»).
 
 ## 2026-11-07 — Хранилище фото и видео в оригинале (DigitalOcean Spaces) + резервные копии (Claude, PR pending)

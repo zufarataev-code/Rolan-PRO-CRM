@@ -148,8 +148,8 @@ async function main() {
     if (existing) await api(`/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) });
     else await api(`/issues/${pr.number}/comments`, { method: "POST", body: JSON.stringify({ body }) });
   }
-  // A PR that just went stale had a live conflict comment; replace it so it stops telling others to wait.
-  for (const pr of open.filter((item) => isStale(item) && item.labels.some((label) => label.name === LABEL))) {
+  // Every stale PR with a radar comment gets the stale notice — idempotent, so a failed update is retried next run.
+  for (const pr of open.filter(isStale)) {
     const existing = (await all(`/issues/${pr.number}/comments`)).find((comment) => comment.body?.includes(MARKER));
     const body = renderStaleComment();
     if (existing && existing.body !== body) await api(`/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) });
