@@ -53,6 +53,10 @@ export function findOverlaps(prs) {
   return result;
 }
 
+export function renderStaleComment() {
+  return `${MARKER}\n**Радар пересечений:** в этом PR нет новых коммитов дольше ${STALE_DAYS} дней — он помечен \`stale\` и больше не считается занятой работой. Пересечения не проверяются. Автор доводит или закрывает PR (\`.agents/PROTOCOL.md\`, правило 6).`;
+}
+
 export function renderComment(overlaps, staleSkipped) {
   if (!overlaps.length) {
     return `${MARKER}\n**Радар пересечений:** с другими активными PR файлы не пересекаются — можно работать.${
@@ -143,6 +147,12 @@ async function main() {
     if (existing && existing.body === body) continue;
     if (existing) await api(`/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) });
     else await api(`/issues/${pr.number}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+  }
+  // A PR that just went stale had a live conflict comment; replace it so it stops telling others to wait.
+  for (const pr of open.filter((item) => isStale(item) && item.labels.some((label) => label.name === LABEL))) {
+    const existing = (await all(`/issues/${pr.number}/comments`)).find((comment) => comment.body?.includes(MARKER));
+    const body = renderStaleComment();
+    if (existing && existing.body !== body) await api(`/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) });
   }
   const conflicted = [...overlaps.values()].filter((list) => list.length).length;
   console.log(`checked ${prs.length} active PRs (${open.length - active.length} stale skipped), ${conflicted} with overlaps`);

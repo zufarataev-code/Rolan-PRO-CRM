@@ -36,6 +36,8 @@ const payload = {
       id: "o10", clientId: "c2", status: "installation_in_progress", installationAt: iso(-1),
       serviceSchedules: [{ id: "s1", installationAt: iso(-1) }, { id: "s2", installationAt: iso(3) }],
     },
+    // Older order: only a total with its date.
+    { id: "o13", clientId: "c2", status: "completed", projectEstimateSnapshot: { revenue: 300 }, paid: 300, paidAt: iso(-2) },
     // Accepted proposal with a draft plan: not a confirmed install yet.
     { id: "o12", clientId: "c1", status: "proposal_accepted", serviceSchedules: [{ id: "s3", installationAt: iso(1) }] },
     // Stripe confirmed automatically: CRM bumps o.paid, no payments line.
@@ -61,7 +63,7 @@ test("receivables use only the approved estimate and skip cancelled or draft wor
   assert.equal(ops.receivableCount, 3);
   assert.equal(ops.debtors[0].id, "o3");
   assert.equal(ops.withoutEstimate, 4); // o4, o9, o10, o12
-  assert.equal(ops.received30, 1000 + 400); // payments line + automatic Stripe
+  assert.equal(ops.received30, 1000 + 400 + 300); // payments line + automatic Stripe + legacy paid total
 });
 
 test("installs list holds only the next seven days, soonest first", () => {
@@ -118,4 +120,7 @@ test("the day starts at midnight Los Angeles time whatever the server zone", () 
   assert.equal(startOfLaDay(new Date("2026-11-08T03:00:00Z")).toISOString(), "2026-11-07T08:00:00.000Z");
   // Summer time: UTC-7.
   assert.equal(startOfLaDay(new Date("2026-07-01T20:00:00Z")).toISOString(), "2026-07-01T07:00:00.000Z");
+  // DST switch days: the offset at midnight differs from the offset at noon.
+  assert.equal(startOfLaDay(new Date("2026-03-08T20:00:00Z")).toISOString(), "2026-03-08T08:00:00.000Z");
+  assert.equal(startOfLaDay(new Date("2026-11-01T20:00:00Z")).toISOString(), "2026-11-01T07:00:00.000Z");
 });

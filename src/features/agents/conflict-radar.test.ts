@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { agentOf, findOverlaps, MARKER, renderComment } from "../../../scripts/agents/conflict-radar.mjs";
+import { agentOf, findOverlaps, MARKER, renderComment, renderStaleComment } from "../../../scripts/agents/conflict-radar.mjs";
 
 const prs = [
   { number: 10, title: "Claude касса", branch: "claude/cashier", files: ["private/legacy/rolanpro-crm-cloud.html", "PROJECT_STATE.md", "src/a.ts"] },
@@ -27,6 +27,9 @@ test("comment names the other agent and is updatable via its marker", () => {
   assert.match(body, /#11 \(Codex/);
   assert.match(renderComment([], 3), /не пересекаются/);
   assert.equal(agentOf("claude/x"), "Claude");
+  const stale = renderStaleComment();
+  assert.ok(stale.startsWith(MARKER));
+  assert.match(stale, /stale/);
 });
 
 test("radar workflow runs on PR updates and on a schedule with label-write rights only", () => {

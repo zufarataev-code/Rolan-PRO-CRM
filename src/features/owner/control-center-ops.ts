@@ -163,25 +163,37 @@ function toCard(order: Row, clients: Map<string, string>): OpsCard {
 /** Only confirmed installations; `proposal_accepted` schedules are internal drafts the CRM calendar hides. */
 const INSTALL_LISTED = new Set(["installation_scheduled", "installation_accepted", "installation_en_route", "installation_in_progress"]);
 
-/** Midnight in Los Angeles as a UTC instant — the server may run in UTC. */
+const LA_PARTS = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function laParts(at: Date) {
+  return Object.fromEntries(LA_PARTS.formatToParts(at).map((part) => [part.type, Number(part.value)])) as Record<string, number>;
+}
+
+/** Los Angeles UTC offset (ms) in effect at a given instant. */
+function laOffset(at: Date) {
+  const p = laParts(at);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/**
+ * Midnight in Los Angeles as a UTC instant — the server may run in UTC.
+ * The offset is taken at midnight itself, not at `now`: on DST switch days
+ * the two differ by an hour.
+ */
 export function startOfLaDay(now: Date) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, Number(part.value)]),
-  );
-  const laAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
-  const offset = laAsUtc - Math.floor(now.getTime() / 1000) * 1000;
-  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) - offset);
+  const p = laParts(now);
+  const wallMidnight = Date.UTC(p.year, p.month - 1, p.day);
+  const guess = wallMidnight - laOffset(now);
+  return new Date(wallMidnight - laOffset(new Date(guess)));
 }
 
 const byRecent = (a: OpsCard, b: OpsCard) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
@@ -216,6 +228,11 @@ export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsP
     }
     const stripe = unrecordedStripe(order);
     if (stripe?.at && stripe.at >= since30 && stripe.at <= now) received30 += stripe.amount;
+    // Older orders: only a total in `o.paid` with its date, no itemized lines.
+    if (!(Array.isArray(order.payments) && order.payments.length) && !stripe && num(order.paid) > 0) {
+      const paidAt = validDate(order.paidAt);
+      if (paidAt && paidAt >= since30 && paidAt <= now) received30 += num(order.paid);
+    }
     if (LOST_STATUSES.has(status)) continue;
 
     const card = toCard(order, clients);

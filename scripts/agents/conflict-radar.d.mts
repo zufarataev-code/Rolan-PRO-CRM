@@ -9,3 +9,4 @@ export type RadarPr = { number: number; title: string; branch: string; files: st
 export type RadarOverlap = { number: number; title: string; branch: string; shared: string[]; hot: boolean };
 export function findOverlaps(prs: RadarPr[]): Map<number, RadarOverlap[]>;
 export function renderComment(overlaps: RadarOverlap[], staleSkipped: number): string;
+export function renderStaleComment(): string;
