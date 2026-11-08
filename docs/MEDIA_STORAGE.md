@@ -14,4 +14,4 @@ CORS: origin `https://rolanpro-crm.143-110-136-211.sslip.io`, methods GET/PUT/HE
 - `SPACES_ACCESS_KEY`, `SPACES_SECRET_KEY` — a bucket-scoped Read/Write key from Spaces → `rolanpro-media` → Settings → Access Keys.
 - Optional: `SPACES_BUCKET` (default `rolanpro-media`), `SPACES_REGION` (default `sfo3`), `SPACES_ENDPOINT` (default `https://sfo3.digitaloceanspaces.com`).
 
-Add them to the server environment file and restart the app. The owner control center (`/owner/control-center`) turns the storage card green once the keys work.
+Add them to the server environment file and restart the app. The owner control center (`/legacy-crm/control-center`) turns the storage card green once the keys work.

@@ -29,7 +29,7 @@ Full rules: `.agents/PROTOCOL.md` → «Совместная работа без
 - Before starting, check open PRs; extend an existing task instead of duplicating it.
 - `.github/workflows/agent-conflict-radar.yml` labels PRs that edit the same files (`conflict-risk`) and comments with whom. Hot files (legacy CRM HTML, Prisma schema, package files) are edited in turn: the PR ready first merges, the other rebases and re-verifies.
 - Never push to, close, or rewrite another agent's branch; comment in their PR instead. Each PR is reviewed by the other agent.
-- The owner sees all of this in `/owner/control-center` → «Агенты».
+- The owner sees all of this in `/legacy-crm/control-center` → «Агенты».
 
 ## Workflow
 
