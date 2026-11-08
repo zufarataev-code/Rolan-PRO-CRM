@@ -19833,6 +19833,11 @@ function renderAppShell() {
             <span class="nav-label">${label}</span>
           </div>
         `).join('')}
+        ${role === 'owner' ? `
+          <a class="nav-item" href="/owner/control-center" title="Центр управления" style="text-decoration:none;color:inherit;">
+            <span class="nav-icon">🛰</span>
+            <span class="nav-label">Центр управления</span>
+          </a>` : ''}
       </nav>
       <div class="p-3 border-t border-slate-700">
         <div class="sidebar-user">
