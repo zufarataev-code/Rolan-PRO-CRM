@@ -1030,6 +1030,72 @@ Purpose:
 
 - Load projects linked to the selected client.
 
+## Facebook Page Comments
+
+These endpoints are available only to authenticated Owner/Manager users. Public
+reply publication remains in manager-approval mode.
+
+### `GET /api/v1/integrations/facebook-comments`
+
+Purpose:
+
+- Load pending/escalated Facebook Page comments, safe reply drafts, optional
+  linked Lead and non-secret integration status.
+
+Query params:
+
+- `status`: `pending_review`, `escalated`, `publishing`, `publish_uncertain`, `replied`, `dismissed`, `workbench` (active queue plus dismissed items that can be reopened), or `all`
+- `limit`: 1-100, default 50
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/draft`
+
+Purpose:
+
+- Regenerate a manager-editable safe draft. An AI outage falls back to a
+  deterministic multilingual draft and never blocks review.
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/lead`
+
+Purpose:
+
+- Explicitly create or reuse one canonical Lead for the comment and link the
+  existing manager task. The comment is never silently converted into a Lead.
+
+### `PATCH /api/v1/integrations/facebook-comments/{commentId}`
+
+Write fields:
+
+- `action`: `dismiss`, `reopen`, `confirm_published`, or `return_to_review`
+
+`confirm_published` and `return_to_review` are manual reconciliation actions
+available only while the comment is `publish_uncertain` after an ambiguous Graph
+API outcome. The in-flight `publishing` state cannot be reconciled or retried.
+The manager first checks the public Facebook thread, then either closes
+the task as replied or returns it to the review queue. `reopen` restores an
+accidentally dismissed item and its manager task, including a comment that had
+been classified as spam. A `publishing` claim older than two minutes is treated
+as abandoned and safely converted to `publish_uncertain` when the workbench is
+loaded.
+
+### `POST /api/v1/integrations/facebook-comments/{commentId}/reply`
+
+Write fields:
+
+- `message`: reviewed public reply, 1-2,000 characters
+
+Purpose:
+
+- Publish the manager-confirmed reply through the protected Page token, close
+  the task and append an activity record.
+
+### `GET|POST /api/webhooks/meta-lead-ads`
+
+Purpose:
+
+- Existing signed Meta Page callback. In addition to `leadgen`, it accepts only
+  new `feed` comments for the configured Page. It ignores Page-authored replies,
+  edits, removals and unrelated fields.
+
 ## Settings
 
 ### `GET /api/v1/settings/bootstrap`

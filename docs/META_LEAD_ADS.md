@@ -50,6 +50,10 @@ Do **not** replace the live Messenger Worker's callback: it still handles messag
 Confirm app mode, permissions and Page lead access before subscribing. A development
 app or unapproved lead access may work for app-role users yet fail for real customers.
 
+The same CRM callback can also receive the Page `feed` field for reviewed public
+comment replies. It must use the same Meta app signature and Page scope; see
+`docs/FACEBOOK_PAGE_COMMENTS.md`. The Messenger Worker callback remains separate.
+
 ## CRM behavior
 
 The receiver retrieves contact/answer data from Graph v26.0 with the protected
