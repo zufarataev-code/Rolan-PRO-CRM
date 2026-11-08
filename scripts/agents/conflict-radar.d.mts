@@ -1,0 +1,12 @@
+export const MARKER: string;
+export const LABEL: string;
+export const STALE_LABEL: string;
+export const STALE_DAYS: number;
+export const HOT_FILES: string[];
+export const IGNORED_FILES: string[];
+export function agentOf(branch?: string): string;
+export type RadarPr = { number: number; title: string; branch: string; files: string[] };
+export type RadarOverlap = { number: number; title: string; branch: string; shared: string[]; hot: boolean };
+export function findOverlaps(prs: RadarPr[]): Map<number, RadarOverlap[]>;
+export function renderComment(overlaps: RadarOverlap[], staleSkipped: number): string;
+export function renderStaleComment(): string;

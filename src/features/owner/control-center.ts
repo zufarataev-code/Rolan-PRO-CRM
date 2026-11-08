@@ -13,6 +13,7 @@ import {
   type CheckResult,
   type ServiceEntry,
 } from "./control-center-core";
+import { summarizeLegacyOrders, type OpsSummary } from "./control-center-ops";
 
 const CHECK_TIMEOUT_MS = 5000;
 const CACHE_MS = 30_000;
@@ -204,3 +205,39 @@ export async function getControlCenterSnapshot(force = false) {
 }
 
 export const CONTROL_CENTER_CHECK_KEYS = Object.keys(CHECKS);
+
+const OPS_CACHE_MS = 60_000;
+let opsCache: { at: number; ops: OpsSummary } | null = null;
+
+/**
+ * Projects and money from the working CRM. Reads only the two keys it needs
+ * (orders, clients) straight from Postgres JSON, at most once a minute, so the
+ * page never loads the whole legacy workspace on every refresh.
+ */
+export type ControlCenterOps =
+  | { ok: true; ops: OpsSummary; asOf: Date; staleError?: string }
+  | { ok: false; error: string };
+
+export async function getControlCenterOps(): Promise<ControlCenterOps> {
+  if (opsCache && Date.now() - opsCache.at < OPS_CACHE_MS) return { ok: true, ops: opsCache.ops, asOf: new Date(opsCache.at) };
+  try {
+    type OpsRow = { orders: unknown; clients: unknown };
+    const rows = (await withTimeout(
+      prisma.$queryRaw<OpsRow[]>`
+        SELECT payload->'orders' AS orders, payload->'clients' AS clients
+        FROM legacy_workspaces WHERE workspace_id = 'primary' LIMIT 1`,
+    )) as OpsRow[];
+    // No workspace row is a broken CRM, not an empty business.
+    if (!rows[0]) throw new Error("workspace_not_initialized");
+    const ops = summarizeLegacyOrders({ orders: rows[0].orders ?? [], clients: rows[0].clients ?? [] });
+    opsCache = { at: Date.now(), ops };
+    return { ok: true, ops, asOf: new Date(opsCache.at) };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    const message =
+      code === "timeout" ? "База не ответила за 5 с" : code === "workspace_not_initialized" ? "Рабочая CRM не найдена в базе" : "Не удалось прочитать проекты";
+    // Keep the last numbers on screen, but never present them as live.
+    if (opsCache) return { ok: true, ops: opsCache.ops, asOf: new Date(opsCache.at), staleError: message };
+    return { ok: false, error: message };
+  }
+}

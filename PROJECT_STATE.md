@@ -2,6 +2,28 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
+
+- Owner: control from the phone — project cards and money inside the CRM control center; Claude and Codex must work together, see the same projects, not redo or block each other but complement each other.
+- Done on `claude/control-center-ops-agents-20261108`:
+  - `src/features/owner/control-center-ops.ts` — read-only summary of the working CRM (`LegacyWorkspace.payload.orders` + `clients`): active projects by five stages with cards (client, №, status, install date, total/balance, deep link `/legacy-crm#/order/<id>`), installs in the next 7 days, receivables, money received in 30 days, top debtors. Amount comes **only** from the approved estimate `projectEstimateSnapshot.revenue`; accepted projects without one are counted separately («долг не посчитан»), never guessed. Cancelled orders and unconfirmed historical drafts are excluded, same rule as the CRM.
+  - `getControlCenterOps()` in `control-center.ts` selects only `payload->'orders'` and `payload->'clients'`, 5 s timeout, 60 s cache — the page does not load the whole workspace on each refresh.
+  - `src/features/owner/control-center-agents.ts` — «Агенты: кто что делает»: open PRs grouped by branch prefix (Claude / Codex / others), stale after 14 days, `conflict-risk` and `owner` labels; GitHub REST, 5 min cache, optional `GITHUB_READ_TOKEN`; keeps the last good picture if GitHub is down.
+  - Page `/owner/control-center`: money tiles, stage board (horizontal swipe on phone), installs/debtors lists, agents block; existing service statuses and project map unchanged.
+  - `.github/workflows/agent-conflict-radar.yml` + `scripts/agents/conflict-radar.mjs` — on PR updates and every 6 h: finds open PRs editing the same files, sets/removes `conflict-risk`, leaves one updatable comment on the triggering PR (🔴 hot files: legacy CRM HTML, Prisma schema, package files). `PROJECT_STATE.md`/`DECISIONS.md` overlaps ignored. Read-only on code, no merging or blocking.
+  - `.agents/PROTOCOL.md` → «Совместная работа без столкновений» (open PR = claim, check before starting, hot files in turn, never touch another agent's branch, cross-review, stale PR handling); exceptions to the hard rule come only from the owner and still require Codex review after. `AGENTS.md` summary added.
+- Finding (dry run of the radar on 2026-11-08): 52 open PRs, 34 without movement > 30 days; 15 of 18 active PRs edit `private/legacy/rolanpro-crm-cloud.html` — this single file is the main collision point between agents.
+- Verification: new tests `control-center-ops.test.ts` 5/5 (incl. Stripe and per-service dates), `agents/conflict-radar.test.ts` 4/4, existing `control-center.test.ts` 6/6; `tsc --noEmit` shows no errors in changed files (Prisma client cannot be generated in the cloud container — engines download 403; CI runs the full build).
+- Codex review (PR #491) found 4 issues, all fixed in the same branch: automatic Stripe receipts (in `o.paid`/`o.stripe`, not in `o.payments`) now count in paid and «получено за 30 дней»; upcoming installs use per-service `serviceSchedules` (project date only for older projects; a multi-day service under way counts from today); radar removes `conflict-risk` from PRs that went stale and keeps the explanatory comment on every overlapping PR, not only the triggering one.
+- Second review round: radar also runs when a PR closes (partner freed at once); staleness is measured by the head commit date and marked with a `stale` label (14 days, same as the control center) — the radar's own labels/comments bump `updated_at`, so `updated_at` is only a fallback before the radar's first run.
+- Third review round: «Монтажи на неделю» lists only confirmed installation statuses (draft plans on `proposal_accepted` stay hidden, as in the CRM calendar); the day boundary is midnight in Los Angeles even on a UTC server; staleness is commit-date only, also for the PR that triggered the run.
+- Fourth review round: older orders with only `o.paid` + `paidAt` count in «получено за 30 дней»; LA midnight uses the offset at midnight (correct on DST switch days); a PR that goes stale gets its live conflict comment replaced with a stale notice.
+- Fifth review round: an unrelated earlier card payment of the same amount no longer hides a later Stripe receipt (superseded in round 8); when GitHub fails, the agents block keeps the last rows but says they are not live and shows their time.
+- Sixth review round: same for project/money numbers — on a database error the last snapshot stays but the page shows «Цифры по проектам не живые» with its time.
+- Seventh review round: a missing `primary` workspace row is an error («Рабочая CRM не найдена в базе»), not zero projects and $0.
+- Eighth review round: unrecorded Stripe = what `o.paid` holds above the itemized lines (capped by the Stripe amount) — the CRM's own books instead of an amount/date guess; the radar checks every stale PR's comment, so a failed update is retried.
+- Next: re-review and merge; owner decision on closing the 34 stale PRs (list in control center «Агенты»).
+
 ## 2026-11-07 — Хранилище фото и видео в оригинале (DigitalOcean Spaces) + резервные копии (Claude, PR pending)
 
 - Owner: photos and videos cannot be uploaded to projects; quality must stay original so the files can feed the content factory; do not disrupt working processes. Cause found in code: legacy order photos were base64 inside the order JSON with a 2 MB limit and image-only input.

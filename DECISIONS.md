@@ -880,3 +880,14 @@ This decision supersedes the 2026-10-26 four-direction grouping. Rolan PRO has f
 - Existing records created during the temporary period when Privacy was grouped under Decorative remain readable and writable. The server accepts an unchanged saved cross-category link, but it cannot be extended with another incompatible material.
 - «Общее по объекту» remains an internal size-free service bucket and does not count as a film direction.
 - No Project, warehouse, payroll or Proposal history is deleted or silently rewritten.
+
+## 2026-11-08 — Claude and Codex coordinate through open PRs, the conflict radar and cross-review (Owner)
+
+Owner requires Claude and Codex to work as one team: same repository and projects, no redoing or blocking each other's work.
+
+- An open PR from a `claude/…` or `codex/…` branch is the claim on a task; work without an open PR is not visible to the other agent.
+- The conflict radar labels open PRs that edit the same files (`conflict-risk`). Hot files (legacy CRM HTML, Prisma schema, package files) are changed in turn: the PR ready first merges, the other rebases and re-verifies.
+- Agents never push to, close or rewrite each other's branches; issues go into the other agent's PR. Each PR is reviewed by the other agent.
+- The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
+- The owner sees active, overlapping, stale and owner-blocked work in `/owner/control-center` → «Агенты».
+
