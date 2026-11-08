@@ -33,6 +33,8 @@ test("radar workflow runs on PR updates and on a schedule with label-write right
   const workflow = readFileSync(".github/workflows/agent-conflict-radar.yml", "utf8");
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /schedule:/);
+  // A merged or closed PR must free its partner right away, not in six hours.
+  assert.match(workflow, /types: \[[^\]]*closed[^\]]*\]/);
   assert.match(workflow, /pull-requests: write/);
   assert.match(workflow, /contents: read/);
   assert.doesNotMatch(workflow, /contents: write/);
