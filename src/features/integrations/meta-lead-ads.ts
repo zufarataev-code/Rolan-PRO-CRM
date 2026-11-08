@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { persistLeadAttribution } from "@/features/google-ads/attribution";
+import { sendLeadFirstTouch } from "@/features/sales/lead-first-touch";
 import { MetaLeadError, normalizeMetaLead, type MetaLeadNotification } from "./meta-lead-ads-core";
 
 const SOURCE = "meta_lead_ads";
@@ -16,7 +17,7 @@ export async function importMetaLead(notification: MetaLeadNotification, token: 
   // Keep Graph responses, tokens and contact data out of HTTP errors and logs.
   if (!response.ok) throw new MetaLeadError("lead_retrieval_failed", 503);
   const lead = normalizeMetaLead(await response.json(), notification);
-  return prisma.$transaction(async tx => {
+  const result = await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('meta-lead-ads'), hashtext(${notification.lead_id}))`;
     const duplicate = await tx.lead.findUnique({ where, select: { lead_id: true } });
     if (duplicate) return { lead_id: duplicate.lead_id, duplicate: true };
@@ -33,4 +34,9 @@ export async function importMetaLead(notification: MetaLeadNotification, token: 
     await tx.activityLog.create({ data: { entity_type: "lead", entity_id: created.lead_id, action_key: "integration.meta_lead_ads.received", message: "Meta instant form enquiry received.", metadata } });
     return { lead_id: created.lead_id, duplicate: false };
   });
+  // First touch happens after commit; it never throws, so a failed SMS cannot make Meta retry.
+  if (!result.duplicate) {
+    await sendLeadFirstTouch({ leadId: result.lead_id, name: lead.name, phone: lead.phone, channel: "meta_lead_ads" });
+  }
+  return result;
 }
