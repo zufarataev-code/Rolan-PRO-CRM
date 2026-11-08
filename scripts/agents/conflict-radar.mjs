@@ -108,7 +108,8 @@ async function main() {
     const commit = await api(`/commits/${pr.head.sha}`);
     lastCommit.set(pr.number, new Date(commit?.commit?.committer?.date ?? commit?.commit?.author?.date ?? pr.created_at).getTime());
   }
-  const isStale = (pr) => lastCommit.get(pr.number) < staleBefore && pr.number !== current;
+  // Commit date only: reopening or marking ready does not make an old branch fresh.
+  const isStale = (pr) => lastCommit.get(pr.number) < staleBefore;
   const active = open.filter((pr) => !isStale(pr));
   const prs = [];
   for (const pr of active) {

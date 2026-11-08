@@ -160,6 +160,30 @@ function toCard(order: Row, clients: Map<string, string>): OpsCard {
   };
 }
 
+/** Only confirmed installations; `proposal_accepted` schedules are internal drafts the CRM calendar hides. */
+const INSTALL_LISTED = new Set(["installation_scheduled", "installation_accepted", "installation_en_route", "installation_in_progress"]);
+
+/** Midnight in Los Angeles as a UTC instant — the server may run in UTC. */
+export function startOfLaDay(now: Date) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const laAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  const offset = laAsUtc - Math.floor(now.getTime() / 1000) * 1000;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day) - offset);
+}
+
 const byRecent = (a: OpsCard, b: OpsCard) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
 
 export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsPerStage = 6): OpsSummary {
@@ -175,8 +199,7 @@ export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsP
 
   const in7 = new Date(now.getTime() + 7 * 86_400_000);
   const since30 = new Date(now.getTime() - 30 * 86_400_000);
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = startOfLaDay(now);
 
   let receivable = 0;
   let received30 = 0;
@@ -207,7 +230,7 @@ export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsP
 
     const stage = OPS_STAGES.find((item) => item.statuses.includes(status)) ?? OPS_STAGES[0];
     stageCards.get(stage.key)!.push(card);
-    const next = upcomingInstall(order, startOfToday, in7);
+    const next = INSTALL_LISTED.has(status) ? upcomingInstall(order, startOfToday, in7) : null;
     if (next) installs.push({ ...card, installAt: next.toISOString() });
   }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { agentForBranch, buildAgentBoard } from "./control-center-agents";
-import { summarizeLegacyOrders } from "./control-center-ops";
+import { startOfLaDay, summarizeLegacyOrders } from "./control-center-ops";
 
 const now = new Date("2026-11-08T12:00:00-08:00");
 const day = 86_400_000;
@@ -36,6 +36,8 @@ const payload = {
       id: "o10", clientId: "c2", status: "installation_in_progress", installationAt: iso(-1),
       serviceSchedules: [{ id: "s1", installationAt: iso(-1) }, { id: "s2", installationAt: iso(3) }],
     },
+    // Accepted proposal with a draft plan: not a confirmed install yet.
+    { id: "o12", clientId: "c1", status: "proposal_accepted", serviceSchedules: [{ id: "s3", installationAt: iso(1) }] },
     // Stripe confirmed automatically: CRM bumps o.paid, no payments line.
     {
       id: "o11", clientId: "c1", status: "installation_scheduled", projectEstimateSnapshot: { revenue: 1000 },
@@ -46,9 +48,9 @@ const payload = {
 
 test("ops summary counts active projects by stage from the working CRM", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.equal(ops.active, 7); // o1, o2, o3, o4, o9, o10, o11
+  assert.equal(ops.active, 8); // o1, o2, o3, o4, o9, o10, o11, o12
   const counts = Object.fromEntries(ops.stages.map((stage) => [stage.key, stage.count]));
-  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 1, install: 4, closing: 0 });
+  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 2, install: 4, closing: 0 });
   assert.equal(ops.stages[0].cards[0].client, "Ortiz");
   assert.equal(ops.stages[0].cards[0].link, "/legacy-crm#/order/o1");
 });
@@ -58,7 +60,7 @@ test("receivables use only the approved estimate and skip cancelled or draft wor
   assert.equal(ops.receivable, 4000 + 500 + 600);
   assert.equal(ops.receivableCount, 3);
   assert.equal(ops.debtors[0].id, "o3");
-  assert.equal(ops.withoutEstimate, 3); // o4, o9, o10
+  assert.equal(ops.withoutEstimate, 4); // o4, o9, o10, o12
   assert.equal(ops.received30, 1000 + 400); // payments line + automatic Stripe
 });
 
@@ -109,4 +111,11 @@ test("once the radar has run, staleness comes from its commit-based label, not u
 test("before the radar's first run, staleness falls back to updated_at", () => {
   const board = buildAgentBoard([{ number: 6, title: "F", head: { ref: "codex/f" }, updated_at: iso(-30), html_url: "u6" }], now);
   assert.equal(board.staleCount, 1);
+});
+
+test("the day starts at midnight Los Angeles time whatever the server zone", () => {
+  // 2026-11-08 03:00 UTC is still Nov 7, 19:00 in LA (PST, UTC-8).
+  assert.equal(startOfLaDay(new Date("2026-11-08T03:00:00Z")).toISOString(), "2026-11-07T08:00:00.000Z");
+  // Summer time: UTC-7.
+  assert.equal(startOfLaDay(new Date("2026-07-01T20:00:00Z")).toISOString(), "2026-07-01T07:00:00.000Z");
 });
