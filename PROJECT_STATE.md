@@ -20,6 +20,7 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Fourth review round: older orders with only `o.paid` + `paidAt` count in «получено за 30 дней»; LA midnight uses the offset at midnight (correct on DST switch days); a PR that goes stale gets its live conflict comment replaced with a stale notice.
 - Fifth review round: an unrelated earlier card payment of the same amount no longer hides a later Stripe receipt (match by Stripe session id or same amount within a day); when GitHub fails, the agents block keeps the last rows but says they are not live and shows their time.
 - Sixth review round: same for project/money numbers — on a database error the last snapshot stays but the page shows «Цифры по проектам не живые» with its time.
+- Seventh review round: a missing `primary` workspace row is an error («Рабочая CRM не найдена в базе»), not zero projects and $0.
 - Next: re-review and merge; owner decision on closing the 34 stale PRs (list in control center «Агенты»).
 
 ## 2026-11-07 — Хранилище фото и видео в оригинале (DigitalOcean Spaces) + резервные копии (Claude, PR pending)

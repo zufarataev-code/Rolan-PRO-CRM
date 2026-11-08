@@ -62,6 +62,8 @@ test("owner sees the control center link in the working CRM", () => {
 test("cached project numbers are flagged as not live when the database fails", () => {
   const source = readFileSync("src/features/owner/control-center.ts", "utf8");
   assert.match(source, /staleError: message/);
+  // A missing workspace row must not look like a healthy empty business.
+  assert.match(source, /if \(!rows\[0\]\) throw new Error\("workspace_not_initialized"\)/);
   const page = readFileSync("app/owner/control-center/page.tsx", "utf8");
   assert.match(page, /Цифры по проектам не живые/);
 });

@@ -227,11 +227,15 @@ export async function getControlCenterOps(): Promise<ControlCenterOps> {
         SELECT payload->'orders' AS orders, payload->'clients' AS clients
         FROM legacy_workspaces WHERE workspace_id = 'primary' LIMIT 1`,
     )) as OpsRow[];
-    const ops = summarizeLegacyOrders({ orders: rows[0]?.orders ?? [], clients: rows[0]?.clients ?? [] });
+    // No workspace row is a broken CRM, not an empty business.
+    if (!rows[0]) throw new Error("workspace_not_initialized");
+    const ops = summarizeLegacyOrders({ orders: rows[0].orders ?? [], clients: rows[0].clients ?? [] });
     opsCache = { at: Date.now(), ops };
     return { ok: true, ops, asOf: new Date(opsCache.at) };
   } catch (error) {
-    const message = error instanceof Error && error.message === "timeout" ? "База не ответила за 5 с" : "Не удалось прочитать проекты";
+    const code = error instanceof Error ? error.message : "";
+    const message =
+      code === "timeout" ? "База не ответила за 5 с" : code === "workspace_not_initialized" ? "Рабочая CRM не найдена в базе" : "Не удалось прочитать проекты";
     // Keep the last numbers on screen, but never present them as live.
     if (opsCache) return { ok: true, ops: opsCache.ops, asOf: new Date(opsCache.at), staleError: message };
     return { ok: false, error: message };
