@@ -5,8 +5,9 @@
  *
  * - Ставит метку `conflict-risk` на все пересекающиеся PR и снимает её, когда
  *   пересечение ушло (центр управления CRM показывает эту метку).
- * - На PR, который запустил проверку, оставляет один обновляемый комментарий:
- *   с кем пересекается и по каким файлам.
+ * - На каждом пересекающемся PR (и на том, что запустил проверку) держит один
+ *   обновляемый комментарий: с кем пересекается и по каким файлам. Старый PR
+ *   тоже узнаёт, что кто-то начал править его файлы.
  * - PR без движения дольше STALE_DAYS не считаются «занятыми» — они в списке
  *   зависших, а не блокируют работу.
  *
@@ -103,24 +104,31 @@ async function main() {
   const prs = [];
   for (const pr of active) {
     const files = await all(`/pulls/${pr.number}/files`);
-    prs.push({ number: pr.number, title: pr.title, branch: pr.head.ref, files: files.map((file) => file.filename), labels: pr.labels.map((l) => l.name) });
+    prs.push({ number: pr.number, title: pr.title, branch: pr.head.ref, files: files.map((file) => file.filename) });
   }
   const overlaps = findOverlaps(prs);
 
   await api("/labels", { method: "POST", body: JSON.stringify({ name: LABEL, color: "d64545", description: "Правит те же файлы, что другой открытый PR" }) }).catch(() => null);
-  for (const pr of prs) {
-    const has = pr.labels.includes(LABEL);
-    const should = overlaps.get(pr.number).length > 0;
+  // Labels: every open PR, so a PR that went stale loses its old conflict-risk too.
+  for (const pr of open) {
+    const has = pr.labels.some((label) => label.name === LABEL);
+    const should = (overlaps.get(pr.number)?.length ?? 0) > 0;
     if (should && !has) await api(`/issues/${pr.number}/labels`, { method: "POST", body: JSON.stringify({ labels: [LABEL] }) });
     if (!should && has) await api(`/issues/${pr.number}/labels/${LABEL}`, { method: "DELETE" });
   }
 
-  if (current) {
-    const body = renderComment(overlaps.get(current) ?? [], open.length - active.length);
-    const comments = await all(`/issues/${current}/comments`);
+  // Comments: every active PR that overlaps or already has a radar comment,
+  // so the older PR also learns who started touching its files.
+  const staleSkipped = open.length - active.length;
+  for (const pr of prs) {
+    const list = overlaps.get(pr.number) ?? [];
+    const comments = await all(`/issues/${pr.number}/comments`);
     const existing = comments.find((comment) => comment.body?.includes(MARKER));
+    if (!existing && !list.length && pr.number !== current) continue;
+    const body = renderComment(list, staleSkipped);
+    if (existing && existing.body === body) continue;
     if (existing) await api(`/issues/comments/${existing.id}`, { method: "PATCH", body: JSON.stringify({ body }) });
-    else await api(`/issues/${current}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+    else await api(`/issues/${pr.number}/comments`, { method: "POST", body: JSON.stringify({ body }) });
   }
   const conflicted = [...overlaps.values()].filter((list) => list.length).length;
   console.log(`checked ${prs.length} active PRs (${open.length - active.length} stale skipped), ${conflicted} with overlaps`);

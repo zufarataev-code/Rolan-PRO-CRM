@@ -31,30 +31,41 @@ const payload = {
     { id: "o8", clientId: "c1", status: "proposal_accepted", quickEntryDraft: true, projectEstimateSnapshot: { revenue: 7777 } },
     // Install far in the future is not in the 7-day list.
     { id: "o9", clientId: "c1", status: "installation_scheduled", installationAt: iso(20) },
+    // Project date is the earliest service (yesterday); the next service is in 3 days.
+    {
+      id: "o10", clientId: "c2", status: "installation_in_progress", installationAt: iso(-1),
+      serviceSchedules: [{ id: "s1", installationAt: iso(-1) }, { id: "s2", installationAt: iso(3) }],
+    },
+    // Stripe confirmed automatically: CRM bumps o.paid, no payments line.
+    {
+      id: "o11", clientId: "c1", status: "installation_scheduled", projectEstimateSnapshot: { revenue: 1000 },
+      paid: 400, stripe: { paid: true, amount: 400, paidAt: iso(-3) },
+    },
   ],
 };
 
 test("ops summary counts active projects by stage from the working CRM", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.equal(ops.active, 5); // o1, o2, o3, o4, o9
+  assert.equal(ops.active, 7); // o1, o2, o3, o4, o9, o10, o11
   const counts = Object.fromEntries(ops.stages.map((stage) => [stage.key, stage.count]));
-  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 1, install: 2, closing: 0 });
+  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 1, install: 4, closing: 0 });
   assert.equal(ops.stages[0].cards[0].client, "Ortiz");
   assert.equal(ops.stages[0].cards[0].link, "/legacy-crm#/order/o1");
 });
 
 test("receivables use only the approved estimate and skip cancelled or draft work", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.equal(ops.receivable, 4000 + 500);
-  assert.equal(ops.receivableCount, 2);
+  assert.equal(ops.receivable, 4000 + 500 + 600);
+  assert.equal(ops.receivableCount, 3);
   assert.equal(ops.debtors[0].id, "o3");
-  assert.equal(ops.withoutEstimate, 2); // o4 and o9
-  assert.equal(ops.received30, 1000);
+  assert.equal(ops.withoutEstimate, 3); // o4, o9, o10
+  assert.equal(ops.received30, 1000 + 400); // payments line + automatic Stripe
 });
 
 test("installs list holds only the next seven days, soonest first", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.deepEqual(ops.installsNext7.map((card) => card.id), ["o3"]);
+  assert.deepEqual(ops.installsNext7.map((card) => card.id), ["o3", "o10"]);
+  assert.equal(ops.installsNext7[1].installAt, iso(3));
 });
 
 test("empty or broken payload never throws", () => {

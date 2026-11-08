@@ -92,9 +92,42 @@ const validDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+/**
+ * Automatic Stripe confirmation in the CRM adds to `o.paid` and `o.stripe`
+ * but does not append to `o.payments`, so it is counted separately unless a
+ * matching Stripe payment line already exists.
+ */
+function unrecordedStripe(order: Row): { amount: number; at: Date | null } | null {
+  const stripe = order?.stripe;
+  if (!stripe?.paid || !(num(stripe.amount) > 0)) return null;
+  const payments: Row[] = Array.isArray(order.payments) ? order.payments : [];
+  const recorded = payments.some(
+    (payment) => /stripe|card/i.test(String(payment?.method ?? "")) && Math.abs(num(payment?.amount) - num(stripe.amount)) < 0.01,
+  );
+  return recorded ? null : { amount: num(stripe.amount), at: validDate(stripe.paidAt) };
+}
+
 function paidTotal(order: Row) {
   const payments = Array.isArray(order.payments) ? order.payments : [];
-  return payments.length ? payments.reduce((sum: number, payment: Row) => sum + num(payment?.amount), 0) : num(order.paid);
+  if (!payments.length) return num(order.paid);
+  return payments.reduce((sum: number, payment: Row) => sum + num(payment?.amount), 0) + (unrecordedStripe(order)?.amount ?? 0);
+}
+
+/** Upcoming work dates: per-service schedules first, the project date only for older projects. */
+function upcomingInstall(order: Row, from: Date, to: Date): Date | null {
+  const plans: Row[] = Array.isArray(order.serviceSchedules) ? order.serviceSchedules : [];
+  const dates = plans.length
+    ? plans.flatMap((plan) => {
+        const start = validDate(plan?.installationAt);
+        if (!start) return [];
+        const end = validDate(plan?.endsAt);
+        // A multi-day service already under way counts from today.
+        if (start < from && end && end >= from) return [from];
+        return [start];
+      })
+    : [validDate(order.installationAt)].filter((date): date is Date => Boolean(date));
+  const upcoming = dates.filter((date) => date >= from && date <= to).sort((a, b) => a.getTime() - b.getTime());
+  return upcoming[0] ?? null;
 }
 
 function approvedTotal(order: Row): number | null {
@@ -158,6 +191,8 @@ export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsP
       const date = validDate(payment?.date ?? payment?.recordedAt);
       if (date && date >= since30 && date <= now) received30 += num(payment?.amount);
     }
+    const stripe = unrecordedStripe(order);
+    if (stripe?.at && stripe.at >= since30 && stripe.at <= now) received30 += stripe.amount;
     if (LOST_STATUSES.has(status)) continue;
 
     const card = toCard(order, clients);
@@ -172,8 +207,8 @@ export function summarizeLegacyOrders(payload: unknown, now = new Date(), cardsP
 
     const stage = OPS_STAGES.find((item) => item.statuses.includes(status)) ?? OPS_STAGES[0];
     stageCards.get(stage.key)!.push(card);
-    const installAt = validDate(order.installationAt);
-    if (installAt && installAt >= startOfToday && installAt <= in7) installs.push(card);
+    const next = upcomingInstall(order, startOfToday, in7);
+    if (next) installs.push({ ...card, installAt: next.toISOString() });
   }
 
   const stages = OPS_STAGES.map((stage) => {
