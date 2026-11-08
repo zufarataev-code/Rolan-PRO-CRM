@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-07 — Хранилище фото и видео в оригинале (DigitalOcean Spaces) + резервные копии (Claude, PR pending)
+
+- Owner: photos and videos cannot be uploaded to projects; quality must stay original so the files can feed the content factory; do not disrupt working processes. Cause found in code: legacy order photos were base64 inside the order JSON with a 2 MB limit and image-only input.
+- Done in DigitalOcean with owner approval: bucket `rolanpro-media` (sfo3, CDN, $5/mo, private listing, CORS for the CRM origin); weekly automated droplet backups enabled for `sf` (Sunday 0:00–4:00 PT, 28-day retention, $3.60/mo). Droplet is 2 GB / 60 GB SFO2 — resize to 4 GB planned at night.
+- Code on `claude/media-storage-20261107`: `src/lib/storage/spaces.ts` (SigV4 presign verified against the AWS reference example, safe keys), routes `/api/v1/files/{config,upload-url,view}`; legacy order/window photo inputs upload originals directly (photos + video) with a progress line, keep a small preview in the order, play video and download the original in the lightbox, AI size reading uses the original. Falls back to the old behaviour until `SPACES_ACCESS_KEY` / `SPACES_SECRET_KEY` are set (see `docs/MEDIA_STORAGE.md`). Control center now checks the bucket live and shows backups as enabled.
+- Verification: full unit suite **1108/1108**, `tsc --noEmit` clean, legacy inline script passes `node --check`. Blocker: the bucket access key must be created and placed in server env by the owner or Codex (Claude does not type secrets into fields).
+
 ## 2026-11-07 — Центр управления владельца `/owner/control-center` (Claude, PR pending)
 
 - Owner: one control center inside CRM for the whole RolanPRO ecosystem — every service with a live works/broken status, links, responsible person, project map, reachable from any device; must not slow the CRM.

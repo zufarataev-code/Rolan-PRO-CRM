@@ -3,6 +3,7 @@ import os from "node:os";
 
 import { getTwilioConfig } from "@/features/twilio/service";
 import { prisma } from "@/lib/db";
+import { getSpacesConfig, presignUrl } from "@/lib/storage/spaces";
 
 import {
   envStatus,
@@ -165,6 +166,15 @@ const CHECKS: Record<string, () => Promise<CheckResult>> = {
     if (anthropic && openai) return { status: "ok", detail: "Anthropic и OpenAI подключены" };
     if (anthropic || openai) return { status: "warn", detail: `Подключён только ${anthropic ? "Anthropic" : "OpenAI"}` };
     return { status: "down", detail: "Ключи ИИ не настроены" };
+  },
+  async files() {
+    const config = getSpacesConfig();
+    if (!config) return { status: "down", detail: "Хранилище rolanpro-media создано, но ключи доступа ещё не вписаны на сервер — фото пока идут по-старому (до 2 МБ)" };
+    // A missing object answers 404 when the keys are valid, 403 when they are not.
+    const probe = presignUrl({ config, method: "HEAD", key: "crm/health/0000-00/probe", expiresSeconds: 60 });
+    const response = await fetch(probe, { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(5000) });
+    if (response.status === 403) return { status: "down", detail: "Ключи хранилища отклонены (403)" };
+    return { status: "ok", detail: `Бакет ${config.bucket} (${config.region}) на связи — оригиналы без сжатия` };
   },
   siteMain: () => pingUrl("https://rolan-pro.com/"),
   siteLegal: () => pingUrl("https://rolanpro-legal.netlify.app/privacy-policy/"),

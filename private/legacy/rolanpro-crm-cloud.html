@@ -30841,12 +30841,13 @@ function renderOrderDetails(id) {
               <button class="btn-primary text-sm" onclick="setPhotoCategory(document.getElementById('ph-cat-${o.id}').value); addOrderPhoto('${o.id}')">📷 ${T('photosAttach')}</button>
             </div>` : ''}
         </div>
-        <div class="text-xs text-gray-500 mb-2">${T('photoSize')}</div>
+        <div class="text-xs text-gray-500 mb-2">${__crmStorageEnabled === true ? 'Фото и видео сохраняются в оригинальном качестве' : T('photoSize')}</div>
         ${(o.photos||[]).length === 0 ? `<div class="text-sm text-gray-500">${T('photosNone')}</div>` : `
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             ${(o.photos||[]).map(p => `
               <div class="relative group cursor-pointer" onclick="openPhotoLightbox('${o.id}','${p.id}')">
                 <img src="${p.dataUrl}" class="w-full h-24 object-cover rounded-lg border">
+                ${p.kind === 'video' ? '<div style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;">▶ видео</div>' : ''}
                 <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs p-1 rounded-b-lg">
                   ${T('photo' + p.category.charAt(0).toUpperCase() + p.category.slice(1))}
                 </div>
@@ -35273,6 +35274,102 @@ function renderGlobalSearch() {
   dropdown.style.display = 'block';
 }
 
+// ---------- MEDIA STORAGE (DigitalOcean Spaces) ----------
+// Originals go straight from the phone to private storage in full quality; the
+// order keeps only a small preview (dataUrl) plus a staff-only link to the original.
+let __crmStorageEnabled = null;
+async function crmStorageEnabled() {
+  if (__crmStorageEnabled === true) return true;
+  try {
+    const response = await fetch('/api/v1/files/config', { credentials: 'same-origin' });
+    const json = await response.json();
+    __crmStorageEnabled = !!(response.ok && json?.data?.enabled);
+  } catch (e) { __crmStorageEnabled = false; }
+  return __crmStorageEnabled;
+}
+setTimeout(() => { crmStorageEnabled(); }, 1500);
+function crmUploadStatus(text) {
+  let el = document.getElementById('crm-upload-status');
+  if (!text) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'crm-upload-status';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;background:#0f1b2a;color:#fff;padding:10px 16px;border-radius:6px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:90vw;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+}
+function crmDrawThumb(source, width, height, max) {
+  if (!width || !height) return '';
+  const scale = Math.min(1, max / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.75);
+}
+async function crmMakeThumb(file, max = 480) {
+  const url = URL.createObjectURL(file);
+  try {
+    if ((file.type || '').startsWith('video/')) {
+      const video = document.createElement('video');
+      video.muted = true; video.playsInline = true; video.preload = 'auto'; video.src = url;
+      await new Promise(resolve => { video.onloadeddata = resolve; video.onerror = resolve; setTimeout(resolve, 8000); });
+      try {
+        video.currentTime = Math.min(1, (video.duration || 2) / 2);
+        await new Promise(resolve => { video.onseeked = resolve; setTimeout(resolve, 3000); });
+      } catch (e) {}
+      return crmDrawThumb(video, video.videoWidth, video.videoHeight, max);
+    }
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return crmDrawThumb(img, img.naturalWidth, img.naturalHeight, max);
+  } catch (e) {
+    return '';
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+async function crmUploadMedia(file, scope) {
+  const type = file.type || 'application/octet-stream';
+  const response = await fetch('/api/v1/files/upload-url', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ file_name: file.name, content_type: type, size_bytes: file.size, scope }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(json?.errors?.[0]?.message || 'Хранилище недоступно');
+  const put = await fetch(json.data.upload_url, { method: 'PUT', body: file, headers: { 'content-type': type } });
+  if (!put.ok) throw new Error('загрузка не прошла (' + put.status + ')');
+  const thumb = await crmMakeThumb(file);
+  return {
+    key: json.data.key,
+    url: json.data.view_url,
+    size: file.size,
+    mime: type,
+    kind: type.startsWith('video/') ? 'video' : 'image',
+    dataUrl: thumb || json.data.view_url,
+  };
+}
+async function crmAddMediaFiles(files, scope, makeEntry) {
+  const list = Array.from(files || []);
+  const added = [];
+  for (let i = 0; i < list.length; i++) {
+    const file = list[i];
+    crmUploadStatus(`Загружаю ${i + 1} из ${list.length}: ${file.name}…`);
+    try {
+      added.push(makeEntry(file, await crmUploadMedia(file, scope)));
+    } catch (e) {
+      alert('Не удалось загрузить ' + file.name + ': ' + e.message);
+    }
+  }
+  crmUploadStatus(added.length ? `Загружено: ${added.length}` : null);
+  if (added.length) setTimeout(() => crmUploadStatus(null), 2500);
+  return added;
+}
+
 // ---------- PHOTO UPLOADS ----------
 function managerWindowPhotoCount(order, roomId, windowId) {
   return (order?.photos || []).filter(photo => photo.roomId === roomId && photo.windowId === windowId).length;
@@ -35280,12 +35377,23 @@ function managerWindowPhotoCount(order, roomId, windowId) {
 function addWindowMeasurementPhoto(oid, roomId, windowId) {
   const inp = document.createElement('input');
   inp.type = 'file';
-  inp.accept = 'image/*';
+  const useStorage = __crmStorageEnabled === true;
+  inp.accept = useStorage ? 'image/*,video/*' : 'image/*';
   inp.multiple = true;
   inp.onchange = async () => {
     const o = getOrder(oid);
     if (!o) return;
     o.photos = o.photos || [];
+    if (useStorage) {
+      const added = await crmAddMediaFiles(inp.files, 'order-' + oid, (file, media) => ({
+        id: uid(), name: file.name, category: 'measurement', roomId, windowId, ...media,
+        uploadedAt: new Date().toISOString(), uploadedBy: state.currentUserId,
+      }));
+      o.photos.push(...added);
+      save();
+      refreshManagerMeasureModal(oid);
+      return;
+    }
     for (const file of Array.from(inp.files || [])) {
       if (file.size > 2 * 1024 * 1024) { alert(T('photoSize') + ': ' + file.name); continue; }
       const dataUrl = await new Promise(resolve => {
@@ -35312,10 +35420,20 @@ function addWindowMeasurementPhoto(oid, roomId, windowId) {
 function addOrderPhoto(oid) {
   const cat = state.photoCategory || 'measurement';
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  const useStorage = __crmStorageEnabled === true;
+  inp.type = 'file'; inp.accept = useStorage ? 'image/*,video/*' : 'image/*'; inp.multiple = true;
   inp.onchange = async () => {
     const o = getOrder(oid);
     o.photos = o.photos || [];
+    if (useStorage) {
+      const added = await crmAddMediaFiles(inp.files, 'order-' + oid, (file, media) => ({
+        id: uid(), name: file.name, category: cat, ...media,
+        uploadedAt: new Date().toISOString(), uploadedBy: state.currentUserId,
+      }));
+      o.photos.push(...added);
+      save(); render();
+      return;
+    }
     for (const f of Array.from(inp.files || [])) {
       if (f.size > 2 * 1024 * 1024) { alert(T('photoSize') + ': ' + f.name); continue; }
       const dataUrl = await new Promise(res => {
@@ -35347,7 +35465,9 @@ function openPhotoLightbox(oid, pid) {
   state.modal = `
     <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
       <div class="modal-content workspace-modal p-2" style="max-width: 90vw;">
-        <img src="${p.dataUrl}" style="max-height: 80vh; max-width: 100%; object-fit: contain; display: block; margin: auto;">
+        ${p.url && p.kind === 'video'
+          ? `<video src="${p.url}" controls playsinline style="max-height: 80vh; max-width: 100%; display: block; margin: auto;"></video>`
+          : `<img src="${p.url || p.dataUrl}" style="max-height: 80vh; max-width: 100%; object-fit: contain; display: block; margin: auto;">`}
         <div class="p-3 flex items-center justify-between">
           <div class="text-sm">
             <div class="font-medium">${p.name}</div>
@@ -35355,7 +35475,7 @@ function openPhotoLightbox(oid, pid) {
           </div>
           <div class="flex gap-2 flex-wrap">
             <button class="btn-ghost text-sm" onclick="aiParsePhotoMeasurement('${oid}','${pid}')" style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);">✨ Распознать размеры</button>
-            <a class="btn-ghost text-sm" href="${p.dataUrl}" download="${p.name}">⬇</a>
+            <a class="btn-ghost text-sm" href="${p.url ? p.url + '&download=' + encodeURIComponent(p.name) : p.dataUrl}" download="${p.name}">⬇</a>
             <button class="btn-ghost text-red-600 text-sm" onclick="closeModal(); deleteOrderPhoto('${oid}','${pid}');">${T('delete')}</button>
             <button class="btn-ghost text-sm" onclick="closeModal()">${T('close')}</button>
           </div>
@@ -40155,8 +40275,15 @@ async function aiParsePhotoMeasurement(orderId, photoId) {
   const o = getOrder(orderId);
   const photo = (o.photos || []).find(p => p.id === photoId);
   if (!photo) return;
-  if (!photo.dataUrl.startsWith('data:image')) { alert('Фото не загружено как картинка'); return; }
-  const [meta, base64] = photo.dataUrl.split(',');
+  let sourceDataUrl = photo.dataUrl || '';
+  if (photo.url && photo.kind !== 'video' && (photo.size || 0) < 4.5 * 1024 * 1024) {
+    try {
+      const blob = await (await fetch(photo.url, { credentials: 'same-origin' })).blob();
+      sourceDataUrl = await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
+    } catch (e) {}
+  }
+  if (!sourceDataUrl.startsWith('data:image')) { alert('Фото не загружено как картинка'); return; }
+  const [meta, base64] = sourceDataUrl.split(',');
   const mediaType = meta.match(/data:(image\/\w+);base64/)?.[1] || 'image/jpeg';
 
   const prompt = `Это фото окна с измерениями (рулетка, лазерный дальномер, или подписанные размеры).
