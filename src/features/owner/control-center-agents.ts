@@ -27,6 +27,8 @@ export type AgentPr = {
 export type AgentBoard = {
   ok: boolean;
   error?: string;
+  /** When this picture was read from GitHub; older than now when GitHub is failing. */
+  asOf: string;
   byAgent: Record<AgentName, AgentPr[]>;
   staleCount: number;
   conflictCount: number;
@@ -82,6 +84,7 @@ export function buildAgentBoard(pulls: GitHubPull[], now = new Date()): AgentBoa
   }
   return {
     ok: true,
+    asOf: now.toISOString(),
     byAgent,
     staleCount: all.filter((pr) => pr.stale).length,
     conflictCount: all.filter((pr) => pr.conflictRisk).length,
@@ -109,15 +112,17 @@ export async function getAgentBoard(): Promise<AgentBoard> {
     cache = { at: Date.now(), board };
     return board;
   } catch (error) {
-    const empty: AgentBoard = {
+    const message = error instanceof Error ? error.message : "GitHub недоступен";
+    // Keep the last good rows, but say plainly they are not live.
+    if (cache) return { ...cache.board, ok: false, error: message };
+    return {
       ok: false,
-      error: error instanceof Error ? error.message : "GitHub недоступен",
+      error: message,
+      asOf: new Date().toISOString(),
       byAgent: { Claude: [], Codex: [], Другие: [] },
       staleCount: 0,
       conflictCount: 0,
       ownerCount: 0,
     };
-    // Keep the last good picture rather than an empty one.
-    return cache?.board ?? empty;
   }
 }

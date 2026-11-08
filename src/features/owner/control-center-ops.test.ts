@@ -36,6 +36,18 @@ const payload = {
       id: "o10", clientId: "c2", status: "installation_in_progress", installationAt: iso(-1),
       serviceSchedules: [{ id: "s1", installationAt: iso(-1) }, { id: "s2", installationAt: iso(3) }],
     },
+    // Earlier card deposit of the same size, then a separate Stripe payment: both count.
+    {
+      id: "o14", clientId: "c2", status: "installation_scheduled", projectEstimateSnapshot: { revenue: 1000 },
+      payments: [{ amount: 200, method: "card", date: iso(-20), recordedAt: iso(-20) }],
+      paid: 400, stripe: { paid: true, amount: 200, paidAt: iso(-1), sessionId: "cs_1" },
+    },
+    // Stripe already itemized by the CRM with the session id: counted once.
+    {
+      id: "o15", clientId: "c2", status: "installation_scheduled", projectEstimateSnapshot: { revenue: 500 },
+      payments: [{ amount: 500, method: "stripe", date: iso(-1), stripeSessionId: "cs_2" }],
+      paid: 500, stripe: { paid: true, amount: 500, paidAt: iso(-1), sessionId: "cs_2" },
+    },
     // Older order: only a total with its date.
     { id: "o13", clientId: "c2", status: "completed", projectEstimateSnapshot: { revenue: 300 }, paid: 300, paidAt: iso(-2) },
     // Accepted proposal with a draft plan: not a confirmed install yet.
@@ -50,20 +62,20 @@ const payload = {
 
 test("ops summary counts active projects by stage from the working CRM", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.equal(ops.active, 8); // o1, o2, o3, o4, o9, o10, o11, o12
+  assert.equal(ops.active, 10); // o1–o4, o9–o12, o14, o15
   const counts = Object.fromEntries(ops.stages.map((stage) => [stage.key, stage.count]));
-  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 2, install: 4, closing: 0 });
+  assert.deepEqual(counts, { lead: 1, survey: 1, proposal: 2, install: 6, closing: 0 });
   assert.equal(ops.stages[0].cards[0].client, "Ortiz");
   assert.equal(ops.stages[0].cards[0].link, "/legacy-crm#/order/o1");
 });
 
 test("receivables use only the approved estimate and skip cancelled or draft work", () => {
   const ops = summarizeLegacyOrders(payload, now);
-  assert.equal(ops.receivable, 4000 + 500 + 600);
-  assert.equal(ops.receivableCount, 3);
+  assert.equal(ops.receivable, 4000 + 500 + 600 + 600);
+  assert.equal(ops.receivableCount, 4);
   assert.equal(ops.debtors[0].id, "o3");
   assert.equal(ops.withoutEstimate, 4); // o4, o9, o10, o12
-  assert.equal(ops.received30, 1000 + 400 + 300); // payments line + automatic Stripe + legacy paid total
+  assert.equal(ops.received30, 1000 + 400 + 300 + 200 + 200 + 500); // o3 line, o11 Stripe, o13 legacy total, o14 card line + Stripe, o15 once
 });
 
 test("installs list holds only the next seven days, soonest first", () => {

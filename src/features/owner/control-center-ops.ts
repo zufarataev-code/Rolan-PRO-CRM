@@ -101,10 +101,19 @@ function unrecordedStripe(order: Row): { amount: number; at: Date | null } | nul
   const stripe = order?.stripe;
   if (!stripe?.paid || !(num(stripe.amount) > 0)) return null;
   const payments: Row[] = Array.isArray(order.payments) ? order.payments : [];
-  const recorded = payments.some(
-    (payment) => /stripe|card/i.test(String(payment?.method ?? "")) && Math.abs(num(payment?.amount) - num(stripe.amount)) < 0.01,
-  );
-  return recorded ? null : { amount: num(stripe.amount), at: validDate(stripe.paidAt) };
+  const at = validDate(stripe.paidAt);
+  const sessionId = stripe.sessionId ? String(stripe.sessionId) : "";
+  // Same transaction = it references the Stripe session, or it is a card line
+  // for the same amount recorded within a day of the Stripe confirmation.
+  // An unrelated earlier card payment of equal size does not hide Stripe.
+  const recorded = payments.some((payment) => {
+    if (sessionId && Object.values(payment ?? {}).some((value) => String(value) === sessionId)) return true;
+    if (!/stripe|card/i.test(String(payment?.method ?? ""))) return false;
+    if (Math.abs(num(payment?.amount) - num(stripe.amount)) >= 0.01) return false;
+    const date = validDate(payment?.recordedAt ?? payment?.date);
+    return Boolean(at && date && Math.abs(date.getTime() - at.getTime()) <= 86_400_000);
+  });
+  return recorded ? null : { amount: num(stripe.amount), at };
 }
 
 function paidTotal(order: Row) {

@@ -310,7 +310,11 @@ export default async function ControlCenterPage() {
           <p className="cc-note">
             {agents.ok
               ? `Открытая задача = открытый PR в GitHub. Пересечений: ${agents.conflictCount} · ждут твоего решения: ${agents.ownerCount} · зависли дольше 14 дней: ${agents.staleCount}.`
-              : `GitHub не ответил (${agents.error}) — список агентов обновится позже.`}
+              : `GitHub не ответил (${agents.error}). ${
+                  Object.values(agents.byAgent).flat().length
+                    ? `Показано состояние на ${new Date(agents.asOf).toLocaleTimeString("ru-RU", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit" })} — оно может быть устаревшим.`
+                    : "Список обновится, когда GitHub ответит."
+                }`}
           </p>
         </section>
 
