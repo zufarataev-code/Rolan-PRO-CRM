@@ -58,3 +58,10 @@ test("owner sees the control center link in the working CRM", () => {
   const html = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(html, /href="\/owner\/control-center"/);
 });
+
+test("cached project numbers are flagged as not live when the database fails", () => {
+  const source = readFileSync("src/features/owner/control-center.ts", "utf8");
+  assert.match(source, /staleError: message/);
+  const page = readFileSync("app/owner/control-center/page.tsx", "utf8");
+  assert.match(page, /Цифры по проектам не живые/);
+});

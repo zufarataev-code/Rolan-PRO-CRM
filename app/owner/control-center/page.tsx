@@ -168,6 +168,15 @@ export default async function ControlCenterPage() {
 
         {ops ? (
           <>
+            {opsResult.ok && opsResult.staleError && (
+              <section className="cc-alert" style={{ borderLeftColor: "var(--warn)" }}>
+                <h2>Цифры по проектам не живые</h2>
+                <p className="cc-note">
+                  {opsResult.staleError}. Показано состояние на{" "}
+                  {opsResult.asOf.toLocaleString("ru-RU", { timeZone: "America/Los_Angeles", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} — проверь в CRM.
+                </p>
+              </section>
+            )}
             <div className="cc-money">
               <div>
                 <b>{ops.active}</b>

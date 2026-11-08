@@ -214,8 +214,12 @@ let opsCache: { at: number; ops: OpsSummary } | null = null;
  * (orders, clients) straight from Postgres JSON, at most once a minute, so the
  * page never loads the whole legacy workspace on every refresh.
  */
-export async function getControlCenterOps(): Promise<{ ok: true; ops: OpsSummary } | { ok: false; error: string }> {
-  if (opsCache && Date.now() - opsCache.at < OPS_CACHE_MS) return { ok: true, ops: opsCache.ops };
+export type ControlCenterOps =
+  | { ok: true; ops: OpsSummary; asOf: Date; staleError?: string }
+  | { ok: false; error: string };
+
+export async function getControlCenterOps(): Promise<ControlCenterOps> {
+  if (opsCache && Date.now() - opsCache.at < OPS_CACHE_MS) return { ok: true, ops: opsCache.ops, asOf: new Date(opsCache.at) };
   try {
     type OpsRow = { orders: unknown; clients: unknown };
     const rows = (await withTimeout(
@@ -225,9 +229,11 @@ export async function getControlCenterOps(): Promise<{ ok: true; ops: OpsSummary
     )) as OpsRow[];
     const ops = summarizeLegacyOrders({ orders: rows[0]?.orders ?? [], clients: rows[0]?.clients ?? [] });
     opsCache = { at: Date.now(), ops };
-    return { ok: true, ops };
+    return { ok: true, ops, asOf: new Date(opsCache.at) };
   } catch (error) {
-    if (opsCache) return { ok: true, ops: opsCache.ops };
-    return { ok: false, error: error instanceof Error && error.message === "timeout" ? "База не ответила за 5 с" : "Не удалось прочитать проекты" };
+    const message = error instanceof Error && error.message === "timeout" ? "База не ответила за 5 с" : "Не удалось прочитать проекты";
+    // Keep the last numbers on screen, but never present them as live.
+    if (opsCache) return { ok: true, ops: opsCache.ops, asOf: new Date(opsCache.at), staleError: message };
+    return { ok: false, error: message };
   }
 }
