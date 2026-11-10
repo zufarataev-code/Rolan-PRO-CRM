@@ -2,14 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-10 — Meta form contact preferences (Codex, in progress)
+## 2026-11-10 — Meta phone-only forms (Codex, PR #499)
 
 - Branch: `codex/meta-contact-preferences-20261110`, based on `efb5e9d`.
-- Scope: keep phone-only intake working, retain optional weekday callback preferences in lead notes and manager notifications, and treat an omitted preference as `No preference`. No new conversion sender or event is planned.
-- Current findings: Meta intake accepts missing email; Messenger matches open leads by normalized phone and enriches missing email. Existing submission-ID deduplication and consent handling remain in place.
-- Coordination: PR #493 owns the Messenger completed-form handoff; do not duplicate its changes. The Facebook campaigns chat owns form publication and must supply verified IDs and exact field keys before the allowlist changes.
-- Verification pending: focused offline tests, full tests/typecheck/build, independent Claude review, and CI. Synthetic production leads are not yet approved.
-- Next action: finish the minimal callback-preference changes, publish the PR, and merge only after checks and review pass. This entry does not claim deployment or live lead receipt.
+- Final owner scope supersedes callback/contact choices: only required phone and optional email. All uncommitted preference features were discarded.
+- Fix: Meta intake accepts missing name and uses the actual normalized phone as its display label, leaving first/last name null. Welcome SMS uses a generic greeting for contact labels. Messenger recognizes a one-answer phone form and can capture it without name/service; booking still requires its existing name and qualification fields. Existing submission-ID deduplication, consent and CallRail CAPI remain intact.
+- Coordination: PR #493 owns Messenger completed-form handoff; only the four shared helper changes were coordinated in its comments. The campaigns chat owns form publication/ad assignment and the two approved synthetic submissions; none were submitted here.
+- Live Graph readback: regular final form `1483569517019504` (2026-11-10 19:37:14 UTC) and weekend `1131494252951244` (19:39:30 UTC) have only `email`, `phone_number`, and Meta's system `inbox_url`. Both final IDs join the existing four-ID allowlist. Interim forms `1158750700009247` and `1174566111579915` are superseded and excluded.
+- Verification: 1130 offline tests passed; TypeScript and production build passed. Independent Claude review and final CI remain pending.
+- Next action: obtain review/CI, merge, verify the automatic main-only CRM deployment, then let the campaigns chat submit its two approved tests. Worker deployment is separate; this entry does not claim live lead receipt or deployment.
 
 ## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
 

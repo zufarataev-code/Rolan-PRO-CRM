@@ -2,6 +2,17 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-10 — Phone-only Meta form identity
+
+The owner simplified the Meta forms to required phone and optional email, dropping
+name, service, ZIP, callback-time and contact-method questions. The integration
+uses the submitted contact as the required CRM display label when no name exists;
+it leaves personal-name fields empty and uses a generic welcome greeting. Do not
+invent identity, infer advertising consent, or add conversion events from receipt.
+Messenger intake may capture a phone-only enquiry; booking still requires its
+existing name and qualification data. Form publication and Worker deployment
+remain separate from the CRM application's release.
+
 ## 2026-11-06 — Review public Meta form scope in Git
 
 The approved Meta form IDs are public deployment configuration in

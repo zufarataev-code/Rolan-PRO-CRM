@@ -55,12 +55,16 @@ export function normalizeMetaLead(input: unknown, notification: MetaLeadNotifica
     if (!name || Object.hasOwn(fields, name) || !Array.isArray(field.values) || field.values.length !== 1) throw new MetaLeadError("invalid_fields", 502);
     fields[name] = text(field.values[0], 1000);
   }
-  const identity = normalizeLeadIdentity({ name: fields.full_name, first_name: fields.first_name, last_name: fields.last_name });
-  if ("error" in identity) throw new MetaLeadError("missing_name", 502);
   const phone = normalizePhoneE164(fields.phone_number);
   const emailValue = fields.email?.toLowerCase() || "";
   const email = /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(emailValue) && emailValue.length <= 191 ? emailValue : null;
   if (!phone && !email) throw new MetaLeadError("missing_contact", 502);
+  // The two-field Meta form supplies no name; use real contact data as its display label.
+  const identity = normalizeLeadIdentity({
+    name: fields.full_name || (!fields.first_name && !fields.last_name ? phone || email : undefined),
+    first_name: fields.first_name, last_name: fields.last_name,
+  });
+  if ("error" in identity) throw new MetaLeadError("missing_name", 502);
   const createdAt = new Date(text(lead.created_time, 40));
   if (!Number.isFinite(createdAt.getTime()) || createdAt.getTime() > Date.now() + 300000) throw new MetaLeadError("invalid_created_time", 502);
   const optionalId = (value: unknown) => value == null ? null : metaId(value);
