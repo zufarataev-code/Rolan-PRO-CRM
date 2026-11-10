@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-10 — Verify automatic Meta intake with optional email (Codex, PR pending)
+
+- Task branch `codex/meta-delivery-coverage-20261110`, based on `37980fb`. The owner asks how a submission without email can be proven to arrive automatically.
+- PRs #499 and #500 are merged and active in production with the six approved forms. Their CI, TypeScript, build and independent reviews passed. Both deployment workflows failed their final external HTTPS probe despite direct release/process/HTTPS checks passing.
+- Existing delivery is signed Meta `leadgen` webhook → provider retrieval → canonical PostgreSQL lead and receipt → existing first touch. There is no Meta polling/backfill scheduler or durable transport queue. The control center reports configuration and received lead age/count, which cannot detect a webhook that never arrived.
+- Add guarded disposable-database coverage through the signed receiver and importer for omitted, blank, empty-array and unanswered email. Provider calls are mocked, welcome SMS is disabled, concurrent delivery/retry must retain one lead/receipt/attribution and preserve staff edits, consent and zero conversions.
+- Live evidence remains distinct. The weekend synthetic enquiry was recovered with a controlled signed replay. A separate native regular preview submission with populated email has no exact CRM row and no webhook seen at its submission time. The original blank-email API variants were rejected before creating a synthetic lead. Native iPhone Continue with blank email was confirmed by the owner, but full live email-free delivery is unproven.
+- Next actions: verify the full receiver fixture, inspect Meta's published app/webhook and test-tool status, and isolate automatic transport with the single remaining approved synthetic test using a supported payload. Preserve the existing owner submission read-only. Review any recovery proposal before adding a production schedule.
+
 ## 2026-11-10 — Unanswered Meta system fields (Codex, PR #500)
 
 - Branch `codex/meta-unanswered-system-fields-20261110`, based on merged PR #499 (`24c0085`).
