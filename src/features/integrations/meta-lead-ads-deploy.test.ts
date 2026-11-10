@@ -9,7 +9,7 @@ test("Meta secret sync retains absent config, rejects partial config and transmi
   const workflow = readFileSync(".github/workflows/deploy-production.yml", "utf8");
   const step = workflow.split("      - name: Sync protected Meta Lead Ads configuration when supplied\n")[1].split("      - name:")[0];
   const forms = step.match(/^          META_LEAD_ADS_FORM_IDS: "([\d,]+)"$/m)?.[1];
-  assert.equal(forms, "1126644350232479,1805660454094850,2227922148076022,1330965225736016");
+  assert.equal(forms, "1126644350232479,1805660454094850,2227922148076022,1330965225736016,2548967978927243,2566162043862965");
   assert.doesNotMatch(step, /secrets\.META_LEAD_ADS_FORM_IDS/);
   const script = step.split("        run: |\n")[1].replace(/^          /gm, "");
   const directory = mkdtempSync(join(tmpdir(), "meta-secret-sync-"));
