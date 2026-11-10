@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-10 — Meta form contact preferences (Codex, in progress)
+
+- Branch: `codex/meta-contact-preferences-20261110`, based on `efb5e9d`.
+- Scope: keep phone-only intake working, retain optional weekday callback preferences in lead notes and manager notifications, and treat an omitted preference as `No preference`. No new conversion sender or event is planned.
+- Current findings: Meta intake accepts missing email; Messenger matches open leads by normalized phone and enriches missing email. Existing submission-ID deduplication and consent handling remain in place.
+- Coordination: PR #493 owns the Messenger completed-form handoff; do not duplicate its changes. The Facebook campaigns chat owns form publication and must supply verified IDs and exact field keys before the allowlist changes.
+- Verification pending: focused offline tests, full tests/typecheck/build, independent Claude review, and CI. Synthetic production leads are not yet approved.
+- Next action: finish the minimal callback-preference changes, publish the PR, and merge only after checks and review pass. This entry does not claim deployment or live lead receipt.
+
 ## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
 
 - Owner: control from the phone — project cards and money inside the CRM control center; Claude and Codex must work together, see the same projects, not redo or block each other but complement each other.
