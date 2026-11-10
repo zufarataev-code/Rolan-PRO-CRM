@@ -1347,6 +1347,16 @@ function closeProposalWizard() {
   state._proposalWizard = null;
   closeModal();
 }
+function proposalWizardLockedTap(oid) {
+  const o = getOrder(oid);
+  const issues = o ? projectEstimateReadiness(o) : [];
+  const text = issues.length
+    ? `Шаги откроются после сборки КП. Сначала: ${issues.join(', ')}`
+    : 'Шаги откроются после сборки КП — нажмите «Собрать КП →» внизу';
+  if (typeof cloudStatus === 'function') cloudStatus(text, 'blue'); else alert(text);
+  const btn = document.querySelector('[data-proposal-wizard] .rp-dirwin-foot .rp-dirwin-next');
+  if (btn) { btn.classList.add('rp-dirwin-pulse'); setTimeout(() => btn.classList.remove('rp-dirwin-pulse'), 1600); }
+}
 function proposalWizardBuild(oid) {
   const o = getOrder(oid);
   if (!o) return;
@@ -1366,7 +1376,15 @@ function proposalWizardHtml(o, step) {
   const total = orderRevenue(o);
   const calc = prop ? premiumProposalCalc(prop) : null;
   const deposit = calc ? calc.paymentDue : (typeof companyDepositFor === 'function' ? companyDepositFor(total) : 0);
-  const tabs = steps.map((item, i) => `<button type="button" class="rp-dirwin-step ${i === index ? 'current' : i < index ? 'done' : ''}" ${ready || i === 0 ? `onclick="openProposalWizard('${o.id}','${item.id}')"` : 'disabled'}>${i < index ? '✓' : i + 1} ${item.label}</button>`).join('');
+  // Owner, 2026-11-10 (iPad): «кнопки „Как увидит“ и „Отправить“ не реагируют». Until the
+  // proposal is built they were silently disabled and looked like live tabs. Now a locked
+  // step is visibly locked and a tap explains what to do — build the proposal below.
+  const tabs = steps.map((item, i) => {
+    const open = ready || i === 0;
+    const cls = `rp-dirwin-step ${i === index ? 'current' : i < index ? 'done' : ''} ${open ? '' : 'locked'}`;
+    const onclick = open ? `openProposalWizard('${o.id}','${item.id}')` : `proposalWizardLockedTap('${o.id}')`;
+    return `<button type="button" class="${cls}" onclick="${onclick}" ${open ? '' : 'aria-disabled="true" title="Сначала соберите КП — кнопка внизу"'}>${i < index ? '✓' : open ? i + 1 : '🔒'} ${item.label}</button>`;
+  }).join('');
   let body = '';
   let foot = '';
   if (step === 'preview' && ready) {

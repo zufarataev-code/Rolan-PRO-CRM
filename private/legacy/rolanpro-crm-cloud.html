@@ -2320,6 +2320,9 @@
   .rp-dirwin-step { flex: 1; border: 1px solid #dbe4ef; border-radius: 6px; padding: .45rem .5rem; font-size: .85rem; font-weight: 700; color: #475569; background: #f8fafc; cursor: pointer; white-space: nowrap; }
   .rp-dirwin-step.done { background: var(--dir-tint); color: var(--dir-deep); border-color: var(--dir-tint); }
   .rp-dirwin-step.current { background: var(--dir-color); color: #fff; border-color: var(--dir-color); }
+  .rp-dirwin-step.locked { opacity: .5; cursor: not-allowed; background: #f1f5f9; }
+  .rp-dirwin-pulse { animation: rpDirwinPulse 1.6s ease; }
+  @keyframes rpDirwinPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); } 30% { box-shadow: 0 0 0 8px rgba(37,99,235,.35); } 70% { box-shadow: 0 0 0 8px rgba(37,99,235,.35); } }
   .rp-dirwin-body { display: flex; flex-direction: column; gap: .5rem; }
   .rp-dirwin-hint { margin: 0 0 .25rem; font-size: .85rem; color: #64748b; }
   .rp-dirwin-group { font-size: .7rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--dir-deep); margin-top: .4rem; }
