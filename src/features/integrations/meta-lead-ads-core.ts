@@ -52,8 +52,13 @@ export function normalizeMetaLead(input: unknown, notification: MetaLeadNotifica
   const fields: Record<string, string> = Object.create(null);
   for (const item of lead.field_data) {
     const field = record(item), name = text(field.name, 255);
-    if (!name || Object.hasOwn(fields, name) || !Array.isArray(field.values) || (field.values.length !== 1 && !(name === "email" && field.values.length === 0))) throw new MetaLeadError("invalid_fields", 502);
-    fields[name] = field.values.length ? text(field.values[0], 1000) : "";
+    const optionalAnswer = name === "email" || name === "inbox_url";
+    const values = optionalAnswer && field.values == null ? [] : field.values;
+    if (!name || Object.hasOwn(fields, name) || !Array.isArray(values) ||
+      (values.length !== 1 && !(optionalAnswer && values.length === 0))) {
+      throw new MetaLeadError("invalid_fields", 502);
+    }
+    fields[name] = values.length ? text(values[0], 1000) : "";
   }
   const identity = normalizeLeadIdentity({ name: fields.full_name, first_name: fields.first_name, last_name: fields.last_name });
   if ("error" in identity) throw new MetaLeadError("missing_name", 502);
