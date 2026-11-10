@@ -2095,6 +2095,13 @@
   .project-cashier-map.compact { padding:.55rem 1rem; }
   .project-cashier-map.compact .project-cashier-flow { margin-top:0;padding:.35rem 0;border:0;background:transparent; }
   .project-cashier-map.compact .project-cashier-add-toggle { margin-top:0;padding:4px 0; }
+  /* Печатные документы внутри CRM (заказ-наряд, ТЗ-лист, раскрой, КП, акт, счёт) */
+  #rp-print-overlay { position:fixed;inset:0;z-index:2147483646;background:#0f172a;display:flex;flex-direction:column; }
+  #rp-print-overlay .rp-print-bar { flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top, 0px));background:#fff;border-bottom:1px solid #e2e8f0;color:#0f172a;font-size:15px; }
+  #rp-print-overlay .rp-print-bar b { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  #rp-print-overlay .rp-print-actions { display:flex;gap:8px;flex:none; }
+  #rp-print-overlay iframe { flex:1;width:100%;border:0;background:#fff; }
+  @media print { #rp-print-overlay { display:none !important; } }
   /* Ширины рулона у модели плёнки (склад): отмеченные — в которых модель выпускается; 72″ — широкая */
   .catalog-roll-widths { display:inline-flex;gap:4px;flex-wrap:wrap; }
   .catalog-roll-widths label { display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid #d9dee6;border-radius:4px;font-size:11px;font-weight:700;color:#64748b;background:#fff;cursor:pointer;white-space:nowrap; }
@@ -14176,17 +14183,40 @@ function openWorkOrder(orderId) {
   render();
 }
 
+// Owner, 2026-11-10 (iPad): «ТЗ для монтажников открывается белым экраном, с которого не выйти».
+// window.open('') + document.write opens a blank tab; in the installed app (PWA) on iPad it is a
+// blank sheet with no address bar and no close button. Printable documents now open INSIDE the
+// CRM — an overlay with an iframe, «Печать / PDF» and «Закрыть». Works everywhere, nothing to allow.
+function rpOpenPrintableDocument(title, html, options = {}) {
+  const prev = document.getElementById('rp-print-overlay');
+  if (prev) prev.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'rp-print-overlay';
+  overlay.innerHTML = `<div class="rp-print-bar"><b>${academyEsc(title || 'Документ')}</b><div class="rp-print-actions"><button type="button" class="btn-primary" data-print>Печать / PDF</button><button type="button" class="btn-ghost" data-close>Закрыть</button></div></div><iframe title="${academyEsc(title || 'Документ')}"></iframe>`;
+  document.body.appendChild(overlay);
+  const frame = overlay.querySelector('iframe');
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = event => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('[data-close]').addEventListener('click', close);
+  overlay.querySelector('[data-print]').addEventListener('click', () => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (_) { try { window.print(); } catch (__) {} }
+  });
+  // Scripts of the printed page that call print() on load would fire inside the frame; strip them.
+  // «<\\/script>» in a template literal yields «<\/script>», which the HTML parser does not take as a
+  // closing tag: the rest of the page was swallowed by the Tailwind <script> — that WAS the white screen.
+  frame.srcdoc = String(html || '').replace(/<\\\/script>/g, '<\/script>').replace(/<script>\s*setTimeout\(\s*\(\)\s*=>\s*window\.print\(\)[^<]*<\/script>/g, '');
+  if (options.autoPrint) frame.addEventListener('load', () => setTimeout(() => { try { frame.contentWindow.print(); } catch (_) {} }, 500), { once: true });
+  return overlay;
+}
+
 function printWorkOrder(orderId) {
   const order = getOrder(orderId);
   if (!order) return;
-  const win = window.open('', '_blank');
-  if (!win) { alert('Разрешите всплывающие окна для печати'); return; }
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8">
+  rpOpenPrintableDocument(`Заказ-наряд ${order.number}`, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Заказ-наряд ${academyEsc(order.number)}</title>
     <style>${workOrderPrintCss()}</style></head>
-    <body>${renderWorkOrderHtml(order, true)}
-    <script>setTimeout(()=>window.print(), 400);</${'script'}></body></html>`);
-  win.document.close();
+    <body>${renderWorkOrderHtml(order, true)}</body></html>`);
 }
 
 function workOrderPrintCss() {
@@ -14574,11 +14604,8 @@ function cutSheetContinuousPrintCss() {
 function printCutSheet(orderId) {
   const order = getOrder(orderId);
   if (!order) return;
-  const w = window.open('', '_blank');
-  if (!w) { alert('Браузер заблокировал печать. Разрешите pop-up для CRM.'); return; }
   const printCss = `body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;padding:24px;color:#0f172a}.tag{display:inline-flex;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}.cut-sheet-help{border:1px solid #bae6fd;border-radius:6px;background:#f0f9ff;padding:12px;font-size:13px;margin-bottom:14px}.cut-sheet-strip{border:1px solid #dbeafe;border-radius:6px;background:#fff;padding:12px;margin-top:10px;break-inside:avoid}.cut-map-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}.cut-map-roll{position:relative;width:100%;min-height:132px;border:2px solid #2563eb;border-radius:6px;overflow:hidden;background:repeating-linear-gradient(90deg,rgba(37,99,235,.09) 0,rgba(37,99,235,.09) 18px,rgba(255,255,255,.86) 18px,rgba(255,255,255,.86) 36px),repeating-linear-gradient(0deg,rgba(148,163,184,.22) 0,rgba(148,163,184,.22) 1px,transparent 1px,transparent 22px)}.cut-map-scale{position:absolute;left:0;right:0;top:0;height:24px;display:flex;justify-content:space-between;align-items:center;padding:0 8px;color:#1d4ed8;background:rgba(239,246,255,.92);border-bottom:1px solid #bfdbfe;font-size:11px;font-weight:900}.cut-map-piece{position:absolute;top:32px;bottom:10px;border:1px solid rgba(30,64,175,.42);border-radius:4px;background:#dbeafe;color:#0f172a;padding:7px;display:flex;flex-direction:column;justify-content:center;gap:2px;font-size:11px;line-height:1.12;overflow:hidden}.cut-map-piece:nth-of-type(odd){background:#e0e7ff}.cut-map-piece b,.cut-map-piece span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cut-map-waste{position:absolute;top:32px;bottom:10px;border-left:1px dashed #94a3b8;background:#f1f5f9;color:#64748b;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;font-weight:800;padding:5px}.cut-step-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}.cut-step{border:1px solid #e2e8f0;border-radius:4px;background:#f8fafc;padding:8px;font-size:11px;color:#334155}.cut-step b{display:block;color:#0f172a;font-size:12px;margin-bottom:2px}.cut-piece-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}.cut-piece-card{border:1px solid #e2e8f0;border-radius:4px;background:#fff;padding:8px;font-size:11px}.cut-piece-name{font-weight:900;color:#0f172a;overflow-wrap:anywhere}.cut-piece-meta{margin-top:4px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;color:#475569}.film-cut-variant-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.film-cut-variant-card{border:1px solid #dbe4ef;border-radius:4px;background:#fff;padding:10px}.film-cut-variant-card.ok{border-color:#86efac;background:#f0fdf4}.film-cut-variant-card.warn{border-color:#fcd34d;background:#fffbeb}.film-cut-variant-card.bad{border-color:#fecaca;background:#fef2f2}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #e2e8f0;padding:6px;text-align:left}@media print{button{display:none}.cut-sheet-strip{break-inside:avoid}.cut-map-roll{min-height:120px}}`;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${academyEsc(order.number)} Cut Sheet</title><script src="https://cdn.tailwindcss.com"><\\/script><style>${printCss}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderCutSheetHtml(order, true)}<script>setTimeout(()=>window.print(),300)<\\/script></body></html>`);
-  w.document.close();
+  rpOpenPrintableDocument(`Раскрой ${order.number}`, `<!doctype html><html><head><meta charset="utf-8"><title>${academyEsc(order.number)} Cut Sheet</title><script src="https://cdn.tailwindcss.com"><\/script><style>${printCss}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderCutSheetHtml(order, true)}</body></html>`);
 }
 function openTechnicalSheet(orderId) {
   const order = getOrder(orderId);
@@ -14641,10 +14668,7 @@ function printTechnicalSheet(orderId) {
   const order = getOrder(orderId);
   if (!order) return;
   if (!orderUserCanAccess(order)) { alert('Нет доступа к ТЗ-листу этого заказа'); return; }
-  const w = window.open('', '_blank');
-  if (!w) { alert('Браузер заблокировал печать. Разрешите pop-up для CRM.'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${academyEsc(order.number)} Technical Sheet</title><script src="https://cdn.tailwindcss.com"><\\/script><style>${rolanDocumentPrintCss()}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderTechnicalSheetHtml(order, true)}<script>setTimeout(()=>window.print(),700)<\\/script></body></html>`);
-  w.document.close();
+  rpOpenPrintableDocument(`ТЗ-лист ${order.number}`, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${academyEsc(order.number)} Technical Sheet</title><script src="https://cdn.tailwindcss.com"><\/script><style>${rolanDocumentPrintCss()}</style><style>${cutSheetVerticalPrintCss()}</style><style>${cutSheetContinuousPrintCss()}</style></head><body>${renderTechnicalSheetHtml(order, true)}</body></html>`);
 }
 
 // ---------- MEASURER SKETCH MODULE (finger-draw → professional drawing) ----------
@@ -33233,7 +33257,6 @@ function printProposal(oid) {
   if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
   const c = getClient(o.clientId);
   const projectAddress = orderAddress(o, c);
-  const win = window.open('', '_blank');
   const rows = (o.measurements?.rooms||[]).flatMap(r =>
     (r.windows||[]).map(w => `
       <tr>
@@ -33245,7 +33268,7 @@ function printProposal(oid) {
       </tr>
     `)
   ).join('');
-  win.document.write(`
+  rpOpenPrintableDocument(`КП ${o.number}`, `
   <!DOCTYPE html><html><head><meta charset="UTF-8"><title>КП ${o.number}</title>
   <style>
     body { font-family: Arial; padding: 2rem; max-width: 800px; margin: auto; color: #1a2b4a; }
@@ -33289,9 +33312,7 @@ function printProposal(oid) {
       <div>${T('clientSignature')}</div>
       <div>${T('companySignature')} — ${db.settings.companyName}</div>
     </div>
-    <script>setTimeout(()=>window.print(), 300);</${'script'}>
   </body></html>`);
-  win.document.close();
 }
 
 // ---------- CLIENT PORTAL (explicit token access, no employee login) ----------
@@ -34952,9 +34973,7 @@ function openSignedActDocument(oid) {
   <p>The client confirms that the work listed above is completed and accepted.</p>
   <div class="sig"><img src="${sig.image}" alt="Signature"><b>${esc(sig.name)}</b><br><small>Signed ${esc(new Date(sig.signedAt).toLocaleString('en-US'))}</small></div>
   <p><button onclick="print()">Print / Save as PDF</button></p></body></html>`;
-  const win = window.open('', '_blank');
-  if (!win) { alert('Разрешите всплывающие окна, чтобы открыть акт.'); return; }
-  win.document.open(); win.document.write(page); win.document.close();
+  rpOpenPrintableDocument(`Акт ${o.number}`, page);
 }
 
 // ---------- FILM TYPES (rate-aware) ----------
@@ -44334,8 +44353,14 @@ async function cloudBoot() {
     const allowedCards = cloudAllowedLegacyIds.map(getUser).filter(Boolean);
     let rememberedCard = null;
     try { rememberedCard = localStorage.getItem('rolanpro_cloud_card'); } catch (_) {}
-    const firstAllowed = allowedCards.find(card => card.id === rememberedCard) || allowedCards[0];
     const authenticatedLegacyRole = teamLegacyRoleFromServer(cloudCurrentUser.roles);
+    // Owner, 2026-11-10: «жму на монтажника — открывается замерщик». A session limited to ONE
+    // server role (role preview, or an employee with one role) lands on the card of THAT role,
+    // not on the first or remembered card of a multi-role employee (Zufar Ataev: u_z1 + u_i1).
+    const serverRoleCodes = Array.isArray(cloudCurrentUser.roles) ? cloudCurrentUser.roles : [];
+    const roleCards = serverRoleCodes.length === 1 && authenticatedLegacyRole ? allowedCards.filter(card => card.role === authenticatedLegacyRole) : [];
+    const cardChoices = roleCards.length ? roleCards : allowedCards;
+    const firstAllowed = cardChoices.find(card => card.id === rememberedCard) || cardChoices[0];
     // Multi-role employees have one server-derived card per role; never rewrite their roles here.
     const roleWasSynchronized = Boolean(
       allowedCards.length === 1 && firstAllowed && authenticatedLegacyRole && firstAllowed.role !== authenticatedLegacyRole,
