@@ -1591,10 +1591,7 @@ function issueProjectInvoice(oid) {
   if (!o) return;
   const inv = invoiceDraft(o, { ...(state._invoiceForm?.oid === oid ? state._invoiceForm : {}), ...invoiceFormValues() });
   if (inv.amount <= 0) { alert('Сумма счёта 0 — проект уже оплачен.'); return; }
-  const win = window.open('', '_blank');
-  if (!win) { alert('Разрешите всплывающие окна, чтобы открыть счёт.'); return; }
-  win.document.write(invoiceDocumentHtml(inv));
-  win.document.close();
+  rpOpenPrintableDocument(`Invoice ${inv.number}`, invoiceDocumentHtml(inv));
   o.invoices = Array.isArray(o.invoices) ? o.invoices : [];
   const existing = o.invoices.find(i => i.number === inv.number);
   const record = { number: inv.number, issued: inv.issued, due: inv.due, terms: inv.terms, amount: inv.amount, mode: inv.mode, po: inv.poNumber, by: state.currentUserId || null, at: new Date().toISOString() };
