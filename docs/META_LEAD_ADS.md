@@ -35,6 +35,8 @@ approved list with an older form. The approved forms are:
 | Quote + Call v2 | `1805660454094850` |
 | Quote + Call + Chat | `2227922148076022` |
 | Weekend No Calls Test, Quote + Chat | `1330965225736016` |
+| Regular quote form, optional email | `2548967978927243` |
+| Weekend quote form, optional email | `2566162043862965` |
 
 Review form additions and removals through a PR. These forms use single-value
 contact/ZIP fields and a single-select service question. Multiline and multi-select
@@ -55,6 +57,9 @@ app or unapproved lead access may work for app-role users yet fail for real cust
 The receiver retrieves contact/answer data from Graph v26.0 with the protected
 Page token and app-secret proof. Webhook-provided contact fields are never trusted.
 Both notification and retrieved lead must match the configured Page/form scope.
+Email may be omitted, blank, an empty answer array, or an unanswered field.
+With a valid name and phone, CRM stores the enquiry with `email: null` and
+preserves ZIP and service. Email is not used to route the webhook.
 
 Each provider lead ID creates one PostgreSQL `NEW_LEAD`, source `meta_lead_ads`,
 visible in the existing **New Leads** inbox. ZIP and original custom answers
@@ -69,7 +74,8 @@ or receipt. Committed retries do not retrieve data again or overwrite staff edit
 Different submissions remain separate enquiries; contact matching does not silently
 combine people or change an existing enquiry's source or stage.
 
-Receipt creation does not schedule, qualify, send SMS, or produce a conversion.
+New enquiries use the existing first-touch manager notification and welcome SMS.
+Receipt creation does not schedule, qualify, or produce an advertising conversion.
 Advertising consent remains UNKNOWN and audience-marketing eligibility false.
 Submitting an enquiry authorizes responding to that enquiry, not marketing reuse.
 
@@ -79,13 +85,27 @@ Graph reads time out after 8 seconds. If sustained batches exceed Meta's respons
 deadline, replace synchronous reads with a durable queue before increasing volume.
 Monitor `meta_lead_ads_ingest_failed` and provider delivery failures; logs omit
 tokens, contacts, request bodies and Graph error payloads.
+There is currently no Meta polling/backfill job. The control center's configuration
+and last-received enquiry count cannot establish that every provider lead arrived.
 
 ## Release and evidence
 
 Run unit tests, TypeScript, production build and the guarded disposable-database
 E2E gate. Its provider response is mocked; no real Meta/CRM enquiry is submitted.
+The gate calls the signed POST receiver with each email-free representation,
+persists into the guarded disposable PostgreSQL database, and checks concurrent
+delivery, committed retry, one receipt/notification, preserved staff notes and
+no conversions. A tampered signature must reach neither Graph nor lead creation.
 Production changes follow reviewed main deployment, with server secrets set first.
 Verify GET validation and unsigned POST rejection without creating a lead. Then
 verify the Page subscription and retrieval access. A genuine first enquiry must be
 followed through to the office inbox before claiming live end-to-end delivery.
-Keep every campaign paused and all ad media empty until the owner supplies assets.
+
+For live transport verification, use an explicitly approved synthetic submission
+and follow its exact provider ID to `integration.meta_lead_ads.received` before
+any manual replay. An organic testing-tool lead can verify automatic transport,
+but does not prove paid attribution. Meta's API test endpoint can reject blank
+email even when the customer-facing form permits it. A supported test with email
+therefore proves transport separately from the email-free database fixture.
+Final live confirmation is an actual blank-email submission whose exact provider
+ID appears automatically in CRM with phone/ZIP/service intact and email null.

@@ -30,13 +30,17 @@ after(async () => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
-  for (const canonicalId of canonicalIds) {
-    await prisma.activityLog.deleteMany({ where: { entity_id: canonicalId } });
-    await prisma.acquisitionTouchpoint.deleteMany({ where: { lead_id: canonicalId } });
-    await prisma.consentSnapshot.deleteMany({ where: { lead_id: canonicalId } });
-    await prisma.lead.delete({ where: { lead_id: canonicalId } });
+  try {
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { entity_type: "lead", entity_id: { in: canonicalIds } } }),
+      prisma.activityLog.deleteMany({ where: { entity_id: { in: canonicalIds } } }),
+      prisma.acquisitionTouchpoint.deleteMany({ where: { lead_id: { in: canonicalIds } } }),
+      prisma.consentSnapshot.deleteMany({ where: { lead_id: { in: canonicalIds } } }),
+      prisma.lead.deleteMany({ where: { lead_id: { in: canonicalIds } } }),
+    ]);
+  } finally {
+    await prisma.$disconnect();
   }
-  await prisma.$disconnect();
 });
 const emailCases = [
   { label: "omitted email", fields: [] },
@@ -45,34 +49,50 @@ const emailCases = [
   { label: "unanswered email", fields: [{ name: "email" }] },
 ];
 for (const [index, emailCase] of emailCases.entries()) {
-  test(`signed concurrent deliveries with ${emailCase.label} commit one complete enquiry`, async t => {
+  test(`signed concurrent deliveries with ${emailCase.label} commit one complete enquiry`, { timeout: 30_000 }, async t => {
     const leadId = providerIdPrefix + String(index) + "987";
     process.env.META_LEAD_ADS_PAGE_ACCESS_TOKEN = "offline-token";
     const body = JSON.stringify({ object: "page", entry: [{ id: "100", changes: [{ field: "leadgen", value: { page_id: "100", form_id: "200", leadgen_id: leadId, ad_id: "300" } }] }] });
     const signature = "sha256=" + createHmac("sha256", "offline-secret").update(body).digest("hex");
     const deliver = () => POST(new Request(`${base}/api/webhooks/meta-lead-ads`, { method: "POST", headers: { "x-hub-signature-256": signature }, body }));
+    let releaseReads!: () => void;
+    const bothReads = new Promise<void>(resolve => { releaseReads = resolve; });
+    let readCount = 0;
     const provider = t.mock.method(globalThis, "fetch", async (url: URL, options: RequestInit) => {
       assert.equal(url.origin, "https://graph.facebook.com");
       assert.equal(url.pathname, `/v26.0/${leadId}`);
       assert.equal(options.headers && (options.headers as Record<string, string>).authorization, "Bearer offline-token");
       assert.equal(url.searchParams.has("access_token"), false);
       assert.equal(url.searchParams.get("appsecret_proof"), createHmac("sha256", "offline-secret").update("offline-token").digest("hex"));
+      // Both callbacks must pass the initial database lookup before either can commit.
+      readCount += 1;
+      if (readCount === 2) releaseReads();
+      await bothReads;
       return Response.json({ id: leadId, form_id: "200", ad_id: "300", adset_id: "400", campaign_id: "500", created_time: new Date().toISOString(), field_data: [{ name: "full_name", values: ["Offline Meta fixture"] }, { name: "phone_number", values: ["2025550123"] }, { name: "zip_code", values: ["90210"] }, { name: "service", values: ["Privacy Film"] }, ...emailCase.fields, { name: "inbox_url" }] });
     });
+    const forged = await POST(new Request(`${base}/api/webhooks/meta-lead-ads`, { method: "POST", headers: { "x-hub-signature-256": signature }, body: body + " " }));
+    assert.equal(forged.status, 401);
+    assert.equal(provider.mock.callCount(), 0);
+    assert.equal(await prisma.lead.count({ where: { external_source: "meta_lead_ads", external_submission_id: leadId } }), 0);
     const responses = await Promise.all([deliver(), deliver()]);
-    const lead = await prisma.lead.findUniqueOrThrow({ where: { external_source_external_submission_id: { external_source: "meta_lead_ads", external_submission_id: leadId } }, include: { pipeline_status: true } });
-    const canonicalId = lead.lead_id;
-    canonicalIds.push(canonicalId);
+    const lead = await prisma.lead.findUnique({ where: { external_source_external_submission_id: { external_source: "meta_lead_ads", external_submission_id: leadId } }, include: { pipeline_status: true } });
+    if (lead) canonicalIds.push(lead.lead_id);
+    for (const call of provider.mock.calls) assert.ifError(call.error);
     for (const response of responses) {
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), { ok: true, received: 1 });
     }
+    assert.ok(lead);
+    const canonicalId = lead.lead_id;
+    assert.equal(provider.mock.callCount(), 2);
     assert.equal(lead.source, "meta_lead_ads"); assert.equal(lead.pipeline_status.status_code, "NEW_LEAD");
     assert.equal(lead.phone, "+12025550123"); assert.equal(lead.email, null);
     assert.equal(lead.name, "Offline Meta fixture");
     assert.match(lead.notes!, /zip_code: 90210/);
     assert.match(lead.notes!, /service: Privacy Film/);
     assert.equal(await prisma.activityLog.count({ where: { entity_id: canonicalId } }), 1);
+    assert.equal(await prisma.notification.count({ where: { entity_type: "lead", entity_id: canonicalId, type_key: "lead.first_touch" } }), 1);
+    assert.equal(await prisma.notification.count({ where: { entity_type: "lead", entity_id: canonicalId } }), 1);
     const touches = await prisma.acquisitionTouchpoint.findMany({ where: { lead_id: canonicalId } });
     assert.equal(touches.length, 1); assert.equal((touches[0].session_attributes as any).campaign_id, "500");
     const consent = await prisma.consentSnapshot.findMany({ where: { lead_id: canonicalId } });
@@ -88,5 +108,6 @@ for (const [index, emailCase] of emailCases.entries()) {
     assert.equal(provider.mock.callCount(), reads);
     assert.equal((await prisma.lead.findUniqueOrThrow({ where: { lead_id: canonicalId } })).notes, "Staff notes stay intact");
     assert.equal(await prisma.activityLog.count({ where: { entity_id: canonicalId } }), 1);
+    assert.equal(await prisma.notification.count({ where: { entity_type: "lead", entity_id: canonicalId } }), 1);
   });
 }
