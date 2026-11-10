@@ -2,6 +2,16 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-10 — Existing Meta forms with optional email (Codex, PR #499)
+
+- Branch: `codex/meta-contact-preferences-20261110`, based on `efb5e9d`.
+- Final owner scope: restore each pre-today form, including its original service choices and required name/phone/ZIP; only email becomes optional. Earlier preference, two-field and nameless proposals are superseded. All related SMS/Worker/name changes were removed from the final diff.
+- Minimum intake fix: treat an empty optional-email values array as absent email, alongside existing omitted/blank handling. Other empty fields, duplicate fields, non-array values and multiple answers retain strict validation. Existing provider deduplication, consent, SMS and CallRail CAPI behavior remain.
+- Coordination: PR #493 owns Messenger handoff and has no remaining code overlap. The campaigns chat owns form publication/ad assignment and the two approved synthetic submissions; none were submitted here.
+- Verified final forms: regular `2548967978927243` (19:54:40 UTC) and weekend `2566162043862965` (19:57:27 UTC). Live Graph comparison confirms each original service key/label/options unchanged; native contacts are ordered `full_name`, `zip_code`, `phone_number`, `email`, then Meta's system `inbox_url`. The campaigns chat verified name/ZIP/phone required and email optional in the builder. Both final IDs join the four existing IDs; all interim IDs are excluded.
+- Verification: 1126 offline tests, TypeScript and production build pass. Exact code commit `e6e7412` passed both CI jobs, including clean-database E2E and desktop/mobile gates. Independent Claude Opus5.5 review: `NO_FINDINGS` (session `2ed829e8-3648-4947-a23f-5938738850fa`). Optional-email tests preserve name/phone/ZIP/service; E2E disables welcome SMS. The final configuration commit must also pass CI before merge.
+- Release path: reviewed PR #499 → successful main CI → automatic production deployment → active-release/process/HTTPS/Meta-route readback → campaigns chat's two approved synthetic tests and final ad assignment. No deployment or live lead receipt is claimed by this pre-merge entry.
+
 ## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
 
 - Owner: control from the phone — project cards and money inside the CRM control center; Claude and Codex must work together, see the same projects, not redo or block each other but complement each other.

@@ -42,6 +42,30 @@ test("provider data preserves service, ZIP and attribution without trusting webh
   const invalidContacts = { ...lead, field_data: lead.field_data.map(field => ["email", "phone_number"].includes(field.name) ? { ...field, values: ["<img onerror=x>"] } : field) };
   assert.throws(() => normalizeMetaLead(invalidContacts, notification), MetaLeadError);
 });
+test("the existing form accepts optional email while preserving name, phone, ZIP and service", () => {
+  for (const email of [undefined, [], [""], ["   "], ["fixture@example.test"]]) {
+    const fields = lead.field_data.filter(field => field.name !== "email");
+    if (email !== undefined) fields.push({ name: "email", values: email });
+    const result = normalizeMetaLead({ ...lead, field_data: fields }, notification);
+    assert.equal(result.name, "Offline Fixture");
+    assert.equal(result.phone, "+12025550123");
+    assert.equal(result.email, email?.[0]?.trim() || null);
+    assert.match(result.notes, /zip_code: 90210/);
+    assert.match(result.notes, /which_service: Solar & Heat Control/);
+    assert.doesNotMatch(result.notes, /fixture@example/);
+  }
+  for (const values of [null, "", ["one@example.test", "two@example.test"]]) {
+    assert.throws(() => normalizeMetaLead({ ...lead, field_data: [
+      ...lead.field_data.filter(field => field.name !== "email"), { name: "email", values },
+    ] }, notification), MetaLeadError);
+  }
+  assert.throws(() => normalizeMetaLead({ ...lead, field_data: [
+    ...lead.field_data, { name: "email", values: [] },
+  ] }, notification), MetaLeadError);
+  assert.throws(() => normalizeMetaLead({ ...lead, field_data: [
+    ...lead.field_data.filter(field => field.name !== "phone_number"), { name: "phone_number", values: [] },
+  ] }, notification), MetaLeadError);
+});
 test("webhook verification, disabled configuration, raw signatures and streamed size limits fail closed", async () => {
   const keys = ["APP_SECRET", "VERIFY_TOKEN", "PAGE_ACCESS_TOKEN", "PAGE_ID", "FORM_IDS"].map(key => "META_LEAD_ADS_" + key);
   const previous = keys.map(key => process.env[key]);
