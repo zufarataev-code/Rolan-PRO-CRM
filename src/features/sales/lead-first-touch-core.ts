@@ -38,8 +38,7 @@ export function buildLeadWelcomeSms(input: {
   now?: Date;
 }) {
   const now = input.now ?? new Date();
-  const first = /^\+?[\d\s().-]{8,}$/.test(input.name.trim()) || input.name.includes("@")
-    ? "there" : input.name.trim().split(/\s+/)[0] || "there";
+  const first = input.name.trim().split(/\s+/)[0] || "there";
   const greeting = `Hi ${first}, thank you for your interest in Rolan PRO window film!`;
   const optOut = "Reply STOP to opt out.";
 

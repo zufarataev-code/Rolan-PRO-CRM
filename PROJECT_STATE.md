@@ -2,15 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-10 — Meta phone-only forms (Codex, PR #499)
+## 2026-11-10 — Existing Meta forms with optional email (Codex, PR #499)
 
 - Branch: `codex/meta-contact-preferences-20261110`, based on `efb5e9d`.
-- Final owner scope supersedes callback/contact choices: only required phone and optional email. All uncommitted preference features were discarded.
-- Fix: Meta intake accepts missing name and uses the actual normalized phone as its display label, leaving first/last name null. Welcome SMS uses a generic greeting for contact labels. Messenger recognizes a one-answer phone form and can capture it without name/service; booking still requires its existing name and qualification fields. Existing submission-ID deduplication, consent and CallRail CAPI remain intact.
-- Coordination: PR #493 owns Messenger completed-form handoff; only the four shared helper changes were coordinated in its comments. The campaigns chat owns form publication/ad assignment and the two approved synthetic submissions; none were submitted here.
-- Live Graph readback: regular final form `1483569517019504` (2026-11-10 19:37:14 UTC) and weekend `1131494252951244` (19:39:30 UTC) have only `email`, `phone_number`, and Meta's system `inbox_url`. Both final IDs join the existing four-ID allowlist. Interim forms `1158750700009247` and `1174566111579915` are superseded and excluded.
-- Verification: 1130 offline tests passed; TypeScript and production build passed. Independent Claude review and final CI remain pending.
-- Next action: obtain review/CI, merge, verify the automatic main-only CRM deployment, then let the campaigns chat submit its two approved tests. Worker deployment is separate; this entry does not claim live lead receipt or deployment.
+- Final owner scope: restore each pre-today form, including its original service choices and required name/phone/ZIP; only email becomes optional. Earlier preference, two-field and nameless proposals are superseded. All related SMS/Worker/name changes were removed from the final diff.
+- Minimum intake fix: treat an empty optional-email values array as absent email, alongside existing omitted/blank handling. Other empty fields, duplicate fields, non-array values and multiple answers retain strict validation. Existing provider deduplication, consent, SMS and CallRail CAPI behavior remain.
+- Coordination: PR #493 owns Messenger handoff and has no remaining code overlap. The campaigns chat owns form publication/ad assignment and the two approved synthetic submissions; none were submitted here.
+- Final restored form IDs are pending live Graph readback. All four previous IDs will remain; all interim versions from today's superseded scopes must be excluded.
+- Verification: optional-email unit cases and the disposable E2E fixture cover name/phone/ZIP/service without email. E2E disables welcome SMS. Full tests/typecheck/build, independent Claude review and CI must be checked against the final scope; earlier nameless-scope results are superseded.
+- Next action: verify final form IDs/schema, complete review/CI, merge, verify main-only deployment and notify the campaigns chat before its two approved tests. No deployment or live lead receipt is claimed yet.
 
 ## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
 

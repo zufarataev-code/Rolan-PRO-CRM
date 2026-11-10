@@ -51,8 +51,8 @@ export function parseLeadFormMessage(text: string): LeadData {
   if (lead.serviceType) lead.serviceType = detectServiceType(lead.serviceType) || lead.serviceType;
   if (lead.zip && !/^\d{5}(?:-\d{4})?$/.test(lead.zip)) delete lead.zip;
   if (lead.phone && lead.phone.replace(/\D/g, "").length < 10) delete lead.phone;
-  // The phone-only form has one answer; a lone name in normal chat is not a form.
-  return lead.phone || Object.keys(lead).length >= 2 ? lead : {};
+  // A lone "Name: x" line in a normal chat message is not a form.
+  return Object.keys(lead).length >= 2 ? lead : {};
 }
 
 const LEAD_FACT_LABELS: Array<[keyof LeadData, string]> = [
@@ -298,13 +298,12 @@ export function parseBookingPayload(value?: string) {
 }
 
 export function leadReadyForCrm(lead: LeadData) {
-  return Boolean(lead.phone?.trim());
+  return Boolean(lead.name?.trim() && lead.phone?.trim());
 }
 
 export function leadReadyForBooking(lead: LeadData) {
   return Boolean(
     leadReadyForCrm(lead) &&
-    lead.name?.trim() &&
     lead.serviceType?.trim() &&
     (lead.propertyType?.trim() || lead.objectType?.trim()) &&
     (lead.address?.trim() || lead.city?.trim() || lead.zip?.trim()),
@@ -321,7 +320,7 @@ export function crmLeadPayload(
     external_event_id: eventId,
     external_contact_id: contactId,
     page_id: pageId,
-    name: lead.name?.trim() || lead.phone?.trim(),
+    name: lead.name?.trim(),
     phone: lead.phone?.trim(),
     email: lead.email?.trim() || undefined,
     service_type: lead.serviceType?.trim() || undefined,
