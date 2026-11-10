@@ -213,7 +213,7 @@ Email: wmelsea@example.org
 Zip code: 90023`;
 
 test("Worker reads the Meta instant-form summary instead of asking again", async () => {
-  const { parseLeadFormMessage, knownLeadFacts } = await import(
+  const { extractLeadFormQuestion, parseLeadFormMessage, knownLeadFacts } = await import(
     "../../../integrations/facebook-messenger-worker/src/booking"
   );
   const lead = parseLeadFormMessage(WESLEY_FORM);
@@ -227,6 +227,23 @@ test("Worker reads the Meta instant-form summary instead of asking again", async
   assert.match(facts, /ZIP from the lead form: 90023/);
   assert.deepEqual(parseLeadFormMessage("Can I book an appointment?"), {});
   assert.deepEqual(parseLeadFormMessage("Note: call me after 5"), {});
+  assert.equal(extractLeadFormQuestion(WESLEY_FORM), undefined);
+  assert.equal(
+    extractLeadFormQuestion(`How much does solar film usually cost?\n${WESLEY_FORM}`),
+    "How much does solar film usually cost?",
+  );
+});
+
+test("Meta form lead gets a short manager handoff without AI disclosure or another interview", () => {
+  const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
+  assert.match(source, /formHandoff && !formQuestion/);
+  assert.match(source, /we received your information\. A Rolan PRO manager will call you/);
+  assert.match(source, /state\.stage = "manager_followup"/);
+  assert.match(source, /Do not ask another qualification question, offer calendar slots/);
+  assert.doesNotMatch(
+    source.match(/function formLeadThankYou[\s\S]*?\n}/)?.[0] || "",
+    /AI assistant|virtual assistant|bot/i,
+  );
 });
 
 test("Worker can offer slots once the form ZIP and property type are known", () => {
