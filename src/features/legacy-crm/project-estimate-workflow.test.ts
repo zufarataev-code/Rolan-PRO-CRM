@@ -112,7 +112,8 @@ test("window and room removal checkboxes create an area-based calculated service
 test("each room exposes a service-scoped film selector and shows its selected film", () => {
   assert.match(source, /Одна плёнка на всю комнату · \$\{academyEsc\(scope\.short\)\}/);
   assert.match(source, /managerApplyFilmToRoom\('\$\{oid\}','\$\{room\.id\}',this\.value\)/);
-  assert.match(source, /const roomFilm = roomCatalog \? `\$\{roomCatalog\.brand\} · \$\{roomCatalog\.model\}` : 'плёнка не выбрана'/);
+  // Owner, 2026-11-10: «логично бренд — модель: Rolan PRO Magnitronic SP-05» — короткая подпись плёнки
+  assert.match(source, /const roomFilm = roomCatalog \? catalogShortLabel\(roomCatalog\) : 'плёнка не выбрана'/);
   assert.match(source, /managerRoomFilmPickerHtml\(oid, r, selectedRoomCatalog, preferredCategory\)/);
 });
 

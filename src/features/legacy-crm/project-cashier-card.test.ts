@@ -16,7 +16,11 @@ test('only the directions in the project are tiles; the rest hide behind «+ Д�
   assert.match(map, /class="project-cashier-direction on \$\{excluded \? 'excluded' : ''\}"/);
   assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add tiles');
   // Owner, 2026-10-28: «убрать ненужные окна по направлениям — лишний шум».
-  assert.match(map, /\$\{active \? `<div class="project-cashier-directions four count-\$\{Math\.min\(active, 4\)\}">\$\{tiles\}<\/div>` : ''\}\$\{addHtml\}/);
+  // Owner, 2026-11-10: «солнцезащитную компактно — архитектура не ложится»: a direction
+  // already in the project is NOT repeated as a tile above its own card; the strip keeps
+  // the facts and «+ Добавить направление», and the choice tiles appear only while adding.
+  assert.doesNotMatch(map, /count-\$\{Math\.min\(active, 4\)\}">\$\{tiles\}/, 'no duplicate tile above the direction card');
+  assert.match(map, /\$\{!active \? `<div class="project-cashier-directions four count-\$\{Math\.min\(Math\.max\(missing\.length, 1\), 4\)\}">\$\{missing\.join\(''\)\}<\/div>` : addHtml\}/);
   assert.match(map, /missing\.push\(`<button type="button" class="project-cashier-direction add"/);
   assert.match(map, /const adding = !active \|\| state\.projectCashierAdding\?\.\[o\.id\] === true;/, 'an empty project shows the choices at once');
   assert.match(map, /\+ Добавить направление/);
