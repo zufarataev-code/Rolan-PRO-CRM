@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-09 — Facebook form lead: short manager handoff instead of a second interview (Codex, PR pending)
+
+- Owner showed a real Facebook Messenger lead where Meta had already supplied the customer's name, phone, email, ZIP and requested Safety Film. The bot still introduced itself as AI and started another qualification interview.
+- Done on `codex/facebook-form-lead-handoff-20261109`: the Worker separates Meta form fields and standard form boilerplate from a genuine customer question. A form lead with a phone gets one short confirmation that the information was received and a Rolan PRO manager will call; the bot does not announce AI, ask another qualification question or offer calendar slots. If the customer includes an actual question outside the form fields, the bot answers that question briefly and still confirms manager follow-up.
+- The lead continues to be written to CRM before the acknowledgment. The conversation remains in `manager_followup`, so later customer questions are answered without restarting qualification; an explicit new booking request can still start a booking flow.
+- Verification: Messenger Worker + CRM integration suites **25/25**, including the form-only and form-with-question split; `git diff --check` clean. The full parallel suite could not run through the shared local dependency tree (`esbuild: The service was stopped` before tests executed), and full `tsc --noEmit` stalled on host filesystem reads; neither reported a code assertion/type error in this change.
+- Not deployed: the Messenger Worker is a separate Cloudflare release and still requires owner confirmation after PR review/merge.
+
 ## 2026-11-08 — Центр управления: проекты, деньги, агенты + правила совместной работы Claude и Codex (Claude, PR pending)
 
 - Owner: control from the phone — project cards and money inside the CRM control center; Claude and Codex must work together, see the same projects, not redo or block each other but complement each other.

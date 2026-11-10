@@ -29,6 +29,38 @@ const FORM_FIELD_ALIASES: Array<[RegExp, keyof LeadData]> = [
   [/(?:windows|how many|окон|ventanas)/i, "windows"],
 ];
 
+const FORM_INTRO_PATTERNS = [
+  /^(?:hello[!,.]?\s*)?i (?:filled out|submitted|completed) (?:your|the) form(?:\s+and\s+.*)?[.!]?$/i,
+  /^(?:hello[!,.]?\s*)?(?:thanks?[,!]?\s*)?i(?:'d| would) like to (?:know|learn) more about (?:your|the) business[.!]?$/i,
+];
+
+const DIRECT_QUESTION_PATTERN =
+  /\?|^(?:how|what|when|where|why|who|which|can|could|would|will|do|does|did|is|are|should|сколько|как|когда|где|почему|кто|какой|можно|можете|есть|будет|cu[aá]nto|c[oó]mo|cu[aá]ndo|d[oó]nde|por qu[eé]|qui[eé]n|puede|puedo|hay|es|son)\b/i;
+
+/**
+ * Meta appends instant-form answers to a Messenger message. Return only a
+ * genuine customer question outside those form fields. The standard Meta
+ * intro ("I filled out your form...") is not a sales question and must not
+ * start another qualification interview.
+ */
+export function extractLeadFormQuestion(text: string) {
+  const freeText: string[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separator = line.indexOf(":");
+    if (separator > 0) {
+      const label = line.slice(0, separator).replace(/[?*]+$/g, "").trim();
+      if (FORM_FIELD_ALIASES.some(([pattern]) => pattern.test(label))) continue;
+    }
+    if (FORM_INTRO_PATTERNS.some((pattern) => pattern.test(line))) continue;
+    freeText.push(line);
+  }
+  const candidate = freeText.join(" ").trim();
+  if (!candidate || !DIRECT_QUESTION_PATTERN.test(candidate)) return undefined;
+  return candidate.slice(0, 600);
+}
+
 /**
  * Meta drops the instant-form answers into Messenger as plain text
  * ("Full name: …", "Phone number: …"). Read them deterministically so the

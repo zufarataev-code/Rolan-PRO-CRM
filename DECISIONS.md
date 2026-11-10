@@ -2,6 +2,13 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-09 — A completed Facebook lead form is a manager handoff, not a new qualification interview (Owner)
+
+- When Meta delivers a lead form containing a usable phone number, the bot acknowledges receipt once and says that a Rolan PRO manager will call. It does not volunteer that it is AI, repeat collected data, ask another qualification question or immediately offer calendar slots.
+- Standard Meta form text and form-field labels are not customer questions. A genuine free-text question outside the form fields is answered briefly and factually; the answer still ends with manager follow-up.
+- Subsequent customer questions remain answerable in Messenger without restarting qualification. Only an explicit request for a new appointment/booking may reopen the booking flow.
+- The existing disclosure in the Meta lead consent remains the disclosure source. If a customer directly asks whether the responder is AI or human, the bot must still answer honestly and briefly.
+
 ## 2026-11-06 — Review public Meta form scope in Git
 
 The approved Meta form IDs are public deployment configuration in

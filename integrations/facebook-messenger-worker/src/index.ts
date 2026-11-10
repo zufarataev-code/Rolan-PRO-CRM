@@ -2,6 +2,7 @@ import {
   bookingPayload,
   buildBusinessWindows,
   crmLeadPayload,
+  extractLeadFormQuestion,
   formatSlot,
   isBusinessHours,
   knownLeadFacts,
@@ -255,7 +256,9 @@ async function askAssistant(
   const storedPrompt = await env.CHAT.get("sys_prompt");
   const stateInstruction = applicationStage === "booked"
     ? "Application state: this customer already has a confirmed booking. Answer follow-up questions normally. Do not start another booking or say you are checking CRM unless the customer explicitly asks for another appointment or address."
-    : `Application state: ${applicationStage || "new"}.`;
+    : applicationStage === "manager_followup"
+      ? "Application state: this customer submitted a lead form with a phone number and is waiting for a manager's call. Answer only the customer's actual question, briefly and usefully. Do not ask another qualification question, offer calendar slots, repeat collected facts, or announce that you are AI. End by confirming that a Rolan PRO manager will call."
+      : `Application state: ${applicationStage || "new"}.`;
   const startedAt = Date.now();
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -343,6 +346,11 @@ function callbackQuestion(lead: LeadData) {
 function callbackConfirmed(lead: LeadData) {
   const name = firstName(lead);
   return `${name ? `Got it, ${name}` : "Got it"} — our manager will call you ${lead.callbackTime?.trim() || "soon"}. If anything changes, just message us here.`;
+}
+
+function formLeadThankYou(lead: LeadData) {
+  const name = firstName(lead);
+  return `${name ? `Thank you, ${name}` : "Thank you"} — we received your information. A Rolan PRO manager will call you. If you have any questions in the meantime, send them here and we'll help.`;
 }
 
 function qualificationPrompt(lead: LeadData, language?: string) {
@@ -573,10 +581,14 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   }
   state.lead = normalizeLeadData(state.lead || {});
   const formLead = parseLeadFormMessage(event.text);
-  if (Object.keys(formLead).length) {
+  const formSubmission = Object.keys(formLead).length > 0;
+  const formQuestion = formSubmission ? extractLeadFormQuestion(event.text) : undefined;
+  const formHandoff = formSubmission && Boolean(formLead.phone?.trim());
+  if (formSubmission) {
     state.lead = normalizeLeadData(mergeLead(state.lead, formLead));
     console.log(JSON.stringify({ event: "lead_form_parsed", key, fields: Object.keys(formLead) }));
   }
+  if (formHandoff) state.stage = "manager_followup";
   if (state.stage === "booked" && startsNewBooking(event.text)) {
     state = {
       history: [],
@@ -593,7 +605,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   // Once a manager callback is arranged, do not keep re-offering slots (and
   // re-asking for a call time) on every message unless the customer asks.
   const callbackMode =
-    (state.stage === "callback_requested" || state.stage === "callback_set") &&
+    (state.stage === "callback_requested" || state.stage === "callback_set" || state.stage === "manager_followup") &&
     !startsNewBooking(event.text);
   const callbackStage = state.stage;
 
@@ -617,6 +629,32 @@ async function handleEvent(env: Env, event: MessengerEvent) {
   if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
   await graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "mark_seen" });
   await graphPost(env, endpoint, { recipient: { id: event.senderId }, sender_action: "typing_on" });
+
+  if (formHandoff && !formQuestion) {
+    try {
+      if (leadReadyForCrm(state.lead) && !state.leadCapturedEventId) {
+        const captureEventId = `${event.eventId}:lead`;
+        await postToCrm(
+          env,
+          "/api/integrations/facebook-messenger/leads",
+          crmLeadPayload(state.lead, captureEventId, event.senderId, env.PAGE_ID),
+        );
+        state.leadCapturedEventId = captureEventId;
+      }
+    } catch (error) {
+      console.error("crm_form_lead_capture", error);
+    }
+    const text = await localizeOperationalMessage(
+      env,
+      formLeadThankYou(state.lead),
+      state.lead.language,
+      true,
+    );
+    state.history.push({ role: "assistant", content: JSON.stringify({ reply: text, stage: state.stage }) });
+    await persistState(env, key, state);
+    await sendMessage(env, event, text);
+    return;
+  }
 
   let output: AssistantOutput;
   try {
@@ -655,7 +693,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
       state.leadCapturedEventId = captureEventId;
     }
 
-    if (!alreadyBooked && !callbackMode && !state.escalated && leadReadyForBooking(state.lead)) {
+    if (!formHandoff && !alreadyBooked && !callbackMode && !state.escalated && leadReadyForBooking(state.lead)) {
       await offerSlots(env, event, key, state, attemptedBookingClaim ? undefined : output.reply);
       return;
     }
@@ -665,6 +703,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     return;
   }
 
+  if (formHandoff && !state.escalated) state.stage = "manager_followup";
   if (alreadyBooked && !state.escalated) state.stage = "booked";
   if (callbackMode && !state.escalated) state.stage = callbackStage;
   await persistState(env, key, state);
