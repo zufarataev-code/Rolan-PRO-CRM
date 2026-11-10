@@ -286,10 +286,10 @@ export async function GET(request: NextRequest) {
   const teamDirectoryPatch = session.roles.includes(ROLE_CODES.OWNER) && !session.preview ? `
     <style>
       #rolanpro-team-overlay { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.48); display: grid; place-items: center; padding: 14px; }
-      #rolanpro-team-frame { width: min(980px, 100%); height: min(94dvh, 980px); border: 0; border-radius: 18px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
+      #rolanpro-team-frame { width: min(980px, 100%); height: min(94dvh, 980px); border: 0; border-radius: 6px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
       @media (max-width: 640px) { #rolanpro-team-overlay { padding: 0; } #rolanpro-team-frame { height: 100dvh; border-radius: 0; } }
       #rolanpro-bank-overlay { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.48); display: grid; place-items: center; padding: 14px; }
-      #rolanpro-bank-frame { width: min(1000px, 100%); height: min(94dvh, 1000px); border: 0; border-radius: 18px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
+      #rolanpro-bank-frame { width: min(1000px, 100%); height: min(94dvh, 1000px); border: 0; border-radius: 6px; background: #f1f5f9; box-shadow: 0 24px 80px rgba(15,23,42,.28); }
       @media (max-width: 640px) { #rolanpro-bank-overlay { padding: 0; } #rolanpro-bank-frame { height: 100dvh; border-radius: 0; } }
     </style>
     <script id="rolanpro-team-screen-link">
@@ -393,14 +393,18 @@ export async function GET(request: NextRequest) {
 
   const previewPatch = session.preview ? `
     <style>
+      /* Полоса фиксированной высоты 40px; приложение знает о ней через --rp-topbar-offset
+         и укорачивает боковую панель и рабочую область, чтобы ничего не наезжало и не пряталось внизу. */
+      html { --rp-topbar-offset: 40px; }
       #rolanpro-preview-bar {
-        position: fixed; left: 0; right: 0; top: 0; z-index: 2147483600;
-        display: flex; align-items: center; justify-content: center; gap: 12px;
-        padding: 8px 14px; background: #7c2d12; color: #fff;
-        font: 600 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        position: fixed; left: 0; right: 0; top: 0; height: 40px; z-index: 2147483600;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        padding: 0 12px; background: #7c2d12; color: #fff;
+        font: 600 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
+      #rolanpro-preview-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #rolanpro-preview-bar button {
-        border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+        flex: none; border: 0; border-radius: 4px; padding: 5px 10px; cursor: pointer;
         background: #fff; color: #7c2d12; font: inherit;
       }
       body { padding-top: 40px !important; }
@@ -440,7 +444,7 @@ export async function GET(request: NextRequest) {
         width: min(1080px, 100%);
         height: min(92dvh, 920px);
         background: #f8fafc;
-        border-radius: 18px;
+        border-radius: 6px;
         overflow: hidden;
         box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
         display: grid;
@@ -461,7 +465,7 @@ export async function GET(request: NextRequest) {
         width: 40px;
         height: 40px;
         border: 1px solid #e2e8f0;
-        border-radius: 10px;
+        border-radius: 4px;
         background: #fff;
         font-size: 24px;
         line-height: 1;
