@@ -58,12 +58,14 @@ for (const [index, emailCase] of emailCases.entries()) {
     let releaseReads!: () => void;
     const bothReads = new Promise<void>(resolve => { releaseReads = resolve; });
     let readCount = 0;
+    let allowProviderReads = false;
     const provider = t.mock.method(globalThis, "fetch", async (url: URL, options: RequestInit) => {
       assert.equal(url.origin, "https://graph.facebook.com");
       assert.equal(url.pathname, `/v26.0/${leadId}`);
       assert.equal(options.headers && (options.headers as Record<string, string>).authorization, "Bearer offline-token");
       assert.equal(url.searchParams.has("access_token"), false);
       assert.equal(url.searchParams.get("appsecret_proof"), createHmac("sha256", "offline-secret").update("offline-token").digest("hex"));
+      assert.ok(allowProviderReads, "Tampered request reached Graph");
       // Both callbacks must pass the initial database lookup before either can commit.
       readCount += 1;
       if (readCount === 2) releaseReads();
@@ -74,10 +76,11 @@ for (const [index, emailCase] of emailCases.entries()) {
     assert.equal(forged.status, 401);
     assert.equal(provider.mock.callCount(), 0);
     assert.equal(await prisma.lead.count({ where: { external_source: "meta_lead_ads", external_submission_id: leadId } }), 0);
+    allowProviderReads = true;
     const responses = await Promise.all([deliver(), deliver()]);
     const lead = await prisma.lead.findUnique({ where: { external_source_external_submission_id: { external_source: "meta_lead_ads", external_submission_id: leadId } }, include: { pipeline_status: true } });
     if (lead) canonicalIds.push(lead.lead_id);
-    for (const call of provider.mock.calls) assert.ifError(call.error);
+    await Promise.all(provider.mock.calls.map(call => call.result));
     for (const response of responses) {
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), { ok: true, received: 1 });
@@ -96,18 +99,23 @@ for (const [index, emailCase] of emailCases.entries()) {
     const touches = await prisma.acquisitionTouchpoint.findMany({ where: { lead_id: canonicalId } });
     assert.equal(touches.length, 1); assert.equal((touches[0].session_attributes as any).campaign_id, "500");
     const consent = await prisma.consentSnapshot.findMany({ where: { lead_id: canonicalId } });
-    assert.equal(consent.length, 1); assert.equal(consent[0].ad_user_data, "UNKNOWN"); assert.equal(consent[0].audience_marketing_eligible, false);
+    assert.equal(consent.length, 1); assert.equal(consent[0].ad_user_data, "UNKNOWN"); assert.equal(consent[0].ad_personalization, "UNKNOWN"); assert.equal(consent[0].audience_marketing_eligible, false);
     assert.equal(await prisma.conversionEvent.count({ where: { lead_id: canonicalId } }), 0);
     assert.equal(await prisma.consultation.count({ where: { lead_id: canonicalId } }), 0);
     await prisma.lead.update({ where: { lead_id: canonicalId }, data: { notes: "Staff notes stay intact" } });
     const reads = provider.mock.callCount();
     process.env.META_LEAD_ADS_PAGE_ACCESS_TOKEN = "expired-offline-token";
     const retry = await deliver();
+    await Promise.all(provider.mock.calls.map(call => call.result));
     assert.equal(retry.status, 200);
     assert.deepEqual(await retry.json(), { ok: true, received: 1 });
     assert.equal(provider.mock.callCount(), reads);
     assert.equal((await prisma.lead.findUniqueOrThrow({ where: { lead_id: canonicalId } })).notes, "Staff notes stay intact");
     assert.equal(await prisma.activityLog.count({ where: { entity_id: canonicalId } }), 1);
     assert.equal(await prisma.notification.count({ where: { entity_type: "lead", entity_id: canonicalId } }), 1);
+    assert.deepEqual(await prisma.acquisitionTouchpoint.findMany({ where: { lead_id: canonicalId } }), touches);
+    assert.deepEqual(await prisma.consentSnapshot.findMany({ where: { lead_id: canonicalId } }), consent);
+    assert.equal(await prisma.conversionEvent.count({ where: { lead_id: canonicalId } }), 0);
+    assert.equal(await prisma.consultation.count({ where: { lead_id: canonicalId } }), 0);
   });
 }

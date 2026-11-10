@@ -74,7 +74,8 @@ or receipt. Committed retries do not retrieve data again or overwrite staff edit
 Different submissions remain separate enquiries; contact matching does not silently
 combine people or change an existing enquiry's source or stage.
 
-New enquiries use the existing first-touch manager notification and welcome SMS.
+Existing first touch creates a notification when a manager or owner is available.
+Welcome SMS requires a phone, an enabled SMS setting and configured Twilio access.
 Receipt creation does not schedule, qualify, or produce an advertising conversion.
 Advertising consent remains UNKNOWN and audience-marketing eligibility false.
 Submitting an enquiry authorizes responding to that enquiry, not marketing reuse.
@@ -95,11 +96,12 @@ E2E gate. Its provider response is mocked; no real Meta/CRM enquiry is submitted
 The gate calls the signed POST receiver with each email-free representation,
 persists into the guarded disposable PostgreSQL database, and checks concurrent
 delivery, committed retry, one receipt/notification, preserved staff notes and
-no conversions. A tampered signature must reach neither Graph nor lead creation.
+no conversions. A tampered body must reach neither Graph nor lead creation.
 Production changes follow reviewed main deployment, with server secrets set first.
 Verify GET validation and unsigned POST rejection without creating a lead. Then
 verify the Page subscription and retrieval access. A genuine first enquiry must be
 followed through to the office inbox before claiming live end-to-end delivery.
+Keep every campaign paused and all ad media empty until the owner supplies assets.
 
 For live transport verification, use an explicitly approved synthetic submission
 and follow its exact provider ID to `integration.meta_lead_ads.received` before
