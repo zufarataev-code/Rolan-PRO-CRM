@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-10 — Unanswered Meta system fields (Codex, PR #500)
+
+- Branch `codex/meta-unanswered-system-fields-20261110`, based on merged PR #499 (`24c0085`).
+- Live verification found a Meta test lead with the system field `{ name: "inbox_url" }` and no `values` property. The exact provider shape fails the current parser with `invalid_fields`; the synthetic enquiry has no CRM record yet.
+- Narrow fix: optional `email` and `inbox_url` may omit their answer. Required/other fields, duplicates, non-array answers and multiple answers retain strict validation. Regression and disposable E2E fixtures include the unanswered system field.
+- Verification on code commit `8cc9b4b`: 1127 offline tests, TypeScript, production build and both CI jobs passed. Independent Claude Opus5.5 review returned `NO_FINDINGS` (session `c1e0b5d6-b536-4a07-b2ee-2e2717af5a7a`). The final handoff-only commit must complete CI before merge.
+- The campaigns chat holds ad assignment and owns form/UI validation. Meta's API rejects question `optional`/`is_optional` fields, while saved form previews and the test renderer disagree about blank email. This parser repair does not prove customer-facing optional-email behavior.
+- Next actions: independent review and CI, safe merge/deployment, then process the exact existing approved test lead and verify CRM mapping, consent and conversion counts. Test creation stays within the two approved submissions; production/test records remain outside Git.
+
 ## 2026-11-10 — Existing Meta forms with optional email (Codex, PR #499)
 
 - Branch: `codex/meta-contact-preferences-20261110`, based on `efb5e9d`.

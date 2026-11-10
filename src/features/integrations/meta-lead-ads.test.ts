@@ -54,7 +54,7 @@ test("the existing form accepts optional email while preserving name, phone, ZIP
     assert.match(result.notes, /which_service: Solar & Heat Control/);
     assert.doesNotMatch(result.notes, /fixture@example/);
   }
-  for (const values of [null, "", ["one@example.test", "two@example.test"]]) {
+  for (const values of ["", ["one@example.test", "two@example.test"]]) {
     assert.throws(() => normalizeMetaLead({ ...lead, field_data: [
       ...lead.field_data.filter(field => field.name !== "email"), { name: "email", values },
     ] }, notification), MetaLeadError);
@@ -65,6 +65,33 @@ test("the existing form accepts optional email while preserving name, phone, ZIP
   assert.throws(() => normalizeMetaLead({ ...lead, field_data: [
     ...lead.field_data.filter(field => field.name !== "phone_number"), { name: "phone_number", values: [] },
   ] }, notification), MetaLeadError);
+});
+test("unanswered optional Meta fields preserve the lead while malformed fields fail", () => {
+  for (const name of ["email", "inbox_url"]) {
+    for (const values of [undefined, null, []]) {
+      const fields: unknown[] = lead.field_data.filter(field => field.name !== name);
+      fields.push(values === undefined ? { name } : { name, values });
+      const result = normalizeMetaLead({ ...lead, field_data: fields }, notification);
+      assert.equal(result.name, "Offline Fixture");
+      assert.equal(result.phone, "+12025550123");
+      assert.equal(result.email, name === "email" ? null : "fixture@example.test");
+      assert.match(result.notes, /which_service: Solar & Heat Control/);
+    }
+    for (const values of ["", ["one", "two"]]) {
+      const fields: unknown[] = lead.field_data.filter(field => field.name !== name);
+      assert.throws(() => normalizeMetaLead({ ...lead, field_data: [...fields, { name, values }] }, notification), MetaLeadError);
+    }
+    const fields = lead.field_data.filter(field => field.name !== name);
+    assert.throws(() => normalizeMetaLead({ ...lead, field_data: [...fields, { name }, { name }] }, notification), MetaLeadError);
+  }
+  for (const name of ["full_name", "phone_number", "zip_code", "which_service"]) {
+    for (const values of [undefined, null, []]) {
+      const fields = lead.field_data.filter(field => field.name !== name);
+      assert.throws(() => normalizeMetaLead({ ...lead, field_data: [...fields, { name, values }] }, notification), MetaLeadError);
+    }
+  }
+  const fields = lead.field_data.filter(field => !["phone_number", "email"].includes(field.name));
+  assert.throws(() => normalizeMetaLead({ ...lead, field_data: [...fields, { name: "email" }, { name: "inbox_url" }] }, notification), /missing_contact/);
 });
 test("webhook verification, disabled configuration, raw signatures and streamed size limits fail closed", async () => {
   const keys = ["APP_SECRET", "VERIFY_TOKEN", "PAGE_ACCESS_TOKEN", "PAGE_ID", "FORM_IDS"].map(key => "META_LEAD_ADS_" + key);

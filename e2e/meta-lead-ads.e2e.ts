@@ -33,7 +33,7 @@ test("concurrent deliveries commit one canonical enquiry, receipt and attributio
     assert.equal(url.pathname, `/v26.0/${leadId}`);
     assert.equal(options.headers && (options.headers as Record<string, string>).authorization, "Bearer offline-token");
     assert.equal(url.searchParams.has("access_token"), false);
-    return Response.json({ id: leadId, form_id: "200", ad_id: "300", adset_id: "400", campaign_id: "500", created_time: new Date().toISOString(), field_data: [{ name: "full_name", values: ["Offline Meta fixture"] }, { name: "phone_number", values: ["2025550123"] }, { name: "zip_code", values: ["90210"] }, { name: "service", values: ["Privacy Film"] }] });
+    return Response.json({ id: leadId, form_id: "200", ad_id: "300", adset_id: "400", campaign_id: "500", created_time: new Date().toISOString(), field_data: [{ name: "full_name", values: ["Offline Meta fixture"] }, { name: "phone_number", values: ["2025550123"] }, { name: "zip_code", values: ["90210"] }, { name: "service", values: ["Privacy Film"] }, { name: "inbox_url" }] });
   });
   const results = await Promise.all([importMetaLead(notification, "offline-token", "offline-secret"), importMetaLead(notification, "offline-token", "offline-secret")]);
   canonicalId = results[0].lead_id;
