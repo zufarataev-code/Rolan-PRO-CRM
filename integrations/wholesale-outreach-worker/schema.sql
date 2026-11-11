@@ -11,9 +11,10 @@ CREATE TABLE IF NOT EXISTS contacts (
   city          TEXT,
   segment       TEXT,                           -- Auto / Flat / Auto+Flat
   website       TEXT,
-  status        TEXT NOT NULL DEFAULT 'new',    -- new | sequence | requested | replied | customer | unsubscribed | bounced | paused
+  status        TEXT NOT NULL DEFAULT 'new',    -- new | sequence | requested | replied | customer | unsubscribed | bounced (real bounce events only) | paused (needs a manual look)
   step          INTEGER NOT NULL DEFAULT 0,     -- 0 none sent, 1..3 = last campaign email sent
   next_send_at  TEXT,                           -- ISO; when the next sequence email is due
+  pricelist_sent_at TEXT,                       -- one-time claim: set when the shop confirmed and the PDF went out
   last_event_at TEXT,
   notes         TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
@@ -43,7 +44,8 @@ CREATE TABLE IF NOT EXISTS orders (
   fulfillment   TEXT,                           -- pickup | delivery
   stripe_url    TEXT,
   stripe_session TEXT,
-  status        TEXT NOT NULL DEFAULT 'quoted', -- quoted | link_sent | paid | cancelled
+  status        TEXT NOT NULL DEFAULT 'quoted', -- quoted | link_sent | paid (set only by the verified Stripe webhook) | cancelled
+  paid_at       TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

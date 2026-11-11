@@ -11,7 +11,7 @@ Cloudflare Worker, как и `facebook-messenger-worker`. Согласно `DECI
 | Часть | Как |
 |---|---|
 | Серия из 3 писем (день 0 / +3 / +7), **без цен**, цель — запрос прайса | `scheduled()` по крону в 08:30 PT по будням; дневной лимит с прогревом (15 → 40 писем/день за 7 дней) |
-| Кнопка «Send me the dealer price list» | `GET /price-list?c=<token>` → отправляет PDF-прайс, статус `requested`, уведомление владельцу |
+| Кнопка «Send me the dealer price list» | `GET /price-list?c=<token>` показывает страницу с кнопкой подтверждения (сканеры почты и превью ссылок ничего не запускают); `POST` отправляет PDF-прайс один раз на контакт (`pricelist_sent_at`), статус `requested`, уведомление владельцу |
 | Ответы шопов на письма | Cloudflare Email Routing → `email()` → Claude отвечает как Zak по прайсу и правилам (`src/sales.ts`) |
 | Заказ в переписке | бот собирает SKU/кол-во → считает тир (1–2 / 3–9 / 10+) → Stripe Checkout-ссылка (если задан `STRIPE_SECRET_KEY`) или Zelle → письмо владельцу |
 | Отписка / «stop» | `GET /unsubscribe?c=` или ответ «stop/no» → статус `unsubscribed`, рассылка останавливается |
@@ -38,6 +38,7 @@ Cloudflare Worker, как и `facebook-messenger-worker`. Согласно `DECI
    npx wrangler secret put ANTHROPIC_API_KEY
    npx wrangler secret put ADMIN_TOKEN            # любой длинный пароль для /admin/*
    npx wrangler secret put STRIPE_SECRET_KEY      # необязательно; без него бот даёт Zelle
+   npx wrangler secret put STRIPE_WEBHOOK_SECRET  # нужен вместе со Stripe: вебхук `POST /stripe/webhook` (событие `checkout.session.completed`) — только он переводит заказ в `paid` и шлёт владельцу «оплачен»
    ```
 6. **Деплой и проверка:**
    ```sh

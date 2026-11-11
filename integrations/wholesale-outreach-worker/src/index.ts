@@ -23,6 +23,7 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   ADMIN_TOKEN: string;
   STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
 }
 
 type Row = Contact & { phone: string | null; status: string; step: number; next_send_at: string | null; website: string | null };
@@ -61,8 +62,13 @@ async function resendSend(env: Env, o: SendOpts) {
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new ResendError(r.status, await r.text());
   return (await r.json()) as { id: string };
+}
+class ResendError extends Error {
+  constructor(public status: number, detail: string) { super(`Resend ${status}: ${detail}`); }
+  // 429 and 5xx are provider hiccups; other 4xx mean Resend rejected this message and a retry would fail the same way
+  get permanent() { return this.status >= 400 && this.status < 500 && this.status !== 429; }
 }
 
 async function logMessage(env: Env, contactId: number, direction: "in" | "out", kind: string, subject: string, body: string, messageId?: string | null, providerId?: string | null) {
@@ -100,19 +106,39 @@ async function runCampaign(env: Env) {
   let sent = 0;
   for (const c of due.results) {
     const tpl = CAMPAIGN[c.step];
+    const mid = msgId(env);
+    let providerId: string;
     try {
-      const mid = msgId(env);
-      const r = await resendSend(env, { to: c.email, subject: tpl.subject(c), html: tpl.html(c, env), text: tpl.text(c, env), messageId: mid });
-      const nextStep = c.step + 1;
-      const next = nextStep < 3 ? addDays(STEP_DELAY_DAYS[nextStep]) : null;
-      await env.DB.prepare("UPDATE contacts SET status='sequence', step=?, next_send_at=?, last_event_at=? WHERE id=?")
-        .bind(nextStep, next, now(), c.id).run();
-      await logMessage(env, c.id, "out", tpl.kind, tpl.subject(c), tpl.text(c, env), mid, r.id);
-      sent++;
+      providerId = (await resendSend(env, { to: c.email, subject: tpl.subject(c), html: tpl.html(c, env), text: tpl.text(c, env), messageId: mid })).id;
     } catch (e) {
       console.error("campaign send failed", c.email, e);
-      await env.DB.prepare("UPDATE contacts SET status='bounced', notes=COALESCE(notes,'')||? WHERE id=?").bind(` send error: ${String(e).slice(0, 200)};`, c.id).run();
+      if (e instanceof ResendError && e.permanent) {
+        // Rejected by the provider (bad address, suppressed, …): take it out of the sequence for a manual look.
+        // 'bounced' is reserved for real bounce events, so this is 'paused'.
+        await env.DB.prepare("UPDATE contacts SET status='paused', next_send_at=NULL, notes=COALESCE(notes,'')||? WHERE id=?")
+          .bind(` send rejected: ${String(e).slice(0, 200)};`, c.id).run().catch((x) => console.error("pause failed", c.email, x));
+        continue;
+      }
+      // Transient (429 / 5xx / network): leave the contact untouched so the next run retries it,
+      // and stop this run — the provider is unhappy and the rest would fail too.
+      break;
     }
+    // Resend accepted the e-mail: it counts against today's budget whatever happens next.
+    sent++;
+    const nextStep = c.step + 1;
+    const next = nextStep < 3 ? addDays(STEP_DELAY_DAYS[nextStep]) : null;
+    try {
+      await env.DB.prepare("UPDATE contacts SET status='sequence', step=?, next_send_at=?, last_event_at=? WHERE id=?")
+        .bind(nextStep, next, now(), c.id).run();
+    } catch (e) {
+      // Delivered but not recorded: never label it bounced. Park the contact so the same step is not sent twice.
+      console.error("campaign bookkeeping failed", c.email, e);
+      await env.DB.prepare("UPDATE contacts SET status='paused' WHERE id=?").bind(c.id).run().catch(() => {});
+      await notifyOwner(env, `Проверить контакт: ${c.company}`, `Письмо ${tpl.kind} для ${c.email} ушло, но запись в базе не обновилась (${String(e).slice(0, 200)}). Контакт поставлен на паузу, чтобы не отправить то же письмо дважды.`);
+      continue;
+    }
+    await logMessage(env, c.id, "out", tpl.kind, tpl.subject(c), tpl.text(c, env), mid, providerId)
+      .catch((e) => console.error("campaign log failed", c.email, e));
   }
   await env.DB.prepare("INSERT INTO send_log (day, sent) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET sent = sent + excluded.sent").bind(today(), sent).run();
   return { sent, budget };
@@ -155,6 +181,56 @@ async function stripeLink(env: Env, c: Row, q: ReturnType<typeof quote>, orderId
   const s = (await r.json()) as { id: string; url: string };
   await env.DB.prepare("UPDATE orders SET stripe_url=?, stripe_session=?, status='link_sent' WHERE id=?").bind(s.url, s.id, orderId).run();
   return s.url;
+}
+
+// Stripe webhook: the only place an order becomes 'paid'. Signature is verified, handling is idempotent.
+async function hmacHex(secret: string, payload: string) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function safeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+export async function verifyStripeSignature(secret: string, payload: string, header: string, nowSec = Math.floor(Date.now() / 1000)) {
+  const parts = header.split(",").map((x) => x.trim().split("="));
+  const t = parts.find(([k]) => k === "t")?.[1];
+  const sigs = parts.filter(([k]) => k === "v1").map(([, v]) => v);
+  if (!t || !sigs.length || Math.abs(nowSec - Number(t)) > 300) return false;
+  const expected = await hmacHex(secret, `${t}.${payload}`);
+  return sigs.some((s) => safeEqual(s, expected));
+}
+async function stripeWebhook(req: Request, env: Env) {
+  if (!env.STRIPE_WEBHOOK_SECRET) return json({ error: "webhook not configured" }, 503);
+  const payload = await req.text();
+  if (!(await verifyStripeSignature(env.STRIPE_WEBHOOK_SECRET, payload, req.headers.get("stripe-signature") || ""))) return json({ error: "bad signature" }, 400);
+  const ev = JSON.parse(payload) as { type: string; data: { object: { id: string; payment_status?: string; amount_total?: number } } };
+  if (ev.type !== "checkout.session.completed" && ev.type !== "checkout.session.async_payment_succeeded") return json({ ok: true, ignored: ev.type });
+  const s = ev.data.object;
+  if (s.payment_status !== "paid") return json({ ok: true, pending: true }); // delayed methods: wait for async_payment_succeeded
+  // Atomic: only the first delivery of this event flips the order, so Stripe's retries do not notify twice.
+  const upd = await env.DB.prepare("UPDATE orders SET status='paid', paid_at=? WHERE stripe_session=? AND status<>'paid' RETURNING id, contact_id, rolls, tier, subtotal")
+    .bind(now(), s.id).first<{ id: number; contact_id: number; rolls: number; tier: string; subtotal: number }>();
+  if (upd) {
+    const c = await env.DB.prepare("SELECT company, email, phone, city FROM contacts WHERE id=?").bind(upd.contact_id).first<{ company: string; email: string; phone: string | null; city: string | null }>();
+    await notifyOwner(env, `💰 Оплачен заказ #${upd.id}: ${c?.company || ""}`,
+      `${c?.company || ""} (${c?.city || ""}) — ${c?.email || ""} ${c?.phone || ""}
+Заказ #${upd.id}: ${upd.rolls} рул., ${upd.tier}, subtotal $${upd.subtotal}
+Stripe: оплачено $${((s.amount_total || 0) / 100).toFixed(2)} (с налогом). Сессия ${s.id}`);
+  }
+  return json({ ok: true });
+}
+
+function confirmPriceListPage(c: Row) {
+  return `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>RolanPRO dealer price list</title>
+<body style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:60px auto;padding:0 24px;color:#111">
+<h2>Dealer price list</h2>
+<p>We will email the RolanPRO dealer price list (PDF) to <b>${c.email.replace(/[<>&"]/g, "")}</b>.</p>
+<form method="post"><button style="background:#111;color:#fff;border:0;border-radius:8px;padding:14px 22px;font-size:16px;cursor:pointer">Send me the price list</button></form>
+</body>`;
 }
 
 // ---------- inbound e-mail → bot ----------
@@ -294,11 +370,22 @@ export default {
     const url = new URL(req.url);
     const p = url.pathname;
 
-    if (p === "/price-list" && req.method === "GET") {
+    if (p === "/price-list" && (req.method === "GET" || req.method === "HEAD" || req.method === "POST")) {
       const t = url.searchParams.get("c") || "";
       const c = await env.DB.prepare("SELECT * FROM contacts WHERE token = ?").bind(t).first<Row>();
       if (!c) return html("<p>Link expired. Email " + env.REPLY_TO + " for the price list.</p>", 404);
-      await sendPriceList(env, c).catch((e) => console.error("pricelist", e));
+      // GET never sends anything: link previews and mail security scanners fetch every URL in an e-mail.
+      // The shop confirms with a button (POST), and the send is claimed atomically so it happens once per contact.
+      if (req.method !== "POST") return html(confirmPriceListPage(c));
+      const claim = await env.DB.prepare("UPDATE contacts SET pricelist_sent_at=? WHERE id=? AND pricelist_sent_at IS NULL").bind(now(), c.id).run();
+      if (claim.meta.changes) {
+        try { await sendPriceList(env, c); }
+        catch (e) {
+          console.error("pricelist", e);
+          await env.DB.prepare("UPDATE contacts SET pricelist_sent_at=NULL WHERE id=?").bind(c.id).run(); // release the claim so they can try again
+          return html("<p style='font-family:sans-serif;padding:40px'>We could not send the price list just now. Please try again in a minute or email " + env.REPLY_TO + ".</p>", 502);
+        }
+      }
       return html(thankYouPage(env));
     }
     if (p === "/unsubscribe") {
@@ -306,7 +393,15 @@ export default {
       await env.DB.prepare("UPDATE contacts SET status='unsubscribed', next_send_at=NULL, last_event_at=? WHERE token=?").bind(now(), t).run();
       return html(unsubscribedPage());
     }
-    if (p === "/paid") return html("<p style='font-family:sans-serif;padding:40px'>Payment received — thank you. Zak will confirm pick-up/delivery by email.</p>");
+    if (p === "/stripe/webhook" && req.method === "POST") return stripeWebhook(req, env);
+    if (p === "/paid") {
+      // Only verified state is shown here: an order is 'paid' once Stripe's signed webhook said so.
+      const o = await env.DB.prepare("SELECT status FROM orders WHERE id=?").bind(Number(url.searchParams.get("o")) || 0).first<{ status: string }>();
+      const msg = o?.status === "paid"
+        ? "Payment received — thank you. Zak will confirm pick-up/delivery by email."
+        : "Thank you. Your payment is being confirmed — you will get an email from Zak as soon as it clears.";
+      return html(`<p style='font-family:sans-serif;padding:40px'>${msg}</p>`);
+    }
     if (p === "/health") return json({ ok: true, time: now() });
 
     if (p.startsWith("/admin/")) {
