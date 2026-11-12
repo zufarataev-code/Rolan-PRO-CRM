@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createFieldWorkspace, isPrivilegedLegacyWorkspaceRole } from "@/features/legacy-crm/field-workspace";
 import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
-import { PLAUD_ACTION, PLAUD_ENTITY, PlaudError, matchPlaudRecording, type PlaudRecording } from "./plaud-core";
+import { fetchPlaudEmails } from "@/features/gmail/service";
+import { PLAUD_ACTION, PLAUD_ENTITY, PlaudError, matchPlaudRecording, plaudRecordingFromEmail, type PlaudRecording } from "./plaud-core";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -128,4 +129,28 @@ export async function updatePlaudRecording(id: string, change: { orderId?: strin
     });
     return view(updated);
   });
+}
+
+let lastEmailSync = 0;
+/**
+ * Free route (Owner, 2026-11-12: «Zapier платный — можно иначе»): recordings sent to
+ * info+plaud@… are pulled from the connected Gmail, at most once a minute, when
+ * someone opens a measurement window. Failures never block the CRM.
+ */
+export async function syncPlaudEmails(now = Date.now()) {
+  if (now - lastEmailSync < 60_000) return { skipped: true, imported: 0 };
+  lastEmailSync = now;
+  try {
+    const { messages } = await fetchPlaudEmails();
+    let imported = 0;
+    for (const mail of messages) {
+      if (!mail.body.trim() && !mail.attachmentsText.length) continue;
+      const result = await importPlaudRecording(plaudRecordingFromEmail(mail));
+      if (!result.duplicate) imported += 1;
+    }
+    return { skipped: false, imported };
+  } catch (error) {
+    console.warn("plaud_email_sync_failed", error instanceof Error ? error.message : "unknown");
+    return { skipped: false, imported: 0 };
+  }
 }

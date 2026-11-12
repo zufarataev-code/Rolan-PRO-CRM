@@ -418,3 +418,41 @@ export async function getGmailAttachment(messageId: string, attachmentId: string
     mimeType: String(file.mime_type || "application/octet-stream"),
   };
 }
+
+/**
+ * Plaud by e-mail (Owner, 2026-11-12: no paid Zapier). Reads recent messages
+ * sent to `<mailbox>+plaud@…` (Plaud «share by e-mail» or a free Zapier Plaud → Gmail
+ * zap), with plain-text attachments. Plaud's own marketing mail never matches.
+ */
+export function plaudMailboxAlias(email: string) {
+  const [local, domain] = email.split("@");
+  return local && domain ? `${local.split("+")[0]}+plaud@${domain}` : "";
+}
+
+export async function fetchPlaudEmails(maxResults = 20) {
+  const connection = await primaryGmailConnection();
+  if (!connection?.is_active) return { alias: "", messages: [] as Array<{ id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] }> };
+  const alias = plaudMailboxAlias(connection.email_address);
+  const query = `newer_than:14d to:${alias}`;
+  const list = await gmailRequest<{ messages?: Array<{ id?: string }> }>(connection, `/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`);
+  const messages: Array<{ id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] }> = [];
+  for (const item of list.messages || []) {
+    if (!item.id) continue;
+    const message = await gmailRequest<GmailMessageResource>(connection, `/messages/${encodeURIComponent(item.id)}?format=full`);
+    const attachmentsText: string[] = [];
+    for (const file of attachmentMeta(message.payload)) {
+      const textual = /^text\//.test(file.mime_type) || /\.(txt|srt|md)$/i.test(file.name);
+      if (!textual || !file.attachment_id || file.size > 1_000_000) continue;
+      const result = await gmailRequest<{ data?: string }>(connection, `/messages/${encodeURIComponent(item.id)}/attachments/${encodeURIComponent(file.attachment_id)}`);
+      if (result.data) attachmentsText.push(Buffer.from(result.data, "base64url").toString("utf8"));
+    }
+    messages.push({
+      id: item.id,
+      subject: headerValue(message.payload?.headers, "Subject"),
+      sentAt: new Date(Number(message.internalDate || Date.now())).toISOString(),
+      body: gmailPartText(message.payload),
+      attachmentsText,
+    });
+  }
+  return { alias, messages };
+}

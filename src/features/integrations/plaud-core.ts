@@ -128,3 +128,15 @@ export function matchPlaudRecording(rec: PlaudRecording, payload: JsonRecord, or
   if (byVisit.length === 1) return { order_id: String(byVisit[0].id), order_number: String(byVisit[0].number || ""), reason: "measure_visit" };
   return null;
 }
+
+/** E-mail route: subject = title; a text attachment is the transcript, the body its summary. */
+export function plaudRecordingFromEmail(mail: { id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] }) {
+  const title = mail.subject.replace(/^\s*((fwd?|fw|re)\s*:\s*)+/i, "").trim() || "Запись Plaud";
+  const attachment = mail.attachmentsText.join("\n\n").trim();
+  return normalizePlaudPayload({
+    recording_id: `gmail-${mail.id}`,
+    title,
+    summary: attachment ? mail.body : "",
+    transcript: attachment || mail.body,
+  }, new Date(mail.sentAt));
+}

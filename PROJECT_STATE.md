@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — Plaud без платного Zapier: записи через почту (Claude, PR pending)
+
+- Owner: «Zapier платный, не хочу постоянно платить, когда можно иначе — за диктофон уже плачу».
+- Branch `claude/plaud-email-free-20261112`: recordings e-mailed to `info+plaud@rolan-pro.com` (Plaud app «Share → e-mail», or a free two-step Zapier zap Plaud → Gmail) are pulled from the connected Gmail (`fetchPlaudEmails`, query `newer_than:14d to:<alias>`, plain-text attachments = transcript) at most once a minute when a measurement window loads recordings, imported once (`gmail-<id>`) through the same matching. The webhook stays as an option. Control center hint shows the address.
+- Verification: full unit suite **1153/1153**, `tsc --noEmit` clean.
+
 ## 2026-11-12 — Диктофон Plaud: разговор с клиентом заполняет проект (Claude, PR pending)
 
 - Owner: pays for the Plaud AI dictaphone and wants it integrated — AI listens to the client conversation and fills the project.
