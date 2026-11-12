@@ -4599,3 +4599,196 @@ function measureVisitStartTicker(oid) {
     node.textContent = measureVisitDurationText(measureVisitMinutes(getOrder(oid)));
   }, 30000);
 }
+
+// ---------------------------------------------------------------------------
+// Plaud AI dictaphone (Owner, 2026-11-12): «диктофон с ИИ слушает разговор с
+// клиентом и заполняет проект». Plaud → Zapier → /api/webhooks/plaud; the
+// recordings appear in the measurement window, and one tap lets AI put the
+// client's wishes into the project notes and the dictated sizes into rooms.
+function plaudState() {
+  state._plaud = state._plaud || { byOrder: {}, unassigned: null, loading: {}, open: {} };
+  return state._plaud;
+}
+function plaudRefreshMeasure(oid) {
+  if (typeof document === 'undefined' || typeof render !== 'function') return;
+  if (state.modal && typeof renderManagerMeasureModal === 'function' && String(state.modal).includes('manager-measure-modal') && String(state.modal).includes(`data-measure-order-id="${oid}"`)) {
+    if (typeof preservePositionForNextRender === 'function') preservePositionForNextRender();
+    state.modal = renderManagerMeasureModal(oid);
+    render();
+  }
+}
+async function plaudLoad(oid, force = false) {
+  const s = plaudState();
+  if (typeof fetch !== 'function' || s.loading[oid] || (!force && s.byOrder[oid])) return;
+  s.loading[oid] = true;
+  try {
+    const get = async query => {
+      const response = await fetch('/api/v1/plaud/recordings?' + query, { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('plaud ' + response.status);
+      return (await response.json())?.data?.recordings || [];
+    };
+    const [own, unassigned] = await Promise.all([get('orderId=' + encodeURIComponent(oid)), get('unassigned=1')]);
+    s.byOrder[oid] = own;
+    s.unassigned = unassigned;
+  } catch (error) {
+    s.byOrder[oid] = s.byOrder[oid] || [];
+    s.failed = true;
+  } finally {
+    s.loading[oid] = false;
+    plaudRefreshMeasure(oid);
+  }
+}
+async function plaudPatch(body) {
+  const response = await fetch('/api/v1/plaud/recordings', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error('plaud ' + response.status);
+  return (await response.json())?.data?.recording;
+}
+function plaudRecordingDate(rec) {
+  const at = new Date(rec.recorded_at || rec.received_at);
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function plaudRecordingHtml(oid, rec) {
+  const minutes = rec.duration_sec ? ` · ${Math.max(1, Math.round(rec.duration_sec / 60))} мин` : '';
+  const applied = rec.applied_at ? '<span style="color:#15803d;font-weight:700"> · ✓ внесено в проект</span>' : '';
+  return `<div class="plaud-recording" data-plaud-id="${academyEsc(rec.id)}" style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-top:8px;background:#fff">
+    <div style="font-weight:700">${academyEsc(rec.title)}</div>
+    <div class="text-xs text-gray-500">${academyEsc(plaudRecordingDate(rec))}${minutes}${applied}</div>
+    ${rec.summary ? `<div class="text-sm mt-2" style="white-space:pre-wrap;max-height:180px;overflow:auto">${academyEsc(rec.summary)}</div>` : ''}
+    ${rec.transcript ? `<details class="mt-2"><summary class="text-xs" style="cursor:pointer">Полный текст разговора</summary><div class="text-xs mt-1" style="white-space:pre-wrap;max-height:260px;overflow:auto">${academyEsc(rec.transcript)}</div></details>` : ''}
+    <button type="button" class="btn-primary mt-2" data-plaud-fill style="min-height:48px;width:100%" onclick="plaudAiFill('${oid}','${academyEsc(rec.id)}')">✨ ${rec.applied_at ? 'Заполнить ещё раз' : 'Заполнить проект из разговора'}</button>
+  </div>`;
+}
+function plaudMeasureBlockHtml(o) {
+  if (!o) return '';
+  const s = plaudState();
+  const own = s.byOrder[o.id];
+  if (!own) {
+    if (typeof setTimeout === 'function') setTimeout(() => plaudLoad(o.id), 0);
+    return '';
+  }
+  const unassigned = (s.unassigned || []).slice(0, 5);
+  if (!own.length && !unassigned.length) return '';
+  const inbox = unassigned.length ? `<div class="text-xs font-bold text-slate-600 mt-3">Непривязанные записи — это разговор по этому проекту?</div>${unassigned.map(rec => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px dashed #cbd5e1;border-radius:10px;padding:8px;margin-top:6px">
+      <div><div class="text-sm font-semibold">${academyEsc(rec.title)}</div><div class="text-xs text-gray-500">${academyEsc(plaudRecordingDate(rec))}</div></div>
+      <button type="button" class="btn-ghost" data-plaud-link style="min-height:44px" onclick="plaudLinkHere('${o.id}','${academyEsc(rec.id)}')">Привязать сюда</button></div>`).join('')}` : '';
+  return `<details class="plaud-measure-block" ${s.open[o.id] ? 'open' : ''} ontoggle="plaudState().open['${o.id}']=this.open" style="margin-top:8px;border:1px solid #ddd6fe;background:#faf5ff;border-radius:12px;padding:8px 12px">
+    <summary style="cursor:pointer;font-weight:800;min-height:40px">🎙 Диктофон Plaud · ${own.length} ${own.length === 1 ? 'запись' : 'записей'}${own.some(rec => !rec.applied_at) ? ' <span style="color:#7c3aed">· новая — нажмите</span>' : ''}${unassigned.length ? ` · ${unassigned.length} без проекта` : ''}</summary>
+    ${own.map(rec => plaudRecordingHtml(o.id, rec)).join('')}
+    ${inbox}
+  </details>`;
+}
+async function plaudLinkHere(oid, id) {
+  try {
+    await plaudPatch({ id, orderId: oid });
+    await plaudLoad(oid, true);
+  } catch (error) {
+    if (typeof crmNotice === 'function') crmNotice('Не получилось привязать запись. Попробуйте ещё раз.');
+  }
+}
+/** Parses AI JSON into a clean, size-checked plan (pure — covered by tests). */
+function plaudParsePlan(text) {
+  let parsed = null;
+  try { parsed = JSON.parse(String(text || '').match(/\{[\s\S]+\}/)?.[0] || ''); } catch (error) { parsed = null; }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const str = (value, max = 300) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+  const inch = value => { const n = Number(value); return Number.isFinite(n) && n >= 4 && n <= 600 ? Math.round(n * 100) / 100 : null; };
+  const wishes = (Array.isArray(parsed.client_wishes) ? parsed.client_wishes : []).map(item => str(item, 200)).filter(Boolean).slice(0, 12);
+  const rooms = (Array.isArray(parsed.rooms) ? parsed.rooms : []).slice(0, 30).map(room => ({
+    name: str(room?.name, 80) || 'Комната',
+    windows: (Array.isArray(room?.windows) ? room.windows : []).slice(0, 60).map(w => ({
+      name: str(w?.name, 80),
+      width_in: inch(w?.width_in),
+      height_in: inch(w?.height_in),
+      qty: Math.min(50, Math.max(1, Math.round(Number(w?.qty) || 1))),
+      notes: str(w?.notes, 200),
+    })).filter(w => w.width_in && w.height_in),
+  })).filter(room => room.windows.length);
+  return { wishes, budget: str(parsed.budget, 120), timing: str(parsed.timing, 120), notes: str(parsed.notes, 600), rooms };
+}
+/** Applies the plan: wishes → project note + timeline, sizes → rooms (marked «сверить»). */
+function plaudApplyPlan(o, plan, recTitle = '') {
+  if (!o || !plan) return { windows: 0, rooms: 0 };
+  const parts = [];
+  if (plan.wishes.length) parts.push('Пожелания: ' + plan.wishes.join('; '));
+  if (plan.budget) parts.push('Бюджет: ' + plan.budget);
+  if (plan.timing) parts.push('Сроки: ' + plan.timing);
+  if (plan.notes) parts.push(plan.notes);
+  if (parts.length) {
+    const note = '🎙 Plaud: ' + parts.join(' · ');
+    o.notes = o.notes ? `${o.notes}\n${note}` : note;
+  }
+  o.measurements = o.measurements || { rooms: [] };
+  o.measurements.rooms = o.measurements.rooms || [];
+  let windows = 0;
+  let rooms = 0;
+  plan.rooms.forEach(planRoom => {
+    let room = o.measurements.rooms.find(r => String(r.name || '').trim().toLowerCase() === planRoom.name.toLowerCase());
+    if (!room) {
+      const defaultCatalogId = (typeof defaultCatalogIdForOrder === 'function' && defaultCatalogIdForOrder(o)) || null;
+      const scope = typeof managerActiveMeasureScope === 'function' ? managerActiveMeasureScope(o) : '';
+      room = { id: uid(), name: planRoom.name, windows: [], defaultCatalogId, defaultCatalogByScope: defaultCatalogId && scope ? { [scope]: defaultCatalogId } : {} };
+      o.measurements.rooms.push(room);
+      rooms += 1;
+    }
+    room.windows = room.windows || [];
+    planRoom.windows.forEach(w => {
+      const win = managerWindowDefaults(o, room, {});
+      if (w.name) win.name = w.name;
+      win.width = Math.round(inches_to_mm(w.width_in));
+      win.height = Math.round(inches_to_mm(w.height_in));
+      win.sizePlaceholder = { width: false, height: false };
+      win.qty = w.qty;
+      win.verificationStatus = 'UNVERIFIED';
+      win.internalNotes = ['Из диктофона Plaud — сверить размер', w.notes].filter(Boolean).join(' · ');
+      room.windows.push(win);
+      windows += 1;
+    });
+  });
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: new Date().toISOString(), key: 'plaud_applied', by: state.currentUserId, note: `Диктофон Plaud${recTitle ? ` «${recTitle}»` : ''}: ${windows} размеров, ${plan.wishes.length} пожеланий` });
+  if (windows && typeof invalidateProjectEstimate === 'function') invalidateProjectEstimate(o, 'Размеры из диктофона Plaud');
+  return { windows, rooms };
+}
+async function plaudAiFill(oid, id) {
+  const o = getOrder(oid);
+  const rec = (plaudState().byOrder[oid] || []).find(item => item.id === id);
+  if (!o || !rec) return;
+  const prompt = `Это запись разговора замерщика оконной плёнки с клиентом (диктофон Plaud). Извлеки ТОЛЬКО то, что прямо сказано, ничего не выдумывай.
+Верни СТРОГО JSON:
+  {
+  "client_wishes": ["жара в спальне", "приватность в ванной", ...],
+  "budget": "<если клиент назвал бюджет, иначе пусто>",
+  "timing": "<когда клиент хочет установку, иначе пусто>",
+  "notes": "<прочее важное для проекта коротко, иначе пусто>",
+  "rooms": [{ "name": "Спальня", "windows": [{ "name": "Окно 1", "width_in": 36, "height_in": 60, "qty": 1, "notes": "" }] }]
+  }
+Размеры переводи в дюймы (мм / 25.4, см / 2.54, футы × 12). Окно без обоих размеров не включай. Ответь на русском.
+
+Название записи: ${rec.title}
+Сводка Plaud:
+${rec.summary.slice(0, 6000)}
+
+Разговор:
+${rec.transcript.slice(0, 60000)}`;
+  if (typeof crmNotice === 'function') crmNotice('✨ AI читает разговор… 10–40 секунд');
+  try {
+    const plan = plaudParsePlan(await callClaude([{ role: 'user', content: prompt }], { model: 'claude-sonnet-4-6', maxTokens: 3000 }));
+    if (!plan) { if (typeof crmNotice === 'function') crmNotice('AI не смог разобрать разговор. Посмотрите сводку и внесите вручную.'); return; }
+    const sizes = plan.rooms.reduce((sum, room) => sum + room.windows.length, 0);
+    const lines = [
+      plan.wishes.length ? 'Пожелания: ' + plan.wishes.join('; ') : '',
+      plan.budget ? 'Бюджет: ' + plan.budget : '',
+      plan.timing ? 'Сроки: ' + plan.timing : '',
+      sizes ? `Размеры: ${sizes} окон в ${plan.rooms.length} помещениях (${plan.rooms.map(room => room.name).join(', ')})` : 'Размеров в разговоре нет',
+    ].filter(Boolean);
+    if (!lines.length || !confirm('Внести в проект?\n\n' + lines.join('\n'))) return;
+    const result = plaudApplyPlan(o, plan, rec.title);
+    save();
+    try { await plaudPatch({ id, applied: true }); rec.applied_at = new Date().toISOString(); } catch (error) {}
+    if (typeof crmNotice === 'function') crmNotice(`Готово: ${result.windows} размеров внесено — сверьте их на объекте.`);
+    if (typeof refreshManagerMeasureModal === 'function' && String(state.modal || '').includes('manager-measure-modal')) refreshManagerMeasureModal(oid);
+    else plaudRefreshMeasure(oid);
+  } catch (error) {
+    if (typeof crmNotice === 'function') crmNotice('AI сейчас недоступен. Сводка разговора сохранена — попробуйте позже.');
+  }
+}
