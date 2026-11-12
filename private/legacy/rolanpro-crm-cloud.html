@@ -18475,7 +18475,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
   if (newStatus === 'measurement_done') issues.push(...orderMeasurementCompletionIssues(o, { film: currentUser()?.role !== 'measurer' }));
   if (newStatus === 'proposal_sent') {
     issues.push(...orderMeasurementCompletionIssues(o));
-    if (typeof projectFilmOnSiteWindows === 'function' && projectFilmOnSiteWindows(o).some(win => !windowCatalog(win))) issues.push('отметьте 2–3 плёнки, из которых клиент выберет на месте (окно замера)');
+    if (typeof projectFilmOnSiteProposalIssue === 'function' && projectFilmOnSiteProposalIssue(o)) issues.push('отметьте 2–3 плёнки, из которых клиент выберет на месте (окно замера)');
     if (!projectEstimateIsApproved(o)) issues.push('подтвердите расчёт проекта');
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сформируйте и опубликуйте КП');
   }
@@ -38555,6 +38555,8 @@ function premiumCanonicalSnapshot(prop) {
   };
 }
 async function premiumPublishCanonicalProposal(prop, chosenClientId = '') {
+  const onSiteIssue = typeof projectFilmOnSiteProposalIssue === 'function' ? projectFilmOnSiteProposalIssue(getOrder(prop?.orderId)) : '';
+  if (onSiteIssue) throw new Error(onSiteIssue);
   const snapshot = premiumCanonicalSnapshot(prop);
   if (chosenClientId) snapshot.client = { ...(snapshot.client || {}), client_id: chosenClientId };
   const response = await fetch('/api/v1/legacy-crm/proposals/publish', {

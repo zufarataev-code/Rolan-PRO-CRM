@@ -119,7 +119,34 @@ test("the assigned measurer picks films and variants without seeing prices", () 
 test("measurement, KP and the window cards accept «на месте»", () => {
   assert.match(legacy, /!windowCatalog\(win\) && !win\.filmOnSite\)\) issues\.push/);
   assert.match(legacy, /отметьте 2–3 плёнки, из которых клиент выберет на месте/);
+  assert.match(legacy, /const onSiteIssue = typeof projectFilmOnSiteProposalIssue === 'function'[\s\S]{0,120}throw new Error\(onSiteIssue\)/, "Codex #508: the publish path itself refuses");
   assert.match(legacy, /projectWindowExtraFilmOptionsHtml\(o, win\)/);
   assert.match(legacy, /windowFilmQuickSelectHtml\(o, r, w\)/);
   assert.match(legacy, /projectFilmOnSiteVariantsHtml\(o\)/);
+});
+
+test("Codex #508: recommendation moves only on-site windows; measurer never re-approves; no unrelated service", () => {
+  const { ctx, order } = makeContext("measurer");
+  const [w1, w2] = order.measurements.rooms[0].windows;
+  ctx.projectSetWindowFilm("o1", "r1", "w2", "__onsite");
+  order.filmVariants = ["bs", "mp50"];
+  w2.catalogId = "bs";
+  const invalidated: string[] = [];
+  ctx.invalidateProjectEstimate = (_o: any, note: string) => invalidated.push(note);
+  ctx.projectFilmVariantMakeRecommended("o1", "mp50");
+  assert.equal(w1.catalogId, "bs", "the fixed Black Silver window keeps its film");
+  assert.equal(w2.catalogId, "mp50");
+  assert.equal(ctx.reapproved.length, 0);
+  assert.match(invalidated.at(-1) || "", /Рекомендуемая плёнка/);
+  assert.equal(ctx.projectFilmOnSiteProposalIssue(order), "");
+  order.filmVariants = ["mp50"];
+  assert.match(ctx.projectFilmOnSiteProposalIssue(order), /2–3 плёнки/);
+  // A decorative film no decorative service sells is neither offered nor applied.
+  ctx.db.settings.catalog.push({ id: "frost", category: "decorative", brand: "X", model: "Frost" });
+  const alerts: string[] = [];
+  ctx.alert = (m: string) => alerts.push(m);
+  assert.equal(ctx.projectWindowOtherDirectionFilms(order, w1).some((f: any) => f.id === "frost"), false);
+  assert.equal(ctx.projectSetWindowFilm("o1", "r1", "w1", "frost"), false);
+  assert.equal(w1.measureScope, "solar_film");
+  assert.equal(alerts.length, 1);
 });

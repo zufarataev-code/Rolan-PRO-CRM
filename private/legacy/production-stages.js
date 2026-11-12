@@ -4384,7 +4384,8 @@ function projectFilmVariantMakeRecommended(oid, catalogId) {
   let moved = 0;
   projectCardEdit(() => {
     o.filmVariants = [catalogId, ...current.filter(id => id !== catalogId)];
-    projectFilmVariantWindows(o).forEach(win => {
+    // Codex review #508: only the windows that take the variants change.
+    projectFilmVariantTargetWindows(o).forEach(win => {
       if (win.catalogId !== previous) return;
       const offering = serviceOffering(win.offeringId);
       if (offering && !serviceOfferingAllowedFilmIds(offering).includes(catalogId)) return;
@@ -4393,7 +4394,11 @@ function projectFilmVariantMakeRecommended(oid, catalogId) {
       moved++;
     });
   });
-  if (moved && wasApproved) projectReapproveEstimate(o, `Рекомендуемая плёнка: ${catalogLabel(film)}`);
+  // Codex review #508: a field worker's change goes back to the manager, never re-approved under them.
+  if (moved && wasApproved) {
+    if (orderUserCanSeeMoney(o, currentUser())) projectReapproveEstimate(o, `Рекомендуемая плёнка: ${catalogLabel(film)}`);
+    else invalidateProjectEstimate(o, `Рекомендуемая плёнка: ${catalogLabel(film)}`);
+  }
   save();
   if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
   else if (typeof refreshManagerMeasureModal === 'function' && String(state.modal || '').includes('manager-measure-modal')) refreshManagerMeasureModal(oid);
@@ -4828,7 +4833,7 @@ function projectUserCanPickFilm(o, user = currentUser()) {
 /** Films outside the window's own service: shown as «другое направление — окно перейдёт». */
 function projectWindowOtherDirectionFilms(o, win) {
   const scope = win.measureScope || o.serviceType || '';
-  return (db.settings.catalog || []).filter(film => film && !film.archived && measureScopeByCatalog(film) !== measureScopeInfo(scope).key)
+  return (db.settings.catalog || []).filter(film => film && !film.archived && measureScopeByCatalog(film) !== measureScopeInfo(scope).key && projectOfferingForFilm(measureScopeByCatalog(film), film))
     .sort((a, b) => String(catalogShortLabel(a)).localeCompare(String(catalogShortLabel(b))));
 }
 function projectWindowExtraFilmOptionsHtml(o, win) {
@@ -4846,7 +4851,8 @@ function windowFilmOnSiteNoteHtml(o, win) {
 /** Measurer's select (no prices): film of any direction or «выберет на месте». */
 function windowFilmQuickSelectHtml(o, room, win) {
   if (!projectUserCanPickFilm(o)) return '';
-  const films = (db.settings.catalog || []).filter(film => film && !film.archived);
+  const own = measureScopeInfo(win.measureScope || o.serviceType).key;
+  const films = (db.settings.catalog || []).filter(film => film && !film.archived && (measureScopeByCatalog(film) === own || projectOfferingForFilm(measureScopeByCatalog(film), film)));
   const groups = {};
   films.forEach(film => { const key = measureScopeInfo(measureScopeByCatalog(film)).short || 'Плёнка'; (groups[key] = groups[key] || []).push(film); });
   return `<label class="manager-window-field" data-window-film-quick>Плёнка этого окна<select onchange="projectSetWindowFilm('${o.id}','${room.id}','${win.id}',this.value,true)">
@@ -4858,7 +4864,8 @@ function windowFilmQuickSelectHtml(o, room, win) {
 /** Picks a sized service of the film's direction that sells this film (or the first one). */
 function projectOfferingForFilm(scopeKey, film) {
   const sized = serviceOfferingsFor(serviceOfferingDirection(scopeKey)).filter(item => serviceOfferingNeedsSizes(item) && !serviceOfferingNoFilm(item));
-  return sized.find(item => serviceOfferingAllowedFilmIds(item).includes(film.id)) || sized[0] || null;
+  // Codex review #508: never an unrelated service — no matching service, no move.
+  return sized.find(item => serviceOfferingAllowedFilmIds(item).includes(film.id)) || null;
 }
 /**
  * Sets one window's film. Returns true when handled here: «на месте», or a film
@@ -4887,6 +4894,7 @@ function projectSetWindowFilmSpecial(o, room, win, value) {
     return null; // the window's own service: the usual path
   }
   win.filmOnSite = false;
+  if (scope !== currentScope && !projectOfferingForFilm(scope, film)) return { rejected: true };
   if (scope !== currentScope) {
     win.measureScope = scope;
     win.winType = normalizeMeasureWindowTypeForScope(scope, win.winType);
@@ -4909,6 +4917,10 @@ function projectSetWindowFilm(oid, rid, wid, value, inMeasurement = false) {
   const win = room?.windows?.find(item => item.id === wid);
   if (!o || !win || !value || !projectUserCanPickFilm(o)) return false;
   const result = projectSetWindowFilmSpecial(o, room, win, value);
+  if (result?.rejected) {
+    alert('Эта плёнка не привязана ни к одной услуге своего направления. Владелец может привязать её в «Услуги и цены».');
+    return false;
+  }
   if (!result) {
     // Same-direction film for a window without a matching service: the measurer may still set it.
     const film = getCatalogItem(value);
@@ -4977,4 +4989,10 @@ function openFilmOnSiteChooser(oid) {
     <button type="button" class="btn-ghost mt-3" style="min-height:48px;width:100%" onclick="closeModal()">Закрыть</button>
   </div></div>`;
   render();
+}
+
+/** Codex review #508: a KP for an on-site choice is published only with 2–3 films to choose from. */
+function projectFilmOnSiteProposalIssue(o) {
+  if (!o || !projectHasFilmOnSite(o) || projectFilmVariants(o).length >= 2) return '';
+  return 'Клиент выбирает плёнку на месте — отметьте 2–3 плёнки, которые везём (окно замера), и сформируйте КП заново.';
 }
