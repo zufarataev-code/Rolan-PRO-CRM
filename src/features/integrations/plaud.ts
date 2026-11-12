@@ -141,7 +141,11 @@ export async function syncPlaudEmails(now = Date.now()) {
   if (now - lastEmailSync < 60_000) return { skipped: true, imported: 0 };
   lastEmailSync = now;
   try {
-    const { messages } = await fetchPlaudEmails();
+    const known = new Set((await prisma.activityLog.findMany({
+      where: { action_key: PLAUD_ACTION, created_at: { gte: new Date(now - 15 * 864e5) }, metadata: { path: ["recording_key"], string_starts_with: "gmail-" } },
+      select: { metadata: true },
+    })).map(row => String((row.metadata as JsonRecord)?.recording_key)));
+    const { messages } = await fetchPlaudEmails(id => known.has(`gmail-${id}`));
     let imported = 0;
     for (const mail of messages) {
       if (!mail.body.trim() && !mail.attachmentsText.length) continue;

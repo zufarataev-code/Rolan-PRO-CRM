@@ -136,7 +136,7 @@ export function plaudRecordingFromEmail(mail: { id: string; subject: string; sen
   return normalizePlaudPayload({
     recording_id: `gmail-${mail.id}`,
     title,
-    summary: attachment ? mail.body : "",
+    summary: attachment && mail.body.trim() !== attachment ? mail.body : "",
     transcript: attachment || mail.body,
   }, new Date(mail.sentAt));
 }

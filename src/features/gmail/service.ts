@@ -429,30 +429,52 @@ export function plaudMailboxAlias(email: string) {
   return local && domain ? `${local.split("+")[0]}+plaud@${domain}` : "";
 }
 
-export async function fetchPlaudEmails(maxResults = 20) {
+type PlaudEmail = { id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] };
+
+/** Text attachments, whether Gmail stores them by attachmentId or inline in body.data (Codex #507). */
+export function plaudTextParts(part: GmailPart | undefined): Array<{ attachmentId: string | null; data: string | null }> {
+  if (!part) return [];
+  const name = part.filename || "";
+  const textual = name && (/^text\//.test(part.mimeType || "") || /\.(txt|srt|md)$/i.test(name)) && Number(part.body?.size || 0) <= 1_000_000;
+  const own = textual ? [{ attachmentId: part.body?.attachmentId || null, data: part.body?.data || null }] : [];
+  return own.concat((part.parts || []).flatMap(plaudTextParts));
+}
+
+/**
+ * Pages through every matching message (Codex #507: nothing is lost past page one);
+ * `isKnown` skips messages already imported so a poll does not re-download them.
+ */
+export async function fetchPlaudEmails(isKnown: (gmailId: string) => Promise<boolean> | boolean = () => false) {
   const connection = await primaryGmailConnection();
-  if (!connection?.is_active) return { alias: "", messages: [] as Array<{ id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] }> };
+  if (!connection?.is_active) return { alias: "", messages: [] as PlaudEmail[] };
   const alias = plaudMailboxAlias(connection.email_address);
-  const query = `newer_than:14d to:${alias}`;
-  const list = await gmailRequest<{ messages?: Array<{ id?: string }> }>(connection, `/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`);
-  const messages: Array<{ id: string; subject: string; sentAt: string; body: string; attachmentsText: string[] }> = [];
-  for (const item of list.messages || []) {
-    if (!item.id) continue;
-    const message = await gmailRequest<GmailMessageResource>(connection, `/messages/${encodeURIComponent(item.id)}?format=full`);
-    const attachmentsText: string[] = [];
-    for (const file of attachmentMeta(message.payload)) {
-      const textual = /^text\//.test(file.mime_type) || /\.(txt|srt|md)$/i.test(file.name);
-      if (!textual || !file.attachment_id || file.size > 1_000_000) continue;
-      const result = await gmailRequest<{ data?: string }>(connection, `/messages/${encodeURIComponent(item.id)}/attachments/${encodeURIComponent(file.attachment_id)}`);
-      if (result.data) attachmentsText.push(Buffer.from(result.data, "base64url").toString("utf8"));
+  const query = encodeURIComponent(`newer_than:14d to:${alias}`);
+  const messages: PlaudEmail[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 10; page += 1) {
+    const list = await gmailRequest<{ messages?: Array<{ id?: string }>; nextPageToken?: string }>(
+      connection, `/messages?maxResults=50&q=${query}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
+    for (const item of list.messages || []) {
+      if (!item.id || await isKnown(item.id)) continue;
+      const message = await gmailRequest<GmailMessageResource>(connection, `/messages/${encodeURIComponent(item.id)}?format=full`);
+      const attachmentsText: string[] = [];
+      for (const part of plaudTextParts(message.payload)) {
+        let data = part.data;
+        if (!data && part.attachmentId) {
+          data = (await gmailRequest<{ data?: string }>(connection, `/messages/${encodeURIComponent(item.id)}/attachments/${encodeURIComponent(part.attachmentId)}`)).data || null;
+        }
+        if (data) attachmentsText.push(decodeBase64Url(data));
+      }
+      messages.push({
+        id: item.id,
+        subject: headerValue(message.payload?.headers, "Subject"),
+        sentAt: new Date(Number(message.internalDate || Date.now())).toISOString(),
+        body: gmailPartText(message.payload),
+        attachmentsText,
+      });
     }
-    messages.push({
-      id: item.id,
-      subject: headerValue(message.payload?.headers, "Subject"),
-      sentAt: new Date(Number(message.internalDate || Date.now())).toISOString(),
-      body: gmailPartText(message.payload),
-      attachmentsText,
-    });
+    if (!list.nextPageToken) break;
+    pageToken = list.nextPageToken;
   }
   return { alias, messages };
 }

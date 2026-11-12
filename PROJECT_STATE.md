@@ -6,7 +6,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 
 - Owner: «Zapier платный, не хочу постоянно платить, когда можно иначе — за диктофон уже плачу».
 - Branch `claude/plaud-email-free-20261112`: recordings e-mailed to `info+plaud@rolan-pro.com` (Plaud app «Share → e-mail», or a free two-step Zapier zap Plaud → Gmail) are pulled from the connected Gmail (`fetchPlaudEmails`, query `newer_than:14d to:<alias>`, plain-text attachments = transcript) at most once a minute when a measurement window loads recordings, imported once (`gmail-<id>`) through the same matching. The webhook stays as an option. Control center hint shows the address.
-- Verification: full unit suite **1153/1153**, `tsc --noEmit` clean.
+- Codex review #507: pages through every matching message (skipping already-imported ids) and reads text attachments both by attachmentId and inline `body.data`.
+- Verification: full unit suite **1154/1154**, `tsc --noEmit` clean.
 
 ## 2026-11-12 — Диктофон Plaud: разговор с клиентом заполняет проект (Claude, PR pending)
 
