@@ -23,7 +23,8 @@ test('one measurement window for every role: next window, save and back, the mea
   assert.match(slice(html, 'function openMeasurerV25ForOrder(oid) {', '\n}\n'), /openManagerMeasureModal\(oid\);/);
   // Owner, 2026-10-24: one button in the footer, not five.
   const footer = slice(html, 'function managerMeasureFooterActionHtml(o) {', '\n}\n');
-  assert.match(footer, /'✓ Сдать замер' : '✓ Замер готов — рассчитать'/);
+  // 2026-11-12: the measurer's hand-in is also «Закончил» (stamps the visit end).
+  assert.match(footer, /'✓ Закончил — сдать замер' : '✓ Замер готов — рассчитать'/);
   assert.match(footer, /onclick="managerMeasureSaveAndExit\('\$\{oid\}'\)">Готово<\/button>/);
   assert.match(html, /\$\{managerMeasureFooterActionHtml\(o\)\}/);
   assert.doesNotMatch(html, />Сохранить и назад<\/button>|>Сохранить и следующее окно<\/button>/);

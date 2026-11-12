@@ -4515,3 +4515,84 @@ function projectFilmVariantsEnsureWindows(o) {
   });
   return changed > 0;
 }
+
+// ---------- ВЫЕЗД ЗАМЕРЩИКА: «НАЧАЛ / ЗАКОНЧИЛ» (Owner, 2026-11-12) ----------
+// «Когда замерщик приезжает на объект, он жмёт „Начал“, и система считает время,
+// как в TintWiz; закончил — жмёт „Закончил“». The visit is stamped on the order,
+// the manager gets a notice, and the duration lands in the project timeline.
+function measureVisit(o) {
+  return o?.measureVisit && typeof o.measureVisit === 'object' ? o.measureVisit : {};
+}
+function measureVisitMinutes(o, now = Date.now()) {
+  const visit = measureVisit(o);
+  if (!visit.startedAt) return 0;
+  const end = visit.finishedAt ? new Date(visit.finishedAt).getTime() : now;
+  return Math.max(0, Math.round((end - new Date(visit.startedAt).getTime()) / 60000));
+}
+function measureVisitDurationText(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h ? `${h} ч ${m} мин` : `${m} мин`;
+}
+function measureVisitCanAct(o) {
+  const u = currentUser();
+  return Boolean(o && u && o.status === 'measurement_scheduled' && (u.role === 'owner' || u.role === 'manager' || o.measurerId === u.id));
+}
+function measureVisitStart(oid) {
+  const o = getOrder(oid);
+  if (!measureVisitCanAct(o) || measureVisit(o).startedAt) return;
+  const at = new Date().toISOString();
+  o.measureVisit = { startedAt: at, startedBy: state.currentUserId, finishedAt: null, minutes: null };
+  if (currentUser()?.role === 'measurer' && o.measurerId === state.currentUserId && !o.measurementAcceptedAt) o.measurementAcceptedAt = at;
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at, key: 'measure_visit_started', by: state.currentUserId, note: `Замерщик на объекте: ${currentUser()?.name || ''}`.trim() });
+  if (o.managerId && o.managerId !== state.currentUserId && typeof pushInAppNotification === 'function') {
+    pushInAppNotification(o.managerId, `${o.number} · замер начался`, `${currentUser()?.name || 'Замерщик'} на объекте`, `#/order/${o.id}`);
+  }
+  save();
+  measureVisitRefresh(oid);
+}
+/** Stamped when the measurement is handed in («Сдать замер» / «Замер готов»). */
+function measureVisitFinish(o) {
+  const visit = measureVisit(o);
+  if (!visit.startedAt || visit.finishedAt) return;
+  const at = new Date().toISOString();
+  o.measureVisit = { ...visit, finishedAt: at, finishedBy: state.currentUserId, minutes: measureVisitMinutes({ measureVisit: { startedAt: visit.startedAt, finishedAt: at } }) };
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at, key: 'measure_visit_finished', by: state.currentUserId, note: `Замер закончен · на объекте ${measureVisitDurationText(o.measureVisit.minutes)}` });
+}
+function measureVisitBarHtml(o) {
+  const visit = measureVisit(o);
+  if (!visit.startedAt) {
+    if (!measureVisitCanAct(o)) return '';
+    return `<button type="button" class="btn-primary measure-visit-start" data-measure-visit="start" style="min-height:56px;flex:1 1 100%;font-size:17px;background:#16a34a !important;border-color:#16a34a !important" onclick="measureVisitStart('${o.id}')">▶ Я на объекте — начал замер</button>`;
+  }
+  const started = new Date(visit.startedAt);
+  const time = started.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const done = Boolean(visit.finishedAt);
+  return `<div class="measure-visit-chip" data-measure-visit="${done ? 'done' : 'running'}" data-visit-start="${academyEsc(visit.startedAt)}" style="flex:1 1 100%;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid ${done ? '#bbf7d0' : '#fde68a'};background:${done ? '#f0fdf4' : '#fffbeb'};font-weight:700">
+    <span>${done ? '✓ Замер закончен' : '⏱ На объекте'} с ${academyEsc(time)}</span><span data-visit-elapsed>${measureVisitDurationText(measureVisitMinutes(o))}</span></div>`;
+}
+function measureVisitRefresh(oid) {
+  if (typeof document === 'undefined') return;
+  const o = getOrder(oid);
+  if (state.modal && typeof renderManagerMeasureModal === 'function' && String(state.modal).includes('manager-measure-modal')) {
+    if (typeof preservePositionForNextRender === 'function') preservePositionForNextRender();
+    state.modal = renderManagerMeasureModal(oid);
+    render();
+  } else render();
+  measureVisitStartTicker(oid);
+}
+/** Keeps the «На объекте … мин» chip live while the measurement window is open. */
+function measureVisitStartTicker(oid) {
+  if (typeof document === 'undefined') return;
+  const o = getOrder(oid);
+  if (state._measureVisitTicker) clearInterval(state._measureVisitTicker);
+  state._measureVisitTicker = null;
+  if (!measureVisit(o).startedAt || measureVisit(o).finishedAt) return;
+  state._measureVisitTicker = setInterval(() => {
+    const node = document.querySelector('[data-measure-visit="running"] [data-visit-elapsed]');
+    if (!node) { clearInterval(state._measureVisitTicker); state._measureVisitTicker = null; return; }
+    node.textContent = measureVisitDurationText(measureVisitMinutes(getOrder(oid)));
+  }, 30000);
+}
