@@ -334,6 +334,49 @@ function buildCalculatorItemDescription(
   };
 }
 
+/**
+ * Alternatives (dynamic_fields.choice_group, e.g. film variants): exactly one
+ * line per group stays selected. The line the client just picked wins; if the
+ * client unticked the last one, the recommended (first) line comes back.
+ */
+async function enforceProposalChoiceGroups(
+  tx: ProposalDbClient,
+  proposalId: string,
+  requested: Array<{ proposal_item_id: string; client_selected: boolean }>,
+) {
+  const items = await tx.proposalItem.findMany({
+    where: { proposal_id: proposalId, is_optional: true },
+    select: { proposal_item_id: true, client_selected: true, dynamic_fields: true, sort_order: true, title_en: true },
+    orderBy: { sort_order: "asc" },
+  });
+  const groups = new Map<string, typeof items>();
+  for (const item of items) {
+    const fields = item.dynamic_fields as Record<string, unknown> | null;
+    const group = fields && typeof fields.choice_group === "string" ? fields.choice_group : "";
+    if (!group) continue;
+    groups.set(group, [...(groups.get(group) ?? []), item]);
+  }
+  const picked = new Set(requested.filter((item) => item.client_selected).map((item) => item.proposal_item_id));
+  const chosenTitles: string[] = [];
+  for (const members of groups.values()) {
+    const keep =
+      members.find((item) => picked.has(item.proposal_item_id)) ??
+      members.find((item) => item.client_selected) ??
+      members[0];
+    chosenTitles.push(keep.title_en);
+    for (const item of members) {
+      const selected = item.proposal_item_id === keep.proposal_item_id;
+      if (item.client_selected !== selected) {
+        await tx.proposalItem.update({
+          where: { proposal_item_id: item.proposal_item_id },
+          data: { client_selected: selected, selection_updated_at: new Date() },
+        });
+      }
+    }
+  }
+  return chosenTitles;
+}
+
 async function recalculateProposalTotals(tx: ProposalDbClient, proposalId: string) {
   const items = await tx.proposalItem.findMany({
     where: {
@@ -1847,6 +1890,7 @@ export async function updatePublicProposalSelections(
         },
       });
     }
+    const chosenAlternatives = await enforceProposalChoiceGroups(tx, proposal.proposal_id, input.items);
 
     await tx.proposal.update({
       where: {
@@ -1891,7 +1935,9 @@ export async function updatePublicProposalSelections(
       proposalId: proposal.proposal_id,
       typeKey: "proposal.client_updated",
       title: "Client updated proposal",
-      message: `Клиент обновил выбор услуг по proposal ${proposal.title}.`,
+      message: chosenAlternatives.length
+        ? `Клиент обновил выбор по proposal ${proposal.title}: ${chosenAlternatives.join("; ")}. В CRM нажмите «Забрать выбор клиента».`
+        : `Клиент обновил выбор услуг по proposal ${proposal.title}.`,
     });
   });
 
