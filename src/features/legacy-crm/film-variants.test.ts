@@ -131,3 +131,13 @@ test("the manager can make another variant the recommended one before the client
   context.projectFilmVariantMakeRecommended("o1", "mp20");
   assert.equal(order.filmVariants[0], "mp50", "locked once the client has chosen");
 });
+
+test("the cashier lets the manager mark 2–3 films the client will choose from", () => {
+  assert.match(legacy, /data-cashier-client-choice/);
+  assert.match(legacy, /<span class="rp-cashier-title">Клиент выберет<\/span>/);
+  assert.match(legacy, /const canCommit = c\.step === 'addons' && !!offering && \(!c\.clientChoice \|\| c\.variantIds\.length >= 2\);/);
+  assert.match(legacy, /if \(variantIds\.length >= 2\) \{ state\._newOrderFilmVariants = variantIds;/);
+  assert.match(legacy, /\(state\._newOrderFilmVariants \|\| \[\]\)\.length >= 2 \? \{ filmVariants: \[\.\.\.state\._newOrderFilmVariants\], filmChoicePending: true \}/);
+  assert.match(legacy, /if \(variantIds\.length >= 2\) \{ o\.filmVariants = variantIds; o\.filmChoicePending = true;/);
+  assert.match(stages, /projectFilmVariantsEnsureWindows\(o\)\) save\(\);/);
+});

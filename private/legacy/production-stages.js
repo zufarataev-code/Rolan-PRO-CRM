@@ -1336,6 +1336,7 @@ function openProposalWizard(oid, step = 'compose') {
   const o = getOrder(oid);
   if (!o) return;
   if (!orderUserCanViewProposal(o)) { alert('КП доступно только владельцу и назначенному менеджеру'); return; }
+  if (typeof projectFilmVariantsEnsureWindows === 'function' && projectFilmVariantsEnsureWindows(o)) save();
   const prop = getPremiumProposalByOrder(oid);
   const ready = projectEstimateIsApproved(o) && prop && prop.publishedAt;
   const current = ready ? step : 'compose';
@@ -4496,4 +4497,21 @@ function orderFilmChoiceBadge(o) {
   if (projectFilmChoiceOpen(o)) return ' <span class="status-badge" data-film-choice-badge style="background:#fef3c7;color:#92400e">🎨 Клиент выбирает плёнку</span>';
   if (o.filmChoicePending && !projectFilmVariants(o).length && !measureAllWindows(o).some(({ win }) => windowCatalog(win))) return ' <span class="status-badge" data-film-choice-badge style="background:#e0f2fe;color:#075985">📐 Плёнку выберет замерщик</span>';
   return '';
+}
+
+/** Variants chosen at the cashier: windows measured without a film take the recommended one. */
+function projectFilmVariantsEnsureWindows(o) {
+  const variants = projectFilmVariants(o);
+  if (variants.length < 2 || o.filmVariantChosenAt || !orderUserCanSeeMoney(o, currentUser())) return false;
+  const recommended = getCatalogItem(variants[0]);
+  let changed = 0;
+  projectFilmVariantWindows(o).forEach(win => {
+    if (windowCatalog(win)) return;
+    const offering = serviceOffering(win.offeringId);
+    if (offering && !serviceOfferingAllowedFilmIds(offering).includes(recommended.id)) return;
+    win.catalogId = recommended.id;
+    win.filmType = catalogLabel(recommended);
+    changed++;
+  });
+  return changed > 0;
 }

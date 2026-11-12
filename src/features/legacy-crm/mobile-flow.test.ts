@@ -30,7 +30,8 @@ test('on a phone the cashier steps are one row and the cashier keeps its own lay
 test('film models and add-ons share one responsive final grid without a hidden material step', () => {
   assert.match(html, /const SERVICE_CASHIER_STEPS = \['direction', 'offering', 'addons'\];/);
   assert.doesNotMatch(html, /c\.step === 'material'/);
-  assert.match(html, /rp-cashier-grid compact">\$\{films\.map\(filmCard\)\.join\(''\)\}\$\{unknownFilmCard\}\$\{addons\.map\(addonCard\)\.join\(''\)\}/);
+  // 2026-11-12: «Уточнить на замере» and «Клиент выберет» lead the same single grid.
+  assert.match(html, /rp-cashier-grid compact">\$\{unknownFilmCard\}\$\{clientChoiceCard\}\$\{films\.map\(filmCard\)\.join\(''\)\}\$\{addons\.map\(addonCard\)\.join\(''\)\}/);
   assert.match(html, /все варианты находятся рядом, без отдельного скрытого шага/);
 });
 
