@@ -4570,6 +4570,9 @@ function measureVisitBarHtml(o) {
   const started = new Date(visit.startedAt);
   const time = started.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   const done = Boolean(visit.finishedAt);
+  // Codex review #505: a visit left open (measurer drove away without «Закончил») is flagged.
+  const forgotten = !done && measureVisitMinutes(o) >= 180;
+  if (forgotten) return `<div class="measure-visit-chip" data-measure-visit="running" data-visit-forgotten style="flex:1 1 100%;padding:8px 12px;border:1px solid #fecaca;background:#fef2f2;color:#991b1b;font-weight:700">⚠ Замер открыт с ${academyEsc(time)} (<span data-visit-elapsed>${measureVisitDurationText(measureVisitMinutes(o))}</span>) — если уехали, нажмите «Закончил»</div>`;
   return `<div class="measure-visit-chip" data-measure-visit="${done ? 'done' : 'running'}" data-visit-start="${academyEsc(visit.startedAt)}" style="flex:1 1 100%;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid ${done ? '#bbf7d0' : '#fde68a'};background:${done ? '#f0fdf4' : '#fffbeb'};font-weight:700">
     <span>${done ? '✓ Замер закончен' : '⏱ На объекте'} с ${academyEsc(time)}</span><span data-visit-elapsed>${measureVisitDurationText(measureVisitMinutes(o))}</span></div>`;
 }

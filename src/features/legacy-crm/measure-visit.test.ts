@@ -61,3 +61,9 @@ test("the visit buttons sit in the measurement footer and in the measurer's card
   assert.match(legacy, /measureVisitStartTicker\(oid\)/);
   assert.match(stages, /▶ Я на объекте — начал замер/);
 });
+
+test("a visit left open for 3+ hours is flagged to the measurer", () => {
+  const order: any = { id: "o1", status: "measurement_scheduled", measurerId: "m1", timeline: [], measureVisit: { startedAt: new Date(Date.now() - 200 * 60000).toISOString() } };
+  const ctx = context({ id: "m1", role: "measurer" }, order);
+  assert.match(ctx.measureVisitBarHtml(order), /если уехали, нажмите «Закончил»/);
+});
