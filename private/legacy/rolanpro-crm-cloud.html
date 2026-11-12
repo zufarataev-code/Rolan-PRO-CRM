@@ -18432,7 +18432,8 @@ function orderMeasurementCompletionIssues(o, { film = true } = {}) {
   if (windows.some(({ win }) => windowActualAreaSqft(win) <= 0)) issues.push('заполните размеры и количество для всех окон');
   const typical = windows.filter(({ win }) => !windowSizeEntered(win));
   if (typical.length) issues.push(`внесите ширину и высоту: ${typical.slice(0, 4).map(({ room, win }) => `${room.name || 'Помещение'} · ${win.name || 'Окно'}`).join(', ')}${typical.length > 4 ? ` и ещё ${typical.length - 4}` : ''}`);
-  if (film && windows.some(({ win }) => !windowCatalog(win))) issues.push('выберите плёнку со склада для каждого окна');
+  // Owner, 2026-11-12: «клиент выберет на месте» — such windows wait for the choice, not for a film.
+  if (film && windows.some(({ win }) => !windowCatalog(win) && !win.filmOnSite)) issues.push('выберите плёнку со склада для каждого окна (или «Клиент выберет на месте»)');
   return issues;
 }
 
@@ -18474,6 +18475,7 @@ function orderWorkflowTransitionIssues(o, newStatus) {
   if (newStatus === 'measurement_done') issues.push(...orderMeasurementCompletionIssues(o, { film: currentUser()?.role !== 'measurer' }));
   if (newStatus === 'proposal_sent') {
     issues.push(...orderMeasurementCompletionIssues(o));
+    if (typeof projectFilmOnSiteWindows === 'function' && projectFilmOnSiteWindows(o).some(win => !windowCatalog(win))) issues.push('отметьте 2–3 плёнки, из которых клиент выберет на месте (окно замера)');
     if (!projectEstimateIsApproved(o)) issues.push('подтвердите расчёт проекта');
     if (!publishedPremiumProposalForOrder(o.id)) issues.push('сформируйте и опубликуйте КП');
   }
@@ -27930,7 +27932,7 @@ function projectWindowSolutionHtml(o, room, win, inMeasurement = false) {
   // that could not be finished (Owner's user test, 2026-10-23). The owner picks
   // a film of the direction right here; it is linked to the service at once.
   const linkable = currentUser()?.role === 'owner' && win.offeringId ? projectWindowLinkableFilms(o, win, films) : [];
-  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId && serviceOfferingNoFilm(serviceOffering(win.offeringId)) ? '<div class="order-clean-note">Без плёнки · работа по площади</div>' : win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${(() => { const opt = film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogShortLabel(film))}${warehouseCatalogStockStats(film.id).availableSqft > 0 ? ` · ${warehouseCatalogStockStats(film.id).availableSqft.toFixed(0)} sq ft` : ''}</option>`; const stock = films.filter(film => warehouseCatalogStockStats(film.id).availableSqft > 0); const order = films.filter(film => !(warehouseCatalogStockStats(film.id).availableSqft > 0)); return `${stock.length ? `<optgroup label="На складе">${stock.map(opt).join('')}</optgroup>` : ''}${order.length ? `<optgroup label="Нет на складе — под заказ">${order.map(opt).join('')}</optgroup>` : ''}`; })()}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>` : ''}${orderUserCanManage(currentUser()) ? `<option value="__manual">➕ Нет в списке — добавить плёнку и заказать…</option>` : ''}</select></label>${win.catalogId && getCatalogItem(win.catalogId)?.pendingPurchase && warehouseCatalogStockStats(win.catalogId).availableSqft <= 0 ? `<div class="text-xs" style="color:#92400e">Плёнки нет на складе — ${activeProjectFilmPurchaseRequest(o.id, win.catalogId) ? `заявка на закупку ${academyEsc(activeProjectFilmPurchaseRequest(o.id, win.catalogId).number || '')}` : 'нужна закупка'}</div>` : ''}` : ''}</div>`;
+  return `<div class="grid gap-2" style="min-width:0"><label>Услуга / решение<select aria-label="Услуга окна" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','offeringId',this.value,${inMeasurement})"><option value="">Выберите услугу</option>${offerings.map(item => `<option value="${academyEsc(item.id)}" ${win.offeringId === item.id ? 'selected' : ''}>${academyEsc(item.name)}</option>`).join('')}</select></label>${win.offeringId && serviceOfferingNoFilm(serviceOffering(win.offeringId)) ? '<div class="order-clean-note">Без плёнки · работа по площади</div>' : win.offeringId ? `<label>Материал услуги<select aria-label="Материал услуги" onchange="projectSetWindowSolution('${o.id}','${room.id}','${win.id}','catalogId',this.value,${inMeasurement})"><option value="">${films.length || linkable.length ? 'Выберите плёнку' : 'К услуге не привязана плёнка'}</option>${(() => { const opt = film => `<option value="${academyEsc(film.id)}" ${win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogShortLabel(film))}${warehouseCatalogStockStats(film.id).availableSqft > 0 ? ` · ${warehouseCatalogStockStats(film.id).availableSqft.toFixed(0)} sq ft` : ''}</option>`; const stock = films.filter(film => warehouseCatalogStockStats(film.id).availableSqft > 0); const order = films.filter(film => !(warehouseCatalogStockStats(film.id).availableSqft > 0)); return `${stock.length ? `<optgroup label="На складе">${stock.map(opt).join('')}</optgroup>` : ''}${order.length ? `<optgroup label="Нет на складе — под заказ">${order.map(opt).join('')}</optgroup>` : ''}`; })()}${linkable.length ? `<optgroup label="Другие плёнки направления — привяжутся к услуге">${linkable.map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>` : ''}${typeof projectWindowExtraFilmOptionsHtml === 'function' ? projectWindowExtraFilmOptionsHtml(o, win) : ''}${orderUserCanManage(currentUser()) ? `<option value="__manual">➕ Нет в списке — добавить плёнку и заказать…</option>` : ''}</select></label>${typeof windowFilmOnSiteNoteHtml === 'function' ? windowFilmOnSiteNoteHtml(o, win) : ''}${win.catalogId && getCatalogItem(win.catalogId)?.pendingPurchase && warehouseCatalogStockStats(win.catalogId).availableSqft <= 0 ? `<div class="text-xs" style="color:#92400e">Плёнки нет на складе — ${activeProjectFilmPurchaseRequest(o.id, win.catalogId) ? `заявка на закупку ${academyEsc(activeProjectFilmPurchaseRequest(o.id, win.catalogId).number || '')}` : 'нужна закупка'}</div>` : ''}` : ''}</div>`;
 }
 function applyWindowOffering(win, offering) {
     const previousOfferingId = win.offeringId || '';
@@ -27956,6 +27958,13 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   const win = o?.measurements?.rooms?.find(room => room.id === rid)?.windows?.find(item => item.id === wid);
   if (!win || !orderUserCanSeeMoney(o, currentUser())) return;
   if (field === 'catalogId' && value === '__manual') { openWindowManualFilmForm(oid, rid, wid, inMeasurement); return; }
+  // Owner, 2026-11-12: another direction's film or «на месте» — handled with the window's move.
+  if (field === 'catalogId' && typeof projectSetWindowFilmSpecial === 'function') {
+    const film = getCatalogItem(value);
+    const own = film && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id) && measureScopeByCatalog(film) === measureScopeInfo(win.measureScope || o.serviceType).key;
+    if (value === windowFilmOnSiteValue() || (film && !own)) { projectSetWindowFilm(oid, rid, wid, value, inMeasurement); return; }
+    win.filmOnSite = false;
+  }
   if (field === 'offeringId') {
     const offering = serviceOffering(value);
     const selectedOfferings = projectSelectedSizedOfferings(o, win.measureScope || o.serviceType);
@@ -32132,6 +32141,7 @@ function renderManagerMeasureModal(oid) {
         ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}
         ${managerWindowServicesBarHtml(oid, o)}
         ${typeof plaudMeasureBlockHtml === 'function' ? plaudMeasureBlockHtml(o) : ''}
+        ${typeof projectFilmOnSiteVariantsHtml === 'function' ? projectFilmOnSiteVariantsHtml(o) : ''}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
         <div class="manager-measure-workspace">
@@ -32208,6 +32218,7 @@ function renderManagerMeasureModal(oid) {
                       </div>
                       <div class="manager-window-card-body">
                         ${projectWindowSolutionHtml(o, r, w, true)}
+                        ${!orderUserCanSeeMoney(o, currentUser()) && typeof windowFilmQuickSelectHtml === 'function' ? windowFilmQuickSelectHtml(o, r, w) : ''}
                         <div>${managerWindowTypeCompactHtml(oid, r.id, w, scopeKey)}</div>
                         <div class="manager-window-fields">
                           <div class="manager-window-field mm-opt-direction"><label>Направление плёнки</label><select onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','filmDirection',this.value)">${managerFilmDirectionOptionsHtml(w.filmDirection || '')}</select></div>

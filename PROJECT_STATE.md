@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — Плёнка у каждого окна + «клиент выберет на месте» (Claude, PR pending)
+
+- Owner: «клиенты говорят: приезжайте с плёнкой, на месте выберем — сейчас не можем сформировать КП и внести размеры, система просит плёнку»; «на разных окнах может быть разная плёнка — на одном матовую, на другом Black Silver».
+- Branch `claude/film-per-window-onsite-20261112` (`production-stages.js`): the window's film select also lists films of other directions (the window moves to that direction with a matching sized service, the measurer follows it) and «🎨 Клиент выберет на месте». The assigned measurer gets a price-free «Плёнка этого окна» select. On-site windows count as complete for the measurement; the measurement window asks for 2–3 films «которые везём» (★ recommended prices the KP; variants apply only to on-site windows); accepting the KP does not lock the on-site choice; badge «🎨 Плёнку выберут на месте · везём N» opens the chooser — the manager records the client's pick, windows get the film and the estimate is re-approved (timeline `film_chosen_on_site`). `proposal_sent` asks for the variants when an on-site window has no film.
+- Verification: full unit suite **1158/1158** (new `film-per-window.test.ts` 4/4, two string assertions updated), `tsc --noEmit` clean.
+
 ## 2026-11-12 — Plaud без платного Zapier: записи через почту (Claude, PR pending)
 
 - Owner: «Zapier платный, не хочу постоянно платить, когда можно иначе — за диктофон уже плачу».

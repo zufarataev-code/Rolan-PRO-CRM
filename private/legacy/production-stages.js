@@ -4319,7 +4319,7 @@ function projectFilmVariantWindows(o) {
 }
 /** Films the manager may offer: what the measured windows' services allow, else the project's film category. */
 function projectFilmVariantCandidates(o) {
-  const windows = projectFilmVariantWindows(o);
+  const windows = projectFilmVariantTargetWindows(o);
   const allowed = new Set();
   windows.forEach(win => {
     const offering = serviceOffering(win.offeringId);
@@ -4345,7 +4345,7 @@ function projectFilmVariantLabel(item) {
 }
 function projectFilmVariantToggle(oid, catalogId) {
   const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || !getCatalogItem(catalogId)) return;
+  if (!o || !projectUserCanPickFilm(o) || !getCatalogItem(catalogId)) return;
   if (!projectFilmVariantCandidates(o).some(item => item.id === catalogId)) return;
   const current = projectFilmVariants(o);
   let next = current.includes(catalogId) ? current.filter(id => id !== catalogId) : [...current, catalogId];
@@ -4357,23 +4357,25 @@ function projectFilmVariantToggle(oid, catalogId) {
     o.filmVariantChosenId = null;
     // The recommended film goes onto the windows that still wait for a film,
     // so the estimate, revenue and production keep working on real numbers.
-    if (recommended) projectFilmVariantWindows(o).forEach(win => {
+    if (recommended) projectFilmVariantTargetWindows(o).forEach(win => {
       const offering = serviceOffering(win.offeringId);
       if (windowCatalog(win)) return;
       if (offering && !serviceOfferingAllowedFilmIds(offering).includes(recommended)) return;
       win.catalogId = recommended;
       win.filmType = catalogLabel(getCatalogItem(recommended));
     });
-    if (next.length < 2) o.filmChoicePending = !projectFilmVariantWindows(o).every(win => windowCatalog(win));
+    if (next.length < 2) o.filmChoicePending = projectFilmOnSiteWindows(o).length > 0 || !projectFilmVariantWindows(o).every(win => windowCatalog(win));
     else o.filmChoicePending = true;
   });
+  if (typeof invalidateProjectEstimate === 'function' && projectFilmOnSiteWindows(o).length) invalidateProjectEstimate(o, 'Изменены плёнки для выбора на месте');
   save();
   if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
+  else if (typeof refreshManagerMeasureModal === 'function' && String(state.modal || '').includes('manager-measure-modal')) refreshManagerMeasureModal(oid);
 }
 /** Codex review #503: the manager can change the recommended film at any time before the client decides. */
 function projectFilmVariantMakeRecommended(oid, catalogId) {
   const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.filmVariantChosenAt) return;
+  if (!o || !projectUserCanPickFilm(o) || o.filmVariantChosenAt) return;
   const current = projectFilmVariants(o);
   if (!current.includes(catalogId) || current[0] === catalogId) return;
   const previous = current[0];
@@ -4394,6 +4396,7 @@ function projectFilmVariantMakeRecommended(oid, catalogId) {
   if (moved && wasApproved) projectReapproveEstimate(o, `Рекомендуемая плёнка: ${catalogLabel(film)}`);
   save();
   if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
+  else if (typeof refreshManagerMeasureModal === 'function' && String(state.modal || '').includes('manager-measure-modal')) refreshManagerMeasureModal(oid);
 }
 function projectFilmVariantsHtml(o) {
   if (!projectFilmVariantWindows(o).length) return '';
@@ -4407,7 +4410,8 @@ function projectFilmVariantsHtml(o) {
     const star = on && index > 0 && !o.filmVariantChosenAt
       ? `<button type="button" class="btn-ghost text-xs" data-film-variant-recommend="${academyEsc(item.id)}" title="Сделать рекомендуемой" onclick="projectFilmVariantMakeRecommended('${o.id}','${jsQuote(item.id)}')">☆ рекомендовать</button>`
       : '';
-    return `<span style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="rp-kpwin-option" data-film-variant="${academyEsc(item.id)}" aria-pressed="${on}" style="${on ? 'border-color:#2563eb;background:#eff6ff' : ''}" onclick="projectFilmVariantToggle('${o.id}','${jsQuote(item.id)}')"><span>${on ? (index === 0 ? '★' : String.fromCharCode(65 + index)) : '+'}</span> ${academyEsc(projectFilmVariantLabel(item))} · ${fmtMoney(Number(item.retailPerSqft) || 0)}/sqft</button>${star}</span>`;
+    const price = orderUserCanSeeMoney(o, currentUser()) ? ` · ${fmtMoney(Number(item.retailPerSqft) || 0)}/sqft` : '';
+    return `<span style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="rp-kpwin-option" data-film-variant="${academyEsc(item.id)}" aria-pressed="${on}" style="${on ? 'border-color:#2563eb;background:#eff6ff' : ''}" onclick="projectFilmVariantToggle('${o.id}','${jsQuote(item.id)}')"><span>${on ? (index === 0 ? '★' : String.fromCharCode(65 + index)) : '+'}</span> ${academyEsc(projectFilmVariantLabel(item))}${price}</button>${star}</span>`;
   }).join('');
   const status = o.filmVariantChosenAt
     ? `<div class="rp-kpwin-sent">✓ Клиент выбрал: ${academyEsc(projectFilmVariantLabel(getCatalogItem(o.filmVariantChosenId)))}</div>`
@@ -4474,13 +4478,14 @@ function projectApplyClientFilmChoice(order, items) {
   const already = order.filmVariantChosenId === catalogId && order.filmVariantChosenAt;
   const accepted = typeof projectProposalAccepted === 'function' && projectProposalAccepted(order);
   if (already) return false;
-  if (catalogId === projectFilmVariants(order)[0] && !accepted) return false; // still the default: nothing chosen yet
+  if (catalogId === projectFilmVariants(order)[0] && (!accepted || projectHasFilmOnSite(order))) return false; // still the default (or decided on site): nothing chosen yet
   const wasApproved = projectEstimateIsApproved(order);
   projectCardEdit(() => {
     measureAllWindows(order).forEach(({ win }) => {
       if (!windowIds.has(win.id)) return;
       win.catalogId = film.id;
       win.filmType = catalogLabel(film);
+      win.filmOnSite = false;
     });
     order.filmVariantChosenId = film.id;
     order.filmVariantChosenAt = new Date().toISOString();
@@ -4494,6 +4499,7 @@ function projectApplyClientFilmChoice(order, items) {
 /** A visible stage mark next to the status: the client is choosing the film / the film waits for the measurer. */
 function orderFilmChoiceBadge(o) {
   if (!o || ['cancelled', 'completed', 'review_received'].includes(o.status)) return '';
+  if (projectHasFilmOnSite(o)) return ` <span class="status-badge" data-film-choice-badge data-film-onsite-badge role="button" style="background:#f3e8ff;color:#6b21a8;cursor:pointer" onclick="event.stopPropagation();openFilmOnSiteChooser('${o.id}')">🎨 Плёнку выберут на месте${projectFilmVariants(o).length >= 2 ? ` · везём ${projectFilmVariants(o).length}` : ''}</span>`;
   if (projectFilmChoiceOpen(o)) return ' <span class="status-badge" data-film-choice-badge style="background:#fef3c7;color:#92400e">🎨 Клиент выбирает плёнку</span>';
   if (o.filmChoicePending && !projectFilmVariants(o).length && !measureAllWindows(o).some(({ win }) => windowCatalog(win))) return ' <span class="status-badge" data-film-choice-badge style="background:#e0f2fe;color:#075985">📐 Плёнку выберет замерщик</span>';
   return '';
@@ -4505,7 +4511,7 @@ function projectFilmVariantsEnsureWindows(o) {
   if (variants.length < 2 || o.filmVariantChosenAt || !orderUserCanSeeMoney(o, currentUser())) return false;
   const recommended = getCatalogItem(variants[0]);
   let changed = 0;
-  projectFilmVariantWindows(o).forEach(win => {
+  projectFilmVariantTargetWindows(o).forEach(win => {
     if (windowCatalog(win)) return;
     const offering = serviceOffering(win.offeringId);
     if (offering && !serviceOfferingAllowedFilmIds(offering).includes(recommended.id)) return;
@@ -4797,4 +4803,178 @@ ${rec.transcript.slice(0, 60000)}`;
   } catch (error) {
     if (typeof crmNotice === 'function') crmNotice('AI сейчас недоступен. Сводка разговора сохранена — попробуйте позже.');
   }
+}
+
+// ---------------------------------------------------------------------------
+// ПЛЁНКА У КАЖДОГО ОКНА + «КЛИЕНТ ВЫБЕРЕТ НА МЕСТЕ» (Owner, 2026-11-12):
+// «на одном окне матовую, на другом Black Silver» — a window may take a film
+// of another direction (it moves to that direction's service); and «приезжайте
+// с плёнкой, на месте выберем» — sizes, KP and the installation date go ahead,
+// the KP is priced by the recommended of 2–3 films the crew brings, and the
+// final film is picked on site.
+function windowFilmOnSiteValue() { return '__onsite'; }
+function projectFilmOnSiteWindows(o) {
+  return measureAllWindows(o).map(({ win }) => win).filter(win => win.filmOnSite);
+}
+function projectHasFilmOnSite(o) {
+  return projectFilmOnSiteWindows(o).length > 0 && !o.filmVariantChosenAt;
+}
+/** The assigned measurer picks films too — without prices. */
+function projectUserCanPickFilm(o, user = currentUser()) {
+  if (!o || !user) return false;
+  if (orderUserCanSeeMoney(o, user)) return true;
+  return user.role === 'measurer' && String(o.measurerId || '') === String(state.currentUserId || user.id || '');
+}
+/** Films outside the window's own service: shown as «другое направление — окно перейдёт». */
+function projectWindowOtherDirectionFilms(o, win) {
+  const scope = win.measureScope || o.serviceType || '';
+  return (db.settings.catalog || []).filter(film => film && !film.archived && measureScopeByCatalog(film) !== measureScopeInfo(scope).key)
+    .sort((a, b) => String(catalogShortLabel(a)).localeCompare(String(catalogShortLabel(b))));
+}
+function projectWindowExtraFilmOptionsHtml(o, win) {
+  const other = projectWindowOtherDirectionFilms(o, win);
+  const onsite = `<option value="${windowFilmOnSiteValue()}" ${win.filmOnSite ? 'selected' : ''}>🎨 Клиент выберет на месте</option>`;
+  const groups = {};
+  other.forEach(film => { const key = measureScopeInfo(measureScopeByCatalog(film)).short || 'Другое'; (groups[key] = groups[key] || []).push(film); });
+  return onsite + Object.keys(groups).map(key => `<optgroup label="${academyEsc(key)} — окно перейдёт в это направление">${groups[key].map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>`).join('');
+}
+function windowFilmOnSiteNoteHtml(o, win) {
+  if (!win.filmOnSite) return '';
+  const variants = projectFilmVariants(o).map(id => getCatalogItem(id)).filter(Boolean);
+  return `<div class="text-xs" data-film-onsite-note style="color:#7c3aed;font-weight:700">🎨 Клиент выберет на месте${variants.length >= 2 ? `: ${academyEsc(variants.map(catalogShortLabel).join(' / '))}` : ' — отметьте 2–3 плёнки ниже'}</div>`;
+}
+/** Measurer's select (no prices): film of any direction or «выберет на месте». */
+function windowFilmQuickSelectHtml(o, room, win) {
+  if (!projectUserCanPickFilm(o)) return '';
+  const films = (db.settings.catalog || []).filter(film => film && !film.archived);
+  const groups = {};
+  films.forEach(film => { const key = measureScopeInfo(measureScopeByCatalog(film)).short || 'Плёнка'; (groups[key] = groups[key] || []).push(film); });
+  return `<label class="manager-window-field" data-window-film-quick>Плёнка этого окна<select onchange="projectSetWindowFilm('${o.id}','${room.id}','${win.id}',this.value,true)">
+    <option value="">${windowCatalog(win) ? '' : 'Выберите плёнку'}</option>
+    <option value="${windowFilmOnSiteValue()}" ${win.filmOnSite ? 'selected' : ''}>🎨 Клиент выберет на месте</option>
+    ${Object.keys(groups).map(key => `<optgroup label="${academyEsc(key)}">${groups[key].map(film => `<option value="${academyEsc(film.id)}" ${!win.filmOnSite && win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>`).join('')}
+  </select></label>${windowFilmOnSiteNoteHtml(o, win)}`;
+}
+/** Picks a sized service of the film's direction that sells this film (or the first one). */
+function projectOfferingForFilm(scopeKey, film) {
+  const sized = serviceOfferingsFor(serviceOfferingDirection(scopeKey)).filter(item => serviceOfferingNeedsSizes(item) && !serviceOfferingNoFilm(item));
+  return sized.find(item => serviceOfferingAllowedFilmIds(item).includes(film.id)) || sized[0] || null;
+}
+/**
+ * Sets one window's film. Returns true when handled here: «на месте», or a film
+ * of another direction (the window moves there with a matching service).
+ * A film of the window's own service stays with projectSetWindowSolution.
+ */
+function projectSetWindowFilmSpecial(o, room, win, value) {
+  if (value === windowFilmOnSiteValue()) {
+    win.filmOnSite = true;
+    const recommended = getCatalogItem(projectFilmVariants(o)[0]);
+    if (recommended && measureScopeByCatalog(recommended) === measureScopeInfo(win.measureScope || o.serviceType).key) {
+      win.catalogId = recommended.id;
+      win.filmType = catalogLabel(recommended);
+    } else { win.catalogId = ''; win.filmType = ''; }
+    o.filmChoicePending = true;
+    o.filmVariantChosenAt = null;
+    o.filmVariantChosenId = null;
+    return { moved: false };
+  }
+  const film = getCatalogItem(value);
+  if (!film || film.archived) return null;
+  const scope = measureScopeByCatalog(film);
+  const currentScope = measureScopeInfo(win.measureScope || o.serviceType).key;
+  if (scope === currentScope && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id)) {
+    win.filmOnSite = false;
+    return null; // the window's own service: the usual path
+  }
+  win.filmOnSite = false;
+  if (scope !== currentScope) {
+    win.measureScope = scope;
+    win.winType = normalizeMeasureWindowTypeForScope(scope, win.winType);
+    syncWindowPanelsForType(win, scope);
+    const offering = projectOfferingForFilm(scope, film);
+    applyWindowOffering(win, offering);
+    if (offering) {
+      o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+      o.offeringUnits = { ...(o.offeringUnits || {}), [offering.id]: o.offeringUnits?.[offering.id] || serviceOfferingUnit(offering) };
+    }
+    o.serviceTypes = [...new Set([...(Array.isArray(o.serviceTypes) ? o.serviceTypes : []), scope])];
+  }
+  win.catalogId = film.id;
+  win.filmType = catalogLabel(film);
+  return { moved: scope !== currentScope, scope };
+}
+function projectSetWindowFilm(oid, rid, wid, value, inMeasurement = false) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const win = room?.windows?.find(item => item.id === wid);
+  if (!o || !win || !value || !projectUserCanPickFilm(o)) return false;
+  const result = projectSetWindowFilmSpecial(o, room, win, value);
+  if (!result) {
+    // Same-direction film for a window without a matching service: the measurer may still set it.
+    const film = getCatalogItem(value);
+    if (!film) return false;
+    win.filmOnSite = false;
+    win.catalogId = film.id;
+    win.filmType = catalogLabel(film);
+  }
+  if (typeof syncProjectIncludedServices === 'function') syncProjectIncludedServices(o);
+  invalidateProjectEstimate(o, 'Изменена плёнка окна');
+  save();
+  if (result?.moved) {
+    state._managerActiveScopeByOrder = state._managerActiveScopeByOrder || {};
+    state._managerActiveScopeByOrder[o.id] = result.scope;
+    if (typeof crmNotice === 'function') crmNotice(`Окно перенесено в направление «${measureScopeInfo(result.scope).short}»`);
+  }
+  if (inMeasurement && typeof refreshManagerMeasureModal === 'function') refreshManagerMeasureModal(oid);
+  else if (typeof refreshProjectEstimateWorkspace === 'function') refreshProjectEstimateWorkspace(oid);
+  return true;
+}
+/** Measurement window: «какие плёнки везём» — the 2–3 variants for the on-site choice. */
+function projectFilmOnSiteVariantsHtml(o) {
+  if (!o || !projectFilmOnSiteWindows(o).length || o.filmVariantChosenAt || !projectUserCanPickFilm(o)) return '';
+  return `<div data-film-onsite-variants style="margin-top:8px;border:1px solid #e9d5ff;background:#faf5ff;border-radius:12px;padding:8px 12px">
+    <div style="font-weight:800">🎨 Клиент выберет плёнку на месте</div>
+    <div class="text-xs text-gray-600">Отметьте 2–3 плёнки, которые везём на монтаж. ★ — рекомендуемая: по ней считается КП, клиент видит все варианты с ценами.</div>
+    ${projectFilmVariantsHtml(o)}
+  </div>`;
+}
+/** Not every window is on site: only those windows take the variants. */
+function projectFilmVariantTargetWindows(o) {
+  const onsite = projectFilmOnSiteWindows(o);
+  return onsite.length ? onsite : projectFilmVariantWindows(o);
+}
+/** The choice made at the installation: the film goes onto the on-site windows and the estimate is re-approved. */
+function projectChooseFilmOnSite(oid, catalogId) {
+  const o = getOrder(oid);
+  const film = getCatalogItem(catalogId);
+  if (!o || !film || !orderUserCanSeeMoney(o, currentUser()) || !projectFilmVariants(o).includes(catalogId)) return false;
+  const windows = projectFilmOnSiteWindows(o);
+  if (!windows.length) return false;
+  const wasApproved = projectEstimateIsApproved(o);
+  projectCardEdit(() => {
+    windows.forEach(win => { win.catalogId = film.id; win.filmType = catalogLabel(film); win.filmOnSite = false; win.filmChosenOnSite = true; });
+    o.filmVariantChosenId = film.id;
+    o.filmVariantChosenAt = new Date().toISOString();
+    o.filmChoicePending = false;
+    o.timeline = o.timeline || [];
+    o.timeline.push({ at: o.filmVariantChosenAt, key: 'film_chosen_on_site', by: state.currentUserId, note: `Клиент выбрал плёнку на месте: ${catalogLabel(film)} (${windows.length} окон)` });
+  });
+  if (wasApproved) projectReapproveEstimate(o, `Плёнка выбрана на месте: ${catalogLabel(film)}`);
+  save();
+  return true;
+}
+function openFilmOnSiteChooser(oid) {
+  const o = getOrder(oid);
+  if (!o || !projectHasFilmOnSite(o)) return;
+  const variants = projectFilmVariants(o).map(id => getCatalogItem(id)).filter(Boolean);
+  const money = orderUserCanSeeMoney(o, currentUser());
+  const list = variants.map((film, index) => `<button type="button" class="btn-ghost" data-onsite-choice="${academyEsc(film.id)}" style="min-height:56px;width:100%;text-align:left;margin-top:8px" ${money ? `onclick="if(projectChooseFilmOnSite('${o.id}','${jsQuote(film.id)}')){closeModal();}"` : 'disabled'}>${index === 0 ? '★ ' : ''}${academyEsc(projectFilmVariantLabel(film))}${money ? ` · ${fmtMoney(Number(film.retailPerSqft) || 0)}/sqft` : ''}</button>`).join('');
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content p-6" style="max-width:30rem" onclick="event.stopPropagation()">
+    <h3 class="font-bold text-lg">🎨 Плёнку выбирают на месте</h3>
+    <div class="text-sm text-gray-600 mt-1">Везём на монтаж: ${academyEsc(variants.map(catalogShortLabel).join(', ') || 'варианты ещё не отмечены')}. Окон с выбором: ${projectFilmOnSiteWindows(o).length}.</div>
+    ${list || '<div class="text-sm mt-3">Отметьте 2–3 плёнки в окне замера.</div>'}
+    ${money ? '<div class="text-xs text-gray-500 mt-2">После выбора расчёт пересчитается по этой плёнке.</div>' : '<div class="text-xs text-gray-500 mt-2">Выбор клиента фиксирует менеджер — сообщите ему.</div>'}
+    <button type="button" class="btn-ghost mt-3" style="min-height:48px;width:100%" onclick="closeModal()">Закрыть</button>
+  </div></div>`;
+  render();
 }

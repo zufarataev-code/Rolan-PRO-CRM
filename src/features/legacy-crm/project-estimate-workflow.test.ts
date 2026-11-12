@@ -92,7 +92,7 @@ test("proposal readiness validates the actual window instead of its room wrapper
   );
   assert.match(
     source,
-    /windows\.some\(\(\{ win \}\) => !windowCatalog\(win\)\)/,
+    /windows\.some\(\(\{ win \}\) => !windowCatalog\(win\) && !win\.filmOnSite\)/,
   );
   assert.doesNotMatch(source, /windows\.some\(w => windowActualAreaSqft\(w\) <= 0\)/);
 });
