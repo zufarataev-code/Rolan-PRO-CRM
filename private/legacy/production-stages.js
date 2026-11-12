@@ -4369,6 +4369,31 @@ function projectFilmVariantToggle(oid, catalogId) {
   save();
   if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
 }
+/** Codex review #503: the manager can change the recommended film at any time before the client decides. */
+function projectFilmVariantMakeRecommended(oid, catalogId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.filmVariantChosenAt) return;
+  const current = projectFilmVariants(o);
+  if (!current.includes(catalogId) || current[0] === catalogId) return;
+  const previous = current[0];
+  const film = getCatalogItem(catalogId);
+  const wasApproved = projectEstimateIsApproved(o);
+  let moved = 0;
+  projectCardEdit(() => {
+    o.filmVariants = [catalogId, ...current.filter(id => id !== catalogId)];
+    projectFilmVariantWindows(o).forEach(win => {
+      if (win.catalogId !== previous) return;
+      const offering = serviceOffering(win.offeringId);
+      if (offering && !serviceOfferingAllowedFilmIds(offering).includes(catalogId)) return;
+      win.catalogId = catalogId;
+      win.filmType = catalogLabel(film);
+      moved++;
+    });
+  });
+  if (moved && wasApproved) projectReapproveEstimate(o, `Рекомендуемая плёнка: ${catalogLabel(film)}`);
+  save();
+  if (typeof openProposalWizard === 'function' && state._proposalWizard?.oid === oid) openProposalWizard(oid, 'compose');
+}
 function projectFilmVariantsHtml(o) {
   if (!projectFilmVariantWindows(o).length) return '';
   const chosen = projectFilmVariants(o);
@@ -4378,7 +4403,10 @@ function projectFilmVariantsHtml(o) {
   const chips = candidates.map(item => {
     const index = chosen.indexOf(item.id);
     const on = index !== -1;
-    return `<button type="button" class="rp-kpwin-option" data-film-variant="${academyEsc(item.id)}" aria-pressed="${on}" style="${on ? 'border-color:#2563eb;background:#eff6ff' : ''}" onclick="projectFilmVariantToggle('${o.id}','${jsQuote(item.id)}')"><span>${on ? (index === 0 ? '★' : String.fromCharCode(65 + index)) : '+'}</span> ${academyEsc(projectFilmVariantLabel(item))} · ${fmtMoney(Number(item.retailPerSqft) || 0)}/sqft</button>`;
+    const star = on && index > 0 && !o.filmVariantChosenAt
+      ? `<button type="button" class="btn-ghost text-xs" data-film-variant-recommend="${academyEsc(item.id)}" title="Сделать рекомендуемой" onclick="projectFilmVariantMakeRecommended('${o.id}','${jsQuote(item.id)}')">☆ рекомендовать</button>`
+      : '';
+    return `<span style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="rp-kpwin-option" data-film-variant="${academyEsc(item.id)}" aria-pressed="${on}" style="${on ? 'border-color:#2563eb;background:#eff6ff' : ''}" onclick="projectFilmVariantToggle('${o.id}','${jsQuote(item.id)}')"><span>${on ? (index === 0 ? '★' : String.fromCharCode(65 + index)) : '+'}</span> ${academyEsc(projectFilmVariantLabel(item))} · ${fmtMoney(Number(item.retailPerSqft) || 0)}/sqft</button>${star}</span>`;
   }).join('');
   const status = o.filmVariantChosenAt
     ? `<div class="rp-kpwin-sent">✓ Клиент выбрал: ${academyEsc(projectFilmVariantLabel(getCatalogItem(o.filmVariantChosenId)))}</div>`

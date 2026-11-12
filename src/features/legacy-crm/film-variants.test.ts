@@ -50,6 +50,11 @@ function makeContext() {
     reapproved: [] as string[],
     projectReapproveEstimate: (_o: any, note: string) => context.reapproved.push(note),
     primaryServiceInfo: () => null,
+    getOrder: () => order,
+    orderUserCanSeeMoney: () => true,
+    currentUser: () => ({ role: "manager" }),
+    serviceOfferingAllowedFilmIds: () => [],
+    save: () => {},
   });
   vm.runInContext(variantsBlock(), context);
   return { context, order };
@@ -114,4 +119,15 @@ test("the CRM wires the variants into the KP wizard, snapshot, client pull and s
   assert.match(stages, /const filmChosen = projectApplyClientFilmChoice\(fresh, items\);/);
   assert.match(legacy, /projectFilmVariantsApply\(order, items, calc, prop\)/);
   assert.match(legacy, /orderFilmChoiceBadge\(o\)/);
+});
+
+test("the manager can make another variant the recommended one before the client decides", () => {
+  const { context, order } = makeContext();
+  context.projectFilmVariantMakeRecommended("o1", "mp50");
+  assert.equal(JSON.stringify(order.filmVariants), JSON.stringify(["mp50", "mp35", "mp20"]));
+  assert.deepEqual(order.measurements.rooms[0].windows.map((win: any) => win.catalogId), ["mp50", "mp50"]);
+  assert.equal(context.reapproved.length, 1);
+  order.filmVariantChosenAt = "2026-11-12T00:00:00Z";
+  context.projectFilmVariantMakeRecommended("o1", "mp20");
+  assert.equal(order.filmVariants[0], "mp50", "locked once the client has chosen");
 });
