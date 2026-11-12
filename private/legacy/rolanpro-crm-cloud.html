@@ -32131,6 +32131,7 @@ function renderManagerMeasureModal(oid) {
         ${managerMeasureProgressHtml(o, activeScopeKey)}
         ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}
         ${managerWindowServicesBarHtml(oid, o)}
+        ${typeof plaudMeasureBlockHtml === 'function' ? plaudMeasureBlockHtml(o) : ''}
       </div>
       <div class="manager-measure-body" data-scroll-key="measure-body">
         <div class="manager-measure-workspace">

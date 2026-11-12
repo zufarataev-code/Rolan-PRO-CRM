@@ -50,6 +50,7 @@ export const SERVICES: ServiceEntry[] = [
   { id: "twilio", name: "Twilio SMS", group: "comms", purpose: "SMS клиентам: подтверждения, напоминания", owner: "Зуфар", link: "https://console.twilio.com/", check: "twilio" },
   { id: "gmail", name: "Gmail info@rolan-pro.com", group: "comms", purpose: "КП и переписка с клиентами", owner: "Данил", link: "https://mail.google.com/", check: "gmail" },
   { id: "zadarma", name: "Телефония Zadarma", group: "comms", purpose: "Звонки и записи разговоров", owner: "Данил", link: "https://my.zadarma.com/", check: "zadarma" },
+  { id: "plaud", name: "Диктофон Plaud", group: "comms", purpose: "Разговор замерщика с клиентом → сводка и размеры в проект", owner: "Зуфар", link: "https://app.plaud.ai/", check: "plaud" },
   { id: "marketing-email", name: "Рассылки", group: "comms", purpose: "Отзывы и письма клиентам", owner: "Зуфар", check: "marketingEmail" },
 
   { id: "stripe", name: "Stripe", group: "money", purpose: "Оплата картой по КП", owner: "Зуфар", link: "https://dashboard.stripe.com/", check: "stripe" },
