@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — Касса: «Клиент выберет» с выбором позиций (Claude, PR pending)
+
+- Owner (screenshot of the cashier «Плёнка и допы»): besides «Уточнить на замере» the manager needs «клиент выберет» and must be able to choose which films the client will choose from.
+- Branch `claude/cashier-client-chooses-20261112`: the film step shows «Уточнить на замере», then «Клиент выберет» (when the service has ≥ 2 films). In «Клиент выберет» mode the film cards become toggles marked ★ / B / C (max 3, first = recommended); «Добавить в проект» stays disabled until 2 are marked. Intake: stored as `state._newOrderFilmVariants` → `o.filmVariants` + `filmChoicePending` on create; the service row says «клиент выберет: A / B / C». Existing project: written straight to `o.filmVariants`. Opening the KP wizard puts the recommended film on measured windows without a film (`projectFilmVariantsEnsureWindows`), so the KP variants from #503 work without extra clicks.
+- Verification: full unit suite **1138/1138** (film-variants 7/7; mobile-flow grid assertion updated for the new card order), `tsc --noEmit` clean, `node --check` both legacy scripts.
+
 ## 2026-11-12 — «Клиент выбирает плёнку»: 2–3 варианта плёнки в КП (Claude, PR pending)
 
 - Owner: clients are often offered several films with different light transmission and decide later; this must be a visible stage, and the measurement is saved without a final film.

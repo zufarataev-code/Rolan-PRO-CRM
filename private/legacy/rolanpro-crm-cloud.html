@@ -27132,7 +27132,7 @@ function openServiceCashier(oid, returnTo = 'card') {
     const o = getOrder(oid);
     if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
   }
-  state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [] };
+  state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [], clientChoice: false, variantIds: [] };
   renderServiceCashier();
 }
 function serviceCashierReturn(oid, returnTo) {
@@ -27182,11 +27182,26 @@ function serviceCashierPick(field, value) {
     if (!offering || offering.active === false || !serviceCashierPrimaryOfferings(serviceOfferingDirection(c.directionId)).some(item => item.id === value)) return;
     const o = serviceCashierScope(c);
     const catalogId = projectOfferingCatalogId(o, value) || serviceOfferingDefaultFilmId(offering);
-    Object.assign(c, { offeringId: value, catalogId, addonIds: [] });
+    Object.assign(c, { offeringId: value, catalogId, addonIds: [], clientChoice: false, variantIds: [] });
     c.step = 'addons';
+  } else if (field === 'clientChoice') {
+    // Owner, 2026-11-12: «клиент выберет» — the manager marks the films the
+    // client will choose from; the KP offers them as one choice.
+    c.clientChoice = !c.clientChoice;
+    c.catalogId = '';
+    if (!c.clientChoice) c.variantIds = [];
   } else if (field === 'material') {
     const offering = serviceOffering(c.offeringId);
     if (value && !serviceCashierFilms(offering).some(film => film.id === value)) return;
+    if (c.clientChoice && value) {
+      const max = typeof filmVariantMax === 'function' ? filmVariantMax() : 3;
+      if (c.variantIds.includes(value)) c.variantIds = c.variantIds.filter(id => id !== value);
+      else if (c.variantIds.length >= max) { alert(`Не больше ${max} вариантов — клиенту так проще выбрать.`); return; }
+      else c.variantIds = [...c.variantIds, value];
+      renderServiceCashier();
+      return;
+    }
+    if (!value) { c.clientChoice = false; c.variantIds = []; }
     c.catalogId = value || '';
   } else if (field === 'addon') {
     const offering = serviceOffering(c.offeringId);
@@ -27214,6 +27229,7 @@ function serviceCashierCommit() {
   const addons = serviceCashierAddons(o, offering, c.directionId).filter(item => c.addonIds.includes(item.id));
   const film = c.catalogId && serviceCashierFilms(offering).some(item => item.id === c.catalogId) ? getCatalogItem(c.catalogId) : null;
   const { oid, returnTo, directionId } = c;
+  const variantIds = c.clientChoice ? (c.variantIds || []).filter(id => serviceCashierFilms(offering).some(item => item.id === id)) : [];
   state._serviceCashier = null;
   if (returnTo === 'intake') {
     // The intake keeps its own selection; the first chosen service is the
@@ -27221,11 +27237,13 @@ function serviceCashierCommit() {
     serviceCashierLayer()?.remove();
     toggleNewOrderOffering(offering.id, true, directionId);
     if (film) setNewOrderOfferingMaterial(offering.id, film.id);
+    if (variantIds.length >= 2) { state._newOrderFilmVariants = variantIds; renderNewOrderOfferings(); }
     addons.forEach(item => toggleNewOrderOffering(item.id, true, directionId));
     return;
   }
   state.modal = null;
   const apply = () => {
+    if (variantIds.length >= 2) { o.filmVariants = variantIds; o.filmChoicePending = true; o.filmVariantChosenAt = null; o.filmVariantChosenId = null; }
     if (film) o.offeringCatalogIds = { ...(o.offeringCatalogIds || {}), [offering.id]: film.id };
     projectAddOfferingLine(oid, offering.id, directionId);
     if (film) {
@@ -27289,21 +27307,27 @@ function serviceCashierHtml(c) {
     const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
     const chosen = addons.filter(item => c.addonIds.includes(item.id));
     const includes = serviceOfferingIncludes(offering);
-    const filmCard = item => `<button type="button" class="rp-cashier-card material ${item.id === c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${item.id === c.catalogId}" onclick="serviceCashierPick('material','${jsQuote(item.id)}')"><span class="rp-cashier-check">${item.id === c.catalogId ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">${academyEsc(catalogFilmModel(item) || catalogLabel(item))}</span><span class="rp-cashier-meta">${academyEsc([item.vlt ? `VLT ${item.vlt}%` : '', item.tser ? `TSER ${item.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(item) || '')}</span></button>`;
-    const unknownFilmCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) ? `<button type="button" class="rp-cashier-card material ${!c.catalogId ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${!c.catalogId}" onclick="serviceCashierPick('material','')"><span class="rp-cashier-check">${!c.catalogId ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Уточнить на замере</span><span class="rp-cashier-meta">Замерщик выберет точную модель на объекте</span></button>` : '';
+    const variantMark = id => { const index = c.variantIds.indexOf(id); return index === -1 ? '' : index === 0 ? '★' : String.fromCharCode(65 + index); };
+    const filmOn = item => c.clientChoice ? c.variantIds.includes(item.id) : item.id === c.catalogId;
+    const filmCard = item => `<button type="button" class="rp-cashier-card material ${filmOn(item) ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${filmOn(item)}" onclick="serviceCashierPick('material','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.clientChoice ? variantMark(item.id) : filmOn(item) ? '✓' : ''}</span><span class="rp-cashier-kind">${c.clientChoice ? 'Вариант для клиента' : 'Плёнка'}</span><span class="rp-cashier-title">${academyEsc(catalogFilmModel(item) || catalogLabel(item))}</span><span class="rp-cashier-meta">${academyEsc([item.vlt ? `VLT ${item.vlt}%` : '', item.tser ? `TSER ${item.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(item) || '')}</span></button>`;
+    const unknownOn = !c.catalogId && !c.clientChoice;
+    const clientChoiceCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) && films.length >= 2 ? `<button type="button" class="rp-cashier-card material ${c.clientChoice ? 'selected' : ''}" data-cashier-client-choice style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${c.clientChoice}" onclick="serviceCashierPick('clientChoice','')"><span class="rp-cashier-check">${c.clientChoice ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Клиент выберет</span><span class="rp-cashier-meta">${c.clientChoice ? 'Отметьте 2–3 плёнки — клиент выберет одну в КП' : 'Дать клиенту 2–3 варианта на выбор'}</span></button>` : '';
+    const unknownFilmCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) ? `<button type="button" class="rp-cashier-card material ${unknownOn ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${unknownOn}" onclick="serviceCashierPick('material','')"><span class="rp-cashier-check">${unknownOn ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Уточнить на замере</span><span class="rp-cashier-meta">Замерщик выберет точную модель на объекте</span></button>` : '';
     const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-kind">Доп. работа</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
     body = `<p class="rp-cashier-selection-note">Выберите одну плёнку. Дополнительных работ можно выбрать несколько — все варианты находятся рядом, без отдельного скрытого шага.</p>
-      <div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(offering?.name || 'Услуга')} · плёнка и дополнительные работы</div><div class="rp-cashier-grid compact">${films.map(filmCard).join('')}${unknownFilmCard}${addons.map(addonCard).join('')}</div></div>
+      <div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(offering?.name || 'Услуга')} · плёнка и дополнительные работы</div><div class="rp-cashier-grid compact">${unknownFilmCard}${clientChoiceCard}${films.map(filmCard).join('')}${addons.map(addonCard).join('')}</div></div>
       <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
         <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
         <div class="rp-cashier-summary-line"><b>${academyEsc(offering.name)}</b><span>${serviceCashierOfferingMeta(offering)}</span></div>
-        ${film ? `<div class="rp-cashier-summary-line"><span>Материал</span><span>${academyEsc(catalogLabel(film))}</span></div>` : serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) ? '<div class="rp-cashier-summary-line"><span>Материал</span><span>уточним на замере</span></div>' : ''}
+        ${c.clientChoice
+          ? `<div class="rp-cashier-summary-line"><span>Материал</span><span>клиент выберет${c.variantIds.length ? ': ' + academyEsc(c.variantIds.map(id => catalogLabel(getCatalogItem(id))).join(' / ')) : ''}</span></div>${c.variantIds.length < 2 ? '<div class="rp-cashier-summary-note">Отметьте минимум 2 плёнки. ★ — рекомендуемая.</div>' : ''}`
+          : film ? `<div class="rp-cashier-summary-line"><span>Материал</span><span>${academyEsc(catalogLabel(film))}</span></div>` : serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) ? '<div class="rp-cashier-summary-line"><span>Материал</span><span>уточним на замере</span></div>' : ''}
         ${includes.map(child => `<div class="rp-cashier-summary-line included"><span>↳ ${academyEsc(child.name)}</span><span>в пакете</span></div>`).join('')}
         ${chosen.map(item => `<div class="rp-cashier-summary-line"><span>+ ${academyEsc(item.name)}</span><span>${fmtMoney(Number(item.pricePerSqft) || 0)} / ${academyEsc(serviceOfferingUnitShort(item))}</span></div>`).join('')}
         ${serviceOfferingNeedsSizes(offering) ? '<div class="rp-cashier-summary-note">Цена по кв. футам сложится после замера.</div>' : ''}
       </div>`;
   }
-  const canCommit = c.step === 'addons' && !!offering;
+  const canCommit = c.step === 'addons' && !!offering && (!c.clientChoice || c.variantIds.length >= 2);
   // The footer always offers a forward action, so the window is never a dead end
   // (Owner, 2026-10-26: «окно открыл — выйти невозможно, сохранить нечем»).
   // The combined film/add-ons screen commits directly; there is no hidden material step.
@@ -33937,6 +33961,7 @@ function openOrderModal() {
   state._newOrderMaterialsByService = {};
   state._newOrderDirectionsByService = {};
   state._newOrderDirectionOnly = '';
+  state._newOrderFilmVariants = [];
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
   const allManagers = orderManagerCandidates();
@@ -34071,7 +34096,8 @@ function renderNewOrderOfferings() {
     const filmId = state._newOrderMaterialsByService?.[item.id] || '';
     const film = filmId ? getCatalogItem(filmId) : null;
     const includes = serviceOfferingIncludes(item);
-    const material = serviceOfferingNeedsSizes(item) ? (film ? catalogLabel(film) : 'материал уточним на замере') : `за ${serviceOfferingUnitShort(item)}`;
+    const variants = index === 0 && (state._newOrderFilmVariants || []).length >= 2 ? state._newOrderFilmVariants.map(id => catalogLabel(getCatalogItem(id))).filter(Boolean) : [];
+    const material = serviceOfferingNeedsSizes(item) ? (variants.length ? `клиент выберет: ${variants.join(' / ')}` : film ? catalogLabel(film) : 'материал уточним на замере') : `за ${serviceOfferingUnitShort(item)}`;
     return `<div class="rp-intake-service" data-intake-offering="${academyEsc(item.id)}" data-offering="${academyEsc(item.id)}" style="${orderServiceCardStyle(direction)}">
       <div class="rp-intake-service-main"><div class="rp-intake-service-name">${academyEsc(item.name)}${index === 0 ? ' <span class="rp-intake-service-badge">исходный запрос</span>' : ''}</div><div class="rp-intake-service-meta">${academyEsc(primaryServiceInfo(direction)?.title || '')} · ${academyEsc(material)}${includes.length ? ` · входит: ${academyEsc(includes.map(child => child.name).join(', '))}` : ''}</div></div>
       <button type="button" class="btn-ghost text-sm text-red-600" aria-label="Убрать ${academyEsc(item.name)}" onclick="toggleNewOrderOffering('${academyEsc(item.id)}', false)">Убрать</button>
@@ -34755,6 +34781,7 @@ function createOrder(nextStep = 'project') {
     // How each chosen service was priced when the project was created.
     offeringUnits: Object.fromEntries(selectedOfferings.map(item => [item.id, serviceOfferingUnit(item)])),
     ...(offering ? { offeringId: offering.id, offeringName: offering.name } : { filmChoicePending: true }),
+    ...((state._newOrderFilmVariants || []).length >= 2 ? { filmVariants: [...state._newOrderFilmVariants], filmChoicePending: true } : {}),
     serviceType: service.id,
     serviceTypes: selectedServices.map(item => item.id),
     serviceCategory: service.catalogCategory,
