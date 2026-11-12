@@ -19257,7 +19257,7 @@ function renderOrderCommandCenter(o, c) {
         <h3 class="font-black text-slate-900">Центр управления</h3>
         <div class="text-xs text-gray-500 mt-1">Следующий шаг, события, клиент, документы и оплата в одном месте.</div>
       </div>
-      <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+      <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
     </div>
     <div class="order-command-center">
       ${renderOrderClientRequests(o)}
@@ -21419,7 +21419,7 @@ function renderManagerDashboardLegacy() {
           <div class="p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100" onclick="openOrder('${o.id}')">
             <div class="flex justify-between items-start">
               <div class="font-medium text-sm">${o.number}</div>
-              <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+              <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
             </div>
             <div class="text-xs text-gray-600 mt-1">${getClient(o.clientId)?.name}</div>
             <div class="text-xs text-blue-600 mt-1">📅 ${fmtDateTime(o.installationAt)}</div>
@@ -22096,7 +22096,7 @@ function renderOrderKanbanCard(o) {
           </div>
         </div>
         <div class="mt-2 flex flex-wrap gap-1">
-          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
           ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
         ${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}
@@ -22393,7 +22393,7 @@ function renderOrders() {
               <div>${c?.name || '—'}</div>
               <div class="text-xs text-gray-500">${c?.phone || ''}</div>
             </td>
-            <td class="px-4 py-3"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span></td>
+            <td class="px-4 py-3"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}</td>
             <td class="px-4 py-3">${area ? area.toFixed(1) + ' sq ft' : '—'}</td>
             <td class="px-4 py-3">${fmtMoney(price)}</td>
             <td class="px-4 py-3 text-sm">${installers || '—'}</td>
@@ -25470,7 +25470,7 @@ function renderInstallerPayHistory() {
             <td class="p-2 font-medium">${o.number}</td>
             <td class="p-2 text-xs">${orderAddress(o, c).slice(0,40) || '—'}</td>
             <td class="p-2">${fmtDateTime(o.installationAt)}</td>
-            <td class="p-2"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span></td>
+            <td class="p-2"><span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}</td>
             <td class="p-2 font-semibold text-amber-700">${fmtMoney(orderInstallerPayoutPerPerson(o, u.id))}</td>
           </tr>`;
         }).join('')}
@@ -25742,7 +25742,7 @@ function renderInstallerList(tasks) {
             <div class="text-sm text-gray-600 mt-1">${addressAnchor(orderAddress(o, c))}</div>
             <div class="text-sm text-gray-600">📞 ${c.phone}</div>
           </div>
-          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
         </div>
         <div class="mt-3 text-sm bg-purple-50 border-l-4 border-purple-500 p-2 rounded flex justify-between gap-2">
           <span>📅 ${fmtDateTime(o.installationAt)}</span><b>${academyEsc(fieldDayLabel(o.installationAt))}</b>
@@ -30554,7 +30554,7 @@ function renderInstallerTechnicalWorkspace(o, c, u) {
             <div class="order-clean-stage-title">ТЗ-лист · ${academyEsc(o.number)}</div>
             <div class="order-clean-stage-sub">${academyEsc(projectAddress || 'Адрес ещё не указан')} · ${fmtDateTime(o.installationAt)}</div>
           </div>
-          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+          <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
         </div>
         <div class="order-clean-actions mt-3">
           ${renderOrderActionCard(primary)}
@@ -33529,7 +33529,7 @@ function renderClientAccountPortal() {
                   <div class="text-xs text-gray-500">${academyEsc(o.number)}</div>
                   <div class="font-black text-slate-900">${academyEsc(orderServiceSummaryLabel(o))}</div>
                 </div>
-                <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>
+                <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
               </div>
               <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
                 <div><div class="text-xs text-gray-500">Сумма</div><div class="font-semibold">${fmtMoney(orderRevenue(o))}</div></div>
@@ -38483,6 +38483,8 @@ function premiumCanonicalSnapshot(prop) {
   });
   // Options the client ticks himself (2026-10-24): after the total is fixed, unticked.
   if (typeof projectProposalOptionItems === 'function') items.push(...projectProposalOptionItems(order));
+  // Owner, 2026-11-12: 2–3 film variants become one client choice in the KP.
+  if (typeof projectFilmVariantsApply === 'function') projectFilmVariantsApply(order, items, calc, prop);
   return {
     token: prop.token,
     legacy_order_id: order.id,

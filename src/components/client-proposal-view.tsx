@@ -515,6 +515,12 @@ function itemPriceLabel(item: any, language: "en" | "ru") {
   return formatCurrency(item.line_price);
 }
 
+/** Lines of one `choice_group` are alternatives (e.g. film variants): the client keeps exactly one. */
+function choiceGroup(item: any): string {
+  const value = item?.dynamic_fields?.choice_group;
+  return typeof value === "string" ? value : "";
+}
+
 export function ClientProposalView({
   initialProposal,
   language = "en",
@@ -885,24 +891,47 @@ export function ClientProposalView({
                       <div className="row-meta">{item.measurement.sqft} sqft</div>
                     ) : null}
 
-                    <label className="client-item-toggle">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(item.client_selected)}
-                        disabled={isLocked || saving}
-                        onChange={(event) =>
-                          setProposal((current: any) => ({
-                            ...current,
-                            items: current.items.map((candidate: any) =>
-                              candidate.proposal_item_id === item.proposal_item_id
-                                ? { ...candidate, client_selected: event.target.checked }
-                                : candidate,
-                            ),
-                          }))
-                        }
-                      />
-                      <span>{item.is_optional ? (ru ? "Добавить дополнительную услугу" : "Select optional item") : (ru ? "Оставить эту услугу" : "Keep this service")}</span>
-                    </label>
+                    {choiceGroup(item) ? (
+                      <label className="client-item-toggle" data-choice-group={choiceGroup(item)}>
+                        <input
+                          type="radio"
+                          name={`choice-${choiceGroup(item)}`}
+                          checked={Boolean(item.client_selected)}
+                          disabled={isLocked || saving}
+                          onChange={() =>
+                            setProposal((current: any) => ({
+                              ...current,
+                              // Alternatives: picking one releases the others of the same group.
+                              items: current.items.map((candidate: any) =>
+                                choiceGroup(candidate) === choiceGroup(item)
+                                  ? { ...candidate, client_selected: candidate.proposal_item_id === item.proposal_item_id }
+                                  : candidate,
+                              ),
+                            }))
+                          }
+                        />
+                        <span>{ru ? "Выбрать этот вариант" : "Choose this option"}</span>
+                      </label>
+                    ) : (
+                      <label className="client-item-toggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.client_selected)}
+                          disabled={isLocked || saving}
+                          onChange={(event) =>
+                            setProposal((current: any) => ({
+                              ...current,
+                              items: current.items.map((candidate: any) =>
+                                candidate.proposal_item_id === item.proposal_item_id
+                                  ? { ...candidate, client_selected: event.target.checked }
+                                  : candidate,
+                              ),
+                            }))
+                          }
+                        />
+                        <span>{item.is_optional ? (ru ? "Добавить дополнительную услугу" : "Select optional item") : (ru ? "Оставить эту услугу" : "Keep this service")}</span>
+                      </label>
+                    )}
                   </article>
                 );
               })}

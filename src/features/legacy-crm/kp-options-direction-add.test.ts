@@ -26,7 +26,8 @@ test('a directory service can be a KP option the client ticks, with a monthly pr
 
 test('the server keeps options unticked, counts them only when chosen, and lets the client tick only options', () => {
   assert.match(publish, /isOptional: item\.is_optional === true,/);
-  assert.match(publish, /const total = snapshot\.items\.filter\(\(item\) => !item\.isOptional\)/);
+  // Plain options count only when chosen; a choice group's selected alternative is part of the scope (2026-11-12).
+  assert.match(publish, /\.filter\(\(item\) => !item\.isOptional \|\| \(choiceGroupOf\(item\.dynamicFields\) && item\.clientSelected\)\)/);
   assert.match(publish, /is_optional: item\.isOptional,\s*client_selected: item\.clientSelected,/);
   const update = service.slice(service.indexOf('export async function updatePublicProposalSelections('));
   assert.match(update.slice(0, 3000), /proposal_id: proposal\.proposal_id,\s*\/\/ Only extras are the client's to tick; the agreed scope stays as sent\.\s*is_optional: true,/);

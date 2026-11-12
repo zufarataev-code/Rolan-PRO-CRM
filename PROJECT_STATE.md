@@ -2,6 +2,17 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — «Клиент выбирает плёнку»: 2–3 варианта плёнки в КП (Claude, PR pending)
+
+- Owner: clients are often offered several films with different light transmission and decide later; this must be a visible stage, and the measurement is saved without a final film.
+- Branch `claude/film-variants-kp-20261112`:
+  - `production-stages.js` (functions only): «Варианты плёнки — клиент выбирает» block in the KP wizard compose step. The manager marks up to 3 films (candidates = films allowed by the measured windows' services, else the project's film category). The first is recommended: it goes onto windows still without a film, so estimate/revenue/production stay on real numbers. `projectFilmVariantsApply` replaces the KP film lines of those windows with one line per variant (`dynamic_fields.choice_group = film_variant`, catalog id, VLT, window ids), recommended pre-selected at the approved estimate price; alternatives follow the KP's client-product rule scaled by the same factor. `premiumApplyClientOptions` («Забрать выбор клиента», also run quietly on proposal refresh) now calls `projectApplyClientFilmChoice`: the chosen film goes onto the same windows, the estimate is re-approved, a timeline entry is written. Status badges «🎨 Клиент выбирает плёнку» / «📐 Плёнку выберет замерщик» next to every order status badge.
+  - Server: `publishLegacyProposal` keeps exactly one selected line per choice group and counts it in the scope total; `updatePublicProposalSelections` enforces one-of per group after the client's update (the line just picked wins; unticking the last brings back the first) and names the chosen alternative in the manager notification.
+  - Client KP page: choice-group lines render as radio buttons «Выбрать этот вариант».
+- Codex review #503: manager can change the recommended film until the client decides («☆ рекомендовать»: windows on the old recommended film move to the new one, estimate re-approved). Per-variant client comments not added — the KP page already has the client message field for that.
+- Verification: full unit suite **1137/1137** (new `film-variants.test.ts` 6/6 incl. vm runs of the pricing and the client-choice sync; one existing assertion updated for the scope total), `tsc --noEmit` clean, `node --check` for both legacy scripts.
+- Not covered by this PR: a separate pipeline status (the stage is a badge on top of `proposal_sent`); automatic pull of the client's choice without opening the project (the manager notification says to press «Забрать выбор клиента»).
+
 ## 2026-11-12 — Проект из лида с направлением, плёнку выбирает замерщик (Claude, PR pending)
 
 - Owner: a manager cannot know the film when creating a project — today the cashier forces direction → line → film. A lead from an ad (e.g. solar) must become a project with that direction automatically; consultation and measurement follow; the measurer picks the film on site. Next steps agreed (separate PRs): «Клиент выбирает плёнку» stage with 2–3 film options in the proposal; one-hand measurer screen with «Начал / Закончил» timing; AI voice recorder (with explicit client consent — California all-party consent) and spoken sizes; native iPhone LiDAR app later.

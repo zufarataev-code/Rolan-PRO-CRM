@@ -71,6 +71,13 @@ function cleanSiteType(value: unknown) {
   return siteType === "RESIDENTIAL" || siteType === "COMMERCIAL" ? siteType : null;
 }
 
+/** Lines sharing a `choice_group` are alternatives: the client keeps exactly one. */
+export function choiceGroupOf(fields: unknown) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return "";
+  const value = (fields as Record<string, unknown>).choice_group;
+  return typeof value === "string" ? value.trim().slice(0, 60) : "";
+}
+
 function normalizeSnapshot(input: LegacyProposalSnapshot) {
   const token = cleanText(input.token, 120);
   const legacyOrderId = cleanText(input.legacy_order_id, 120);
@@ -114,7 +121,22 @@ function normalizeSnapshot(input: LegacyProposalSnapshot) {
     // An option starts unticked unless the snapshot says the client chose it.
     clientSelected: item.is_optional === true ? item.client_selected === true : true,
   }));
-  if (!items.some((item) => !item.isOptional)) throw new Error("The proposal has no billable lines.");
+  // A choice group (e.g. 2–3 film variants) is part of the scope: exactly one
+  // line of each group is selected — the first pre-selected one, else the first.
+  const groups = new Map<string, typeof items>();
+  items.forEach((item) => {
+    const group = choiceGroupOf(item.dynamicFields);
+    if (!group) return;
+    item.isOptional = true;
+    groups.set(group, [...(groups.get(group) ?? []), item]);
+  });
+  groups.forEach((members) => {
+    const keep = members.find((item) => item.clientSelected) ?? members[0];
+    members.forEach((item) => { item.clientSelected = item === keep; });
+  });
+  if (!items.some((item) => !item.isOptional || choiceGroupOf(item.dynamicFields))) {
+    throw new Error("The proposal has no billable lines.");
+  }
 
   return {
     token,
@@ -250,8 +272,11 @@ export async function publishLegacyProposal(session: SessionLike, input: LegacyP
       });
     }
 
-    // The scope is the required lines; options count once the client ticks them.
-    const total = snapshot.items.filter((item) => !item.isOptional).reduce((sum, item) => sum + item.linePrice, 0);
+    // The scope is the required lines plus the chosen alternative of each choice
+    // group; plain options count once the client ticks them.
+    const total = snapshot.items
+      .filter((item) => !item.isOptional || (choiceGroupOf(item.dynamicFields) && item.clientSelected))
+      .reduce((sum, item) => sum + item.linePrice, 0);
     const selectedTotal = snapshot.items.filter((item) => item.clientSelected).reduce((sum, item) => sum + item.linePrice, 0);
     const proposal = existing
       ? await tx.proposal.update({
