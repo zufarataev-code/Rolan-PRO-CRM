@@ -122,9 +122,8 @@ const CHECKS: Record<string, () => Promise<CheckResult>> = {
   },
 
   async plaud() {
-    if (!process.env.PLAUD_WEBHOOK_SECRET?.trim()) return { status: "warn", detail: "Не подключён: нужен PLAUD_WEBHOOK_SECRET и Zap в Zapier" };
     const last = await prisma.activityLog.findFirst({ where: { action_key: "integration.plaud.recording" }, orderBy: { created_at: "desc" }, select: { created_at: true } });
-    return last ? { status: "ok", detail: `Последняя запись: ${relativeAge(last.created_at)}` } : { status: "unknown", detail: "Подключено, записей ещё не было" };
+    return last ? { status: "ok", detail: `Последняя запись: ${relativeAge(last.created_at)}` } : { status: "unknown", detail: "Записей ещё не было — отправляйте из Plaud на info+plaud@rolan-pro.com" };
   },
 
   async twilio() {

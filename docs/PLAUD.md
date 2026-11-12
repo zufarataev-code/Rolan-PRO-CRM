@@ -5,11 +5,9 @@ Owner, 2026-11-12: «диктофон с ИИ слушает разговор с
 ## Flow
 
 1. The measurer records the conversation on the Plaud device/app. **California is an all-party-consent state** — say at the start «Я включу запись, чтобы ничего не упустить — вы не против?» and record only after a yes.
-2. Plaud transcribes and summarises → Zapier trigger **Plaud · Transcript & Summary Ready** (instant).
-3. Zapier action **Webhooks by Zapier · POST** to `https://<crm>/api/webhooks/plaud`:
-   - Payload type: JSON
-   - Headers: `Authorization: Bearer <PLAUD_WEBHOOK_SECRET>`
-   - Data: `recording_id`, `title`, `recorded_at`, `duration`, `summary`, `transcript` (map Plaud fields; other common names such as `name`, `transcription`, `start_time` are accepted too).
+2. Plaud transcribes and summarises. Delivery to the CRM — **free, no Zapier subscription** (Owner, 2026-11-12):
+   - **E-mail (default):** in the Plaud app, Share → e-mail to `info+plaud@rolan-pro.com` (the `+plaud` alias of the Gmail box connected to the CRM). Put the project number in the subject when you can. The CRM pulls these e-mails from Gmail at most once a minute when someone opens a measurement window. A free Zapier zap «Plaud → Gmail Send Email» to the same address makes it automatic (a two-step zap is on Zapier's free plan).
+   - **Webhook (optional, needs a paid Zapier plan for «Webhooks by Zapier»):** POST JSON to `https://<crm>/api/webhooks/plaud` with `Authorization: Bearer <PLAUD_WEBHOOK_SECRET>` and fields `recording_id`, `title`, `recorded_at`, `duration`, `summary`, `transcript`.
 4. The CRM stores the recording once (idempotent by `recording_id`, or a content hash) as an `activity_log` row `integration.plaud.recording` and links it to a project only when the match is unambiguous:
    1. project number in the Plaud title (`R-261112-005 …`);
    2. a client phone in the title/summary with exactly one open project;

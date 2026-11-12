@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-import { PlaudError, matchPlaudRecording, normalizePlaudPayload, plaudTokenMatches } from "./plaud-core";
+import { PlaudError, matchPlaudRecording, normalizePlaudPayload, plaudRecordingFromEmail, plaudTokenMatches } from "./plaud-core";
+import { plaudMailboxAlias, plaudTextParts } from "../gmail/service";
 
 const NOW = new Date("2026-11-12T20:00:00Z");
 const SECRET = "s".repeat(32);
@@ -106,4 +107,29 @@ test("Codex #506: field employees see only their projects' recordings; the inbox
 
 test("Codex #506: a recording that arrives later shows up without reloading the CRM", () => {
   assert.match(stages, /Date\.now\(\) - \(s\.loadedAt\[oid\] \|\| 0\) < 60000/);
+});
+
+test("free e-mail route: info+plaud@ alias, subject is the title, a text attachment is the transcript", () => {
+  assert.equal(plaudMailboxAlias("info@rolan-pro.com"), "info+plaud@rolan-pro.com");
+  assert.equal(plaudMailboxAlias("info+x@rolan-pro.com"), "info+plaud@rolan-pro.com");
+  const withFile = plaudRecordingFromEmail({ id: "m1", subject: "Fwd: R-261112-005 Иванов", sentAt: NOW.toISOString(), body: "Сводка: жара", attachmentsText: ["Окно 36 на 60"] });
+  assert.equal(withFile.title, "R-261112-005 Иванов");
+  assert.equal(withFile.transcript, "Окно 36 на 60");
+  assert.equal(withFile.summary, "Сводка: жара");
+  assert.equal(withFile.recording_key, "gmail-m1", "the same e-mail is imported once");
+  const bodyOnly = plaudRecordingFromEmail({ id: "m2", subject: "", sentAt: NOW.toISOString(), body: "Разговор", attachmentsText: [] });
+  assert.equal(bodyOnly.transcript, "Разговор");
+  assert.equal(bodyOnly.title, "Запись Plaud");
+});
+
+test("Codex #507: text attachments are read whether inline or by attachment id", () => {
+  const parts = plaudTextParts({ mimeType: "multipart/mixed", parts: [
+    { mimeType: "text/plain", body: { data: "eA" } },
+    { mimeType: "text/plain", filename: "a.txt", body: { data: Buffer.from("inline").toString("base64url"), size: 6 } },
+    { mimeType: "application/octet-stream", filename: "b.txt", body: { attachmentId: "att", size: 10 } },
+    { mimeType: "application/pdf", filename: "c.pdf", body: { attachmentId: "pdf", size: 10 } },
+  ] });
+  assert.deepEqual(parts.map(p => p.attachmentId || "inline"), ["inline", "att"]);
+  const gmail = readFileSync("src/features/gmail/service.ts", "utf8");
+  assert.match(gmail, /nextPageToken/);
 });

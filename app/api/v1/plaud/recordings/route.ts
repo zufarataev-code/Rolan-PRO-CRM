@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
 import { PlaudError } from "@/features/integrations/plaud-core";
-import { listPlaudRecordings, plaudRecordingOrderId, plaudViewerOrderIds, updatePlaudRecording } from "@/features/integrations/plaud";
+import { listPlaudRecordings, plaudRecordingOrderId, plaudViewerOrderIds, syncPlaudEmails, updatePlaudRecording } from "@/features/integrations/plaud";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const scope = await plaudViewerOrderIds(auth.session.roles, auth.session.user.legacy_user_ids);
   // The unmatched inbox can hold any client's conversation — owner/manager only.
   if (scope && (unassigned || !scope.has(orderId!))) return apiError(403, "forbidden", "Not your project.");
+  await syncPlaudEmails();
   return apiSuccess({ recordings: await listPlaudRecordings(unassigned ? null : orderId!.slice(0, 100)) });
 }
 
