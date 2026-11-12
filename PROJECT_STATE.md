@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — Проект из лида с направлением, плёнку выбирает замерщик (Claude, PR pending)
+
+- Owner: a manager cannot know the film when creating a project — today the cashier forces direction → line → film. A lead from an ad (e.g. solar) must become a project with that direction automatically; consultation and measurement follow; the measurer picks the film on site. Next steps agreed (separate PRs): «Клиент выбирает плёнку» stage with 2–3 film options in the proposal; one-hand measurer screen with «Начал / Закончил» timing; AI voice recorder (with explicit client consent — California all-party consent) and spoken sizes; native iPhone LiDAR app later.
+- Branch `claude/lead-direction-projects-20261112`, legacy CRM only:
+  - `leadServiceDirectionId` reads the service answer from the lead notes (Meta form answer, Messenger/website `Service:` line; the explicit service line wins over the campaign name) → smart / protective / privacy / decorative / solar. `convertLeadOnce` now stamps `serviceType`, `serviceTypes`, `leadIntentServiceType/Label`, workflow, direction tag and `filmChoicePending: true` (previously every lead project was a bare `serviceType: 'film'`).
+  - `autoCreateDirectionProjects` (owner/manager tab, every 60 s + 4 s after load): canonical `NEW_LEAD`, unclaimed, from Meta form / Messenger / website, with a phone, a recognised direction and at most one matching client → project created silently through the existing claim → save → confirm → close path (one project per lead even with several tabs; rollback on failed save). Anything ambiguous stays in «Новые лиды».
+  - New-project form: the cashier offers «Уточнить на замере — только направление» at the line step (intake only, not for general works). The project is created with the direction and `filmChoicePending: true`, without `offeringId` — the same shape lead projects already had.
+- Verification: full unit suite **1131/1131** (new `lead-direction-projects.test.ts` 4/4, one existing creation test updated for the intended direction-only path), `tsc --noEmit` clean, legacy inline script passes `node --check`.
+
 ## 2026-11-10 — Verify automatic Meta intake with optional email (Codex, PR #501)
 
 - Task branch `codex/meta-delivery-coverage-20261110`, based on `37980fb`. The owner asks how a submission without email can be proven to arrive automatically.

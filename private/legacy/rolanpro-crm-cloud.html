@@ -23753,6 +23753,7 @@ function canonicalMessengerLeadRows() {
         email: lead.email,
         source: lead.source,
         message: consultation?.location_address || lead.notes || '',
+        notes: lead.notes || '',
         receivedAt: lead.created_at,
         canonical: true,
         websiteUpdatesHtml: websiteLeadUpdatesHtml(lead.lead_id),
@@ -23929,6 +23930,75 @@ async function closeCanonicalLead(leadId) {
   return done;
 }
 const convertingLeadIds = new Set();
+// Owner, 2026-11-12: a lead from an ad already says what the client wants
+// (form answer, Messenger service). The project is created with that DIRECTION
+// only; the line and the exact film are chosen later by the measurer on site.
+const LEAD_DIRECTION_RULES = [
+  ['smart_film', /\b(smart|pdlc|switchable|smart glass|умн|смарт)/i],
+  ['protective_film', /(security|safety|protect|shatter|graffiti|anti-?graffiti|burglar|hurricane|bulletproof|защит|антиграф)/i],
+  ['privacy_film', /(privacy|one[- ]way|mirror|приват|зеркал)/i],
+  ['decorative_film', /(decor|frost|etched|pattern|логотип|logo|декор|матов)/i],
+  ['solar_film', /(solar|heat|sun|glare|uv|tint|cooling|energy|солнц|жар|тонир|блик)/i],
+];
+function leadServiceDirectionId(lead) {
+  const text = [lead?.notes, lead?.message].filter(Boolean).join('\n');
+  if (!text) return '';
+  // Prefer the explicit service answer line; fall back to the whole text.
+  const serviceLine = text.split(/\n/).find(line => /(service|film|considering|услуг)/i.test(line) && line.includes(':')) || '';
+  for (const source of [serviceLine.slice(serviceLine.indexOf(':') + 1), text]) {
+    const hit = LEAD_DIRECTION_RULES.find(([, pattern]) => pattern.test(source));
+    if (hit && ORDER_PRIMARY_SERVICES.some(item => item.id === hit[0])) return hit[0];
+  }
+  return '';
+}
+function orderDirectionFields(directionId, note) {
+  const service = primaryServiceInfo(directionId);
+  if (!service) return { serviceType: 'film' };
+  return {
+    serviceType: service.id,
+    serviceTypes: [service.id],
+    serviceCategory: service.catalogCategory,
+    serviceWorkflow: [...(service.workflow || [])],
+    leadIntentServiceType: service.id,
+    leadIntentServiceLabel: service.title,
+    leadIntentCapturedAt: new Date().toISOString(),
+    leadIntentConfidence: note || 'captured',
+    filmChoicePending: true,
+    tags: [service.tag].filter(Boolean),
+  };
+}
+// Leads with a phone and a recognised direction become projects on their own
+// while an owner/manager has the CRM open. The server-side claim guarantees one
+// project per lead even with several open tabs; anything ambiguous (several
+// matching clients, no direction) stays in «Новые лиды» for a person.
+const autoProjectLeadIds = new Set();
+const AUTO_PROJECT_SOURCES = new Set(['meta_lead_ads', 'facebook_messenger', 'website']);
+async function autoCreateDirectionProjects() {
+  if (!cloudReady || !['owner', 'manager'].includes(currentUser()?.role)) return;
+  for (const lead of canonicalMessengerLeadRows()) {
+    if (autoProjectLeadIds.has(lead.id) || convertingLeadIds.has(lead.id)) continue;
+    if (!AUTO_PROJECT_SOURCES.has(lead.source) || lead.statusCode !== 'NEW_LEAD' || lead.claimedAt || !lead.phone) continue;
+    if (!leadServiceDirectionId(lead) || clientsMatchingContact(lead.phone, lead.email).length > 1) continue;
+    if (db.orders.some(order => order.canonicalLeadId === lead.id)) continue;
+    autoProjectLeadIds.add(lead.id);
+    convertingLeadIds.add(lead.id);
+    try { await convertLeadOnce(lead.id, { silent: true }); }
+    catch (error) { console.warn('[CRM] auto project from lead failed', error); }
+    finally { convertingLeadIds.delete(lead.id); }
+  }
+}
+let leadAutoProjectTimer = null;
+function startLeadAutoProjects() {
+  if (leadAutoProjectTimer) clearInterval(leadAutoProjectTimer);
+  const tick = async () => {
+    if (!['owner', 'manager'].includes(currentUser()?.role)) return;
+    await fetchCanonicalLeads({ renderIfVisible: true });
+    await autoCreateDirectionProjects();
+  };
+  setTimeout(tick, 4000);
+  leadAutoProjectTimer = setInterval(tick, 60000);
+}
+
 async function convertLead(leadId) {
   // A double click while the first conversion runs is ignored.
   if (convertingLeadIds.has(leadId)) return;
@@ -23936,12 +24006,14 @@ async function convertLead(leadId) {
   try { await convertLeadOnce(leadId); }
   finally { convertingLeadIds.delete(leadId); }
 }
-async function convertLeadOnce(leadId) {
+async function convertLeadOnce(leadId, options = {}) {
+  const silent = Boolean(options.silent);
   const l = (state.leadsCache || []).find(x => x.id === leadId) || canonicalLeadRow(leadId);
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
   // Клиент: всегда переиспользуем существующую карточку по телефону или email.
   const matches = clientsMatchingContact(l.phone, l.email);
+  if (silent && matches.length > 1) return;
   let client = matches.length > 1
     ? await chooseLegacyClient(matches, 'Для кого создать проект?')
     : (matches[0] || null);
@@ -23956,12 +24028,13 @@ async function convertLeadOnce(leadId) {
     const existingOrder = db.orders.find(order => order.canonicalLeadId === leadId);
     if (existingOrder) {
       await closeCanonicalLead(leadId);
-      openOrder(existingOrder.id);
+      if (!silent) openOrder(existingOrder.id);
       return;
     }
     // Reserve the lead; it stays open and visible until the project is saved.
     const claim = await claimCanonicalLead(leadId, 'claim');
     if (!claim.ok) {
+      if (silent) return;
       alert(claim.message);
       fetchCanonicalLeads({ renderIfVisible: true });
       return;
@@ -23982,6 +24055,8 @@ async function convertLeadOnce(leadId) {
     db.clients.push(client);
   }
   const num = 'R-' + localDateKey().slice(2).replace(/-/g,'') + '-' + String(projectNumberSequence()).padStart(3, '0');
+  const leadDirectionId = leadServiceDirectionId(l);
+  const leadDirection = primaryServiceInfo(leadDirectionId);
   const o = {
     id: 'o' + uid(), number: num, clientId: client.id,
     ...(canonical ? { canonicalLeadId: leadId } : {}),
@@ -23993,9 +24068,10 @@ async function convertLeadOnce(leadId) {
     complexity: 'standard', distanceKm: 0, marketing: 0, paid: 0,
     measurements: { rooms: [] },
     extraServices: [], extraExpenses: [],
-    timeline: [{ at: new Date().toISOString(), key: 'orderCreated', by: state.currentUserId, note: `Из лида (${l.source})${l.message ? ': ' + l.message.slice(0,100) : ''}` }],
+    timeline: [{ at: new Date().toISOString(), key: 'orderCreated', by: state.currentUserId, note: `${silent ? 'Создан автоматически из' : 'Из'} лида (${l.source})${leadDirection ? ` · направление: ${leadDirection.title}, плёнку выберет замерщик` : ''}${l.message ? ': ' + l.message.slice(0,100) : ''}` }],
     notes: l.message || '',
     serviceType: 'film', tags: [], priceOverridePerSqft: null,
+    ...(leadDirection ? orderDirectionFields(leadDirection.id, silent ? 'auto_from_ad' : 'from_lead') : {}),
   };
   db.orders.push(o);
   save();
@@ -24011,7 +24087,7 @@ async function convertLeadOnce(leadId) {
       await claimCanonicalLead(leadId, 'release');
       fetchCanonicalLeads({ renderIfVisible: true });
       render();
-      alert('Проект не сохранился на сервере — заявка осталась в «Новых лидах». Проверьте связь и попробуйте ещё раз.');
+      if (!silent) alert('Проект не сохранился на сервере — заявка осталась в «Новых лидах». Проверьте связь и попробуйте ещё раз.');
       return;
     }
     const closed = await claimCanonicalLead(leadId, 'complete');
@@ -24022,6 +24098,7 @@ async function convertLeadOnce(leadId) {
   } else {
     await markLeadProcessed(leadId);
   }
+  if (silent) { if (state.view === 'orders' || state.view === 'leads' || state.view === 'dashboard') render(); return; }
   openOrder(o.id);
 }
 async function dismissLead(leadId) {
@@ -27092,6 +27169,14 @@ function serviceCashierPick(field, value) {
   if (field === 'direction') {
     if (!serviceCashierDirections().some(item => item.direction.id === value)) return;
     Object.assign(c, { directionId: value, offeringId: '', catalogId: '', addonIds: [], step: 'offering' });
+  } else if (field === 'directionOnly') {
+    // Intake only: the project gets the direction; line and film wait for the measurer.
+    if (c.returnTo !== 'intake' || !c.directionId || isGeneralDirection(c.directionId)) return;
+    const directionId = c.directionId;
+    state._serviceCashier = null;
+    serviceCashierLayer()?.remove();
+    setNewOrderDirectionOnly(directionId);
+    return;
   } else if (field === 'offering') {
     const offering = serviceOffering(value);
     if (!offering || offering.active === false || !serviceCashierPrimaryOfferings(serviceOfferingDirection(c.directionId)).some(item => item.id === value)) return;
@@ -27192,8 +27277,11 @@ function serviceCashierHtml(c) {
     body = `<div class="rp-cashier-grid">${serviceCashierDirections().map(({ direction: dir, offerings }) => `<button type="button" class="rp-cashier-card rp-cashier-direction" style="${serviceCashierCardStyle(dir.id)}" onclick="serviceCashierPick('direction','${dir.id}')"><span class="rp-cashier-icon">${dir.icon || '•'}</span><span class="rp-cashier-title">${academyEsc(dir.title)}</span><span class="rp-cashier-meta">${offerings.length} ${offerings.length === 1 ? 'линейка' : offerings.length < 5 ? 'линейки' : 'линеек / услуг'}</span></button>`).join('')}</div>`;
   } else if (c.step === 'offering') {
     const items = serviceCashierPrimaryOfferings(serviceOfferingDirection(c.directionId));
+    const directionOnlyCard = c.returnTo === 'intake' && !isGeneralDirection(c.directionId)
+      ? `<button type="button" class="rp-cashier-card" data-cashier-direction-only style="${serviceCashierCardStyle(c.directionId)}" onclick="serviceCashierPick('directionOnly','')"><span class="rp-cashier-kind">Только направление</span><span class="rp-cashier-title">Уточнить на замере</span><span class="rp-cashier-meta">Линейку и плёнку выберет замерщик на объекте</span></button>`
+      : '';
     body = items.length
-      ? `<p class="rp-cashier-selection-note">Выберите линейку плёнки или основную работу. Материалы этой линейки и дополнительные работы откроются вместе на следующем экране.</p><div class="rp-cashier-grid">${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-kind">Линейка / услуга</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
+      ? `<p class="rp-cashier-selection-note">Выберите линейку плёнки или основную работу. Если клиент ещё не определился — «Уточнить на замере».</p><div class="rp-cashier-grid">${directionOnlyCard}${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-kind">Линейка / услуга</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
       : `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(direction?.icon || '🎞')}</div><b>В направлении пока нет активных услуг</b><div class="text-sm mt-1">Сначала добавьте и заполните услугу в разделе «Услуги и цены».</div></div>`;
   } else {
     const films = serviceCashierFilms(offering);
@@ -33848,6 +33936,7 @@ function openOrderModal() {
   state._newOrderServices = [];
   state._newOrderMaterialsByService = {};
   state._newOrderDirectionsByService = {};
+  state._newOrderDirectionOnly = '';
   state._newOrderExecution = 'standard_project';
   const viewer = currentUser();
   const allManagers = orderManagerCandidates();
@@ -33988,9 +34077,26 @@ function renderNewOrderOfferings() {
       <button type="button" class="btn-ghost text-sm text-red-600" aria-label="Убрать ${academyEsc(item.name)}" onclick="toggleNewOrderOffering('${academyEsc(item.id)}', false)">Убрать</button>
     </div>`;
   }).join('');
-  node.innerHTML = `${rows || (total ? '<div class="rp-intake-service-empty" data-intake-offering="empty">Услуг пока нет — добавьте через кассу.</div>' : '')}${total ? `<button type="button" class="btn-primary text-sm mt-2" data-intake-offering="add" onclick="openServiceCashier('', 'intake')">+ Услуга</button>` : ''}`;
+  const directionOnly = !selected.length && state._newOrderDirectionOnly ? primaryServiceInfo(state._newOrderDirectionOnly) : null;
+  const directionOnlyRow = directionOnly ? `<div class="rp-intake-service" data-intake-offering="direction-only" style="${orderServiceCardStyle(directionOnly.id)}">
+      <div class="rp-intake-service-main"><div class="rp-intake-service-name">${academyEsc(directionOnly.title)} <span class="rp-intake-service-badge">исходный запрос</span></div><div class="rp-intake-service-meta">Линейку и плёнку выберет замерщик на объекте</div></div>
+      <button type="button" class="btn-ghost text-sm text-red-600" aria-label="Убрать направление" onclick="setNewOrderDirectionOnly('')">Убрать</button>
+    </div>` : '';
+  node.innerHTML = `${rows || directionOnlyRow || (total ? '<div class="rp-intake-service-empty" data-intake-offering="empty">Услуг пока нет — добавьте через кассу.</div>' : '')}${total ? `<button type="button" class="btn-primary text-sm mt-2" data-intake-offering="add" onclick="openServiceCashier('', 'intake')">+ Услуга</button>` : ''}`;
   const empty = document.getElementById('no-offering-empty');
   if (empty) empty.style.display = total ? 'none' : '';
+}
+function setNewOrderDirectionOnly(directionId) {
+  const direction = directionId && !isGeneralDirection(directionId) ? primaryServiceInfo(directionId) : null;
+  state._newOrderDirectionOnly = direction ? direction.id : '';
+  if (direction && !newOrderSelectedOfferings().length) {
+    state._newOrderService = direction.id;
+    state._newOrderServices = [direction.id];
+    const hidden = document.getElementById('no-svc');
+    if (hidden) hidden.value = direction.id;
+  }
+  renderNewOrderOfferings();
+  refreshOrderIntakeGates();
 }
 function setNewOrderOfferingMaterial(offeringId, catalogId) {
   const offering = serviceOffering(offeringId);
@@ -34037,7 +34143,7 @@ function toggleNewOrderOffering(id, checked, directionId = '') {
 function refreshOrderIntakeGates() {
   const hasClient = Boolean(state._newOrderClient);
   const hasSite = hasClient && Boolean(state._newOrderSiteType);
-  const validOffering = newOrderSelectedOfferings().length > 0;
+  const validOffering = newOrderSelectedOfferings().length > 0 || Boolean(state._newOrderDirectionOnly);
   document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = hasClient ? '' : 'none'; });
   document.querySelectorAll('[data-intake-offering]').forEach(node => { node.style.display = hasSite ? '' : 'none'; });
   document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = hasSite && validOffering ? '' : 'none'; });
@@ -34566,7 +34672,8 @@ function createOrderClientFromOverlay() {
 function createOrder(nextStep = 'project') {
   let clientId = state._newOrderClient;
   const selectedOfferings = newOrderSelectedOfferings();
-  const serviceId = newOrderOfferingServiceType(selectedOfferings[0]);
+  const directionOnlyId = !selectedOfferings.length && state._newOrderDirectionOnly ? state._newOrderDirectionOnly : '';
+  const serviceId = directionOnlyId || newOrderOfferingServiceType(selectedOfferings[0]);
   const service = primaryServiceInfo(serviceId);
   const selectedServices = [...new Set([serviceId, ...selectedOfferings.map(newOrderOfferingServiceType)])].filter(Boolean).map(id => primaryServiceInfo(id));
   const offeringCatalogIds = newOrderOfferingCatalogIds(selectedOfferings);
@@ -34579,8 +34686,8 @@ function createOrder(nextStep = 'project') {
   const siteType = normalizeOrderSiteType(document.getElementById('no-site-type')?.value || state._newOrderSiteType);
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
 
-  const offering = selectedOfferings[0];
-  if (!offering || !service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id))) {
+  const offering = selectedOfferings[0] || null;
+  if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || (!directionOnlyId && (!offering || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id))))) {
     alert('Отметьте хотя бы одну активную услугу проекта');
     return;
   }
@@ -34640,15 +34747,14 @@ function createOrder(nextStep = 'project') {
       at: new Date().toISOString(),
       key: 'orderCreated',
       by: state.currentUserId,
-      note: `Входящий запрос: ${service.title} · ${executionVariant.title}`,
+      note: `Входящий запрос: ${service.title} · ${executionVariant.title}${directionOnlyId ? ' · линейку и плёнку выберет замерщик' : ''}`,
     }],
     notes: document.getElementById('no-notes').value,
     offeringIds: selectedOfferings.map(item => item.id),
     offeringCatalogIds,
     // How each chosen service was priced when the project was created.
     offeringUnits: Object.fromEntries(selectedOfferings.map(item => [item.id, serviceOfferingUnit(item)])),
-    offeringId: offering.id,
-    offeringName: offering.name,
+    ...(offering ? { offeringId: offering.id, offeringName: offering.name } : { filmChoicePending: true }),
     serviceType: service.id,
     serviceTypes: selectedServices.map(item => item.id),
     serviceCategory: service.catalogCategory,
@@ -34664,8 +34770,7 @@ function createOrder(nextStep = 'project') {
     orderBuilder: {
       offeringIds: selectedOfferings.map(item => item.id),
       offeringCatalogIds: { ...offeringCatalogIds },
-      offeringId: offering.id,
-      offeringName: offering.name,
+      ...(offering ? { offeringId: offering.id, offeringName: offering.name } : { directionOnly: true }),
       serviceId: service.id,
       serviceTitle: service.title,
       serviceIds: selectedServices.map(item => item.id),
@@ -44370,6 +44475,7 @@ async function cloudBoot() {
     state.lang = firstAllowed?.lang || state.lang;
     cloudReady = true;
     startCanonicalLeadsPolling();
+    startLeadAutoProjects();
     localStorage.setItem('rolanpro_crm', JSON.stringify(db));
     // Projects closed through their services: the owner/manager's CRM claims
     // their film write-off and notices; they run once the claim is saved.

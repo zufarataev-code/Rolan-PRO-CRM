@@ -118,7 +118,8 @@ test('services are composed at the cashier; the first is the incoming request; i
 
 test('saved project keeps the chosen services for measurement, estimate and proposal', () => {
   const creation = html.slice(html.indexOf('function createOrder(nextStep'), html.indexOf('function openClientModal()'));
-  assert.match(creation, /const serviceId = newOrderOfferingServiceType\(selectedOfferings\[0\]\);/);
+  // Owner 2026-11-12: a project may start with only a direction; otherwise the first service decides it.
+  assert.match(creation, /const serviceId = directionOnlyId \|\| newOrderOfferingServiceType\(selectedOfferings\[0\]\);/);
   assert.match(creation, /offeringId: offering\.id/);
   assert.match(creation, /offeringCatalogIds/);
   assert.match(creation, /!serviceOfferingInDirection\(offering, serviceOfferingDirection\(service\.id\)\)/);
