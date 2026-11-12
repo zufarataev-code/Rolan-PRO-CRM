@@ -7522,6 +7522,8 @@
     .manager-measure-modal .manager-measure-main { min-width:0; }
     .manager-measure-modal input, .manager-measure-modal select { font-size:16px; min-height:44px; max-width:100%; scroll-margin-block:16px; }
     .manager-measure-modal .manager-measure-footer { position:sticky; bottom:0; z-index:6; background:#fff; box-shadow:0 -6px 16px rgba(15,36,64,.08); display:block; padding:10px 12px calc(12px + env(safe-area-inset-bottom)); }
+    .manager-measure-modal .manager-measure-footer .measure-visit-start, .manager-measure-modal .manager-measure-footer .measure-visit-chip { display:flex; width:100%; margin-bottom:8px; }
+    .manager-measure-modal .manager-measure-footer button { min-height:52px; }
     .manager-measure-modal .manager-measure-footer > div:first-child { font-size:12px; margin-bottom:6px; }
     .manager-measure-footer > div:first-child { margin-bottom:8px; }
     .manager-measure-footer > div:last-child { display:flex; flex-wrap:wrap; }
@@ -13658,6 +13660,7 @@ function measureStudioFinish(orderId) {
     return;
   }
   if (u?.role === 'measurer' && o.measurerId === u.id && !o.measurementAcceptedAt) o.measurementAcceptedAt = new Date().toISOString();
+  if (typeof measureVisitFinish === 'function') measureVisitFinish(o);
   closeModal();
   changeStatus(orderId, 'measurement_done');
 }
@@ -19153,6 +19156,7 @@ function orderPrimaryNextAction(o) {
 /** The measurer's own step on the project card (Owner, 2026-10-24: the card spoke to the manager). */
 function measurerOrderPrimaryAction(o) {
   if (o.status === 'measurement_scheduled' && !o.measurementAcceptedAt) return { icon: '✅', title: 'Принять замер', sub: `${fmtDateTime(o.measurementAt)} · подтвердите, что приедете.`, variant: 'primary', onclick: `acceptMeasurementTask('${o.id}', true)` };
+  if (o.status === 'measurement_scheduled' && typeof measureVisit === 'function' && !measureVisit(o).startedAt) return { icon: '▶', title: 'Я на объекте — начал', sub: 'CRM засечёт время замера и откроет окно замера.', variant: 'primary', onclick: `measureVisitStart('${o.id}'); openMeasurerV25ForOrder('${o.id}')` };
   if (o.status === 'measurement_scheduled') return { icon: '📐', title: measureAllWindows(o).length ? 'Продолжить замер' : 'Начать замер', sub: 'Окна, размеры и стекло. «Завершить замер» — внизу замера.', variant: 'primary', onclick: `openMeasurerV25ForOrder('${o.id}')` };
   return { icon: '✓', title: 'Замер сдан', sub: 'Расчёт и КП делает менеджер. Размеры можно открыть и посмотреть.', variant: 'success', onclick: `openMeasurerV25ForOrder('${o.id}')` };
 }
@@ -32264,6 +32268,7 @@ function openManagerMeasureModal(oid) {
   if (orderIsHistoricalDraft(o)) { alert('Замер не назначается из черновика переноса. Продолжите перенос старого проекта.'); openQuickProjectEntry(oid); return; }
   state.modal = renderManagerMeasureModal(oid);
   render();
+  if (typeof measureVisitStartTicker === 'function') measureVisitStartTicker(oid);
 }
 function managerSolarMeasurementIssues(order) {
   const issues = [];
@@ -32304,6 +32309,7 @@ function completeManagerMeasurement(oid) {
       return;
     }
     if (!o.measurementAcceptedAt) o.measurementAcceptedAt = new Date().toISOString();
+    if (typeof measureVisitFinish === 'function') measureVisitFinish(o);
     closeModal();
     changeStatus(oid, 'measurement_done');
     state.view = 'measurements';
@@ -32322,6 +32328,7 @@ function completeManagerMeasurement(oid) {
     openProjectEstimateWorkspace(oid);
     return;
   }
+  if (typeof measureVisitFinish === 'function') measureVisitFinish(o);
   changeStatus(oid, 'measurement_done');
 }
 function projectSyncServicesFromWindows(oid) {
@@ -32354,8 +32361,10 @@ function managerMeasureFooterActionHtml(o) {
   const oid = o.id;
   const open = !o.measurementDoneAt && ['new', 'consultation_scheduled', 'measurement_scheduled'].includes(o.status);
   if (open) {
-    const label = currentUser()?.role === 'measurer' ? '✓ Сдать замер' : '✓ Замер готов — рассчитать';
-    return `<button class="btn-primary manager-measure-finish" style="min-height:48px;flex:1 1 100%" onclick="completeManagerMeasurement('${oid}')">${label}</button>`;
+    const label = currentUser()?.role === 'measurer' ? '✓ Закончил — сдать замер' : '✓ Замер готов — рассчитать';
+    // Owner, 2026-11-12: «Начал» on arrival, timer while on site — in the thumb zone.
+    const visit = typeof measureVisitBarHtml === 'function' ? measureVisitBarHtml(o) : '';
+    return `${visit}<button class="btn-primary manager-measure-finish" style="min-height:52px;flex:1 1 100%;font-size:16px" onclick="completeManagerMeasurement('${oid}')">${label}</button>`;
   }
   return `<button class="btn-primary manager-measure-exit" style="min-height:48px;flex:1 1 100%" onclick="managerMeasureSaveAndExit('${oid}')">Готово</button>`;
 }

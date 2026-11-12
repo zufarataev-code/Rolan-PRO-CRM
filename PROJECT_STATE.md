@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-12 — Замерщик: «Начал / Закончил» с учётом времени, кнопки под большой палец (Claude, PR pending)
+
+- Owner: on arrival the measurer taps «Начал» and the system counts time (like TintWiz); when done — «Закончил»; the phone screen must work with one hand.
+- Branch `claude/measure-visit-timer-20261112`: `production-stages.js` adds `o.measureVisit` (startedAt/By, finishedAt/By, minutes). «▶ Я на объекте — начал» is the measurer's primary card action for `measurement_scheduled` (opens the measurement window) and the first button of the measurement footer; only the assigned measurer, a manager or the owner can start; a second tap never restarts the clock. Starting accepts the task, writes `measure_visit_started` to the timeline and sends the manager an in-app notice. While on site the footer shows «⏱ На объекте с 10:32 · 14 мин» (refreshed every 30 s while the window is open). Every hand-in path (measurer «✓ Закончил — сдать замер», manager «Замер готов», old studio finish) stamps the end and writes «Замер закончен · на объекте N мин» to the timeline. On phones the footer stays sticky at the bottom with 52 px buttons.
+- Verification: full unit suite **1142/1142** (new `measure-visit.test.ts` 4/4 incl. vm runs; the measurement-window assertion updated for the new label), `tsc --noEmit` clean, `node --check` both legacy scripts.
+
 ## 2026-11-12 — Касса: «Клиент выберет» с выбором позиций (Claude, PR pending)
 
 - Owner (screenshot of the cashier «Плёнка и допы»): besides «Уточнить на замере» the manager needs «клиент выберет» and must be able to choose which films the client will choose from.
