@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 
 import { LEGACY_WORKSPACE_VIEW_ROLES } from "@/features/legacy-crm/api";
 import { PlaudError } from "@/features/integrations/plaud-core";
-import { listPlaudRecordings, updatePlaudRecording } from "@/features/integrations/plaud";
+import { listPlaudRecordings, plaudRecordingOrderId, plaudViewerOrderIds, updatePlaudRecording } from "@/features/integrations/plaud";
 import { requireRequestSession } from "@/lib/auth/server";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
 
@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
   const orderId = request.nextUrl.searchParams.get("orderId");
   const unassigned = request.nextUrl.searchParams.get("unassigned") === "1";
   if (!unassigned && !orderId) return apiError(400, "order_required", "orderId or unassigned=1 is required.");
+  const scope = await plaudViewerOrderIds(auth.session.roles, auth.session.user.legacy_user_ids);
+  // The unmatched inbox can hold any client's conversation — owner/manager only.
+  if (scope && (unassigned || !scope.has(orderId!))) return apiError(403, "forbidden", "Not your project.");
   return apiSuccess({ recordings: await listPlaudRecordings(unassigned ? null : orderId!.slice(0, 100)) });
 }
 
@@ -29,6 +32,12 @@ export async function PATCH(request: NextRequest) {
   const change: { orderId?: string | null; applied?: boolean } = {};
   if ("orderId" in body) change.orderId = typeof body.orderId === "string" && body.orderId ? body.orderId.slice(0, 100) : null;
   if (body.applied === true) change.applied = true;
+  const scope = await plaudViewerOrderIds(auth.session.roles, auth.session.user.legacy_user_ids);
+  if (scope) {
+    // Field employees may only mark their own project's recording as used.
+    const current = await plaudRecordingOrderId(id);
+    if (change.orderId !== undefined || !current || !scope.has(current)) return apiError(403, "forbidden", "Not your project.");
+  }
   try {
     return apiSuccess({ recording: await updatePlaudRecording(id, change, auth.session.user?.user_id ?? null) });
   } catch (cause) {

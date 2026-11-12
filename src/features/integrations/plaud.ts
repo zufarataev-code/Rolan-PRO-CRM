@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
+import { createFieldWorkspace, isPrivilegedLegacyWorkspaceRole } from "@/features/legacy-crm/field-workspace";
 import { legacyProjectsIncludingArchive } from "@/features/legacy-crm/project-archive";
 import { PLAUD_ACTION, PLAUD_ENTITY, PlaudError, matchPlaudRecording, type PlaudRecording } from "./plaud-core";
 
@@ -35,6 +36,25 @@ export async function importPlaudRecording(rec: PlaudRecording) {
     });
     return { id: row.activity_id, duplicate: false, order_id: match?.order_id ?? null, match_reason: match?.reason ?? null };
   });
+}
+
+/**
+ * Codex review #506: transcripts are client conversations. Owner/manager see all;
+ * a field employee sees only recordings of projects in their own field workspace.
+ * Returns null for «everything».
+ */
+export async function plaudViewerOrderIds(roles: readonly string[], legacyUserIds: readonly string[]) {
+  if (isPrivilegedLegacyWorkspaceRole(roles)) return null;
+  const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" }, select: { payload: true } });
+  const field = createFieldWorkspace((workspace?.payload || {}) as JsonRecord, roles, legacyUserIds) as JsonRecord;
+  return new Set((Array.isArray(field.orders) ? field.orders : []).map(order => String((order as JsonRecord).id)));
+}
+
+export async function plaudRecordingOrderId(id: string) {
+  const row = await prisma.activityLog.findFirst({ where: { activity_id: id, action_key: PLAUD_ACTION }, select: { metadata: true } });
+  if (!row) return undefined;
+  const orderId = (row.metadata as JsonRecord | null)?.order_id;
+  return typeof orderId === "string" ? orderId : null;
 }
 
 export type PlaudRecordingView = {

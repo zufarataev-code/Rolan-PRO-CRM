@@ -4606,7 +4606,7 @@ function measureVisitStartTicker(oid) {
 // recordings appear in the measurement window, and one tap lets AI put the
 // client's wishes into the project notes and the dictated sizes into rooms.
 function plaudState() {
-  state._plaud = state._plaud || { byOrder: {}, unassigned: null, loading: {}, open: {} };
+  state._plaud = state._plaud || { byOrder: {}, unassigned: null, loading: {}, open: {}, loadedAt: {} };
   return state._plaud;
 }
 function plaudRefreshMeasure(oid) {
@@ -4619,7 +4619,8 @@ function plaudRefreshMeasure(oid) {
 }
 async function plaudLoad(oid, force = false) {
   const s = plaudState();
-  if (typeof fetch !== 'function' || s.loading[oid] || (!force && s.byOrder[oid])) return;
+  // Codex review #506: Plaud delivers minutes later — re-read at most once a minute.
+  if (typeof fetch !== 'function' || s.loading[oid] || (!force && s.byOrder[oid] && Date.now() - (s.loadedAt[oid] || 0) < 60000)) return;
   s.loading[oid] = true;
   try {
     const get = async query => {
@@ -4627,7 +4628,9 @@ async function plaudLoad(oid, force = false) {
       if (!response.ok) throw new Error('plaud ' + response.status);
       return (await response.json())?.data?.recordings || [];
     };
-    const [own, unassigned] = await Promise.all([get('orderId=' + encodeURIComponent(oid)), get('unassigned=1')]);
+    // The unmatched inbox is owner/manager only (any client's conversation).
+    const privileged = ['owner', 'manager'].includes(currentUser()?.role);
+    const [own, unassigned] = await Promise.all([get('orderId=' + encodeURIComponent(oid)), privileged ? get('unassigned=1').catch(() => []) : Promise.resolve([])]);
     s.byOrder[oid] = own;
     s.unassigned = unassigned;
   } catch (error) {
@@ -4635,7 +4638,12 @@ async function plaudLoad(oid, force = false) {
     s.failed = true;
   } finally {
     s.loading[oid] = false;
-    plaudRefreshMeasure(oid);
+    const before = JSON.stringify(s._shown?.[oid] || null);
+    s._shown = s._shown || {};
+    s._shown[oid] = [(s.byOrder[oid] || []).map(rec => rec.id + rec.applied_at), (s.unassigned || []).map(rec => rec.id)];
+    s.loadedAt[oid] = Date.now();
+    // Re-render only when something changed, so a refresh never jumps the screen.
+    if (force || before !== JSON.stringify(s._shown[oid])) plaudRefreshMeasure(oid);
   }
 }
 async function plaudPatch(body) {
@@ -4662,10 +4670,8 @@ function plaudMeasureBlockHtml(o) {
   if (!o) return '';
   const s = plaudState();
   const own = s.byOrder[o.id];
-  if (!own) {
-    if (typeof setTimeout === 'function') setTimeout(() => plaudLoad(o.id), 0);
-    return '';
-  }
+  if (typeof setTimeout === 'function') setTimeout(() => plaudLoad(o.id), 0);
+  if (!own) return '';
   const unassigned = (s.unassigned || []).slice(0, 5);
   if (!own.length && !unassigned.length) return '';
   const inbox = unassigned.length ? `<div class="text-xs font-bold text-slate-600 mt-3">Непривязанные записи — это разговор по этому проекту?</div>${unassigned.map(rec => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px dashed #cbd5e1;border-radius:10px;padding:8px;margin-top:6px">

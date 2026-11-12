@@ -93,3 +93,17 @@ test("AI plan: invented or broken sizes are dropped, wishes and sizes land in th
 test("the dictaphone block lives in the measurement window", () => {
   assert.match(legacy, /plaudMeasureBlockHtml\(o\)/);
 });
+
+test("Codex #506: field employees see only their projects' recordings; the inbox is owner/manager only", () => {
+  const route = readFileSync("app/api/v1/plaud/recordings/route.ts", "utf8");
+  assert.match(route, /plaudViewerOrderIds\(auth\.session\.roles/);
+  assert.match(route, /scope && \(unassigned \|\| !scope\.has\(orderId!\)\)/);
+  assert.match(route, /change\.orderId !== undefined \|\| !current \|\| !scope\.has\(current\)/);
+  const lib = readFileSync("src/features/integrations/plaud.ts", "utf8");
+  assert.match(lib, /isPrivilegedLegacyWorkspaceRole\(roles\)\) return null/);
+  assert.match(lib, /createFieldWorkspace\(/);
+});
+
+test("Codex #506: a recording that arrives later shows up without reloading the CRM", () => {
+  assert.match(stages, /Date\.now\(\) - \(s\.loadedAt\[oid\] \|\| 0\) < 60000/);
+});
