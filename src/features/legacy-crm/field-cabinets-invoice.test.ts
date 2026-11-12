@@ -33,7 +33,7 @@ test('«Завершить замер» is inside the studio; the measurer may l
   const finish = slice(html, 'function measureStudioFinish(orderId)', 'function measureSwapDims()');
   assert.match(finish, /orderWorkflowTransitionIssues\(o, 'measurement_done'\)/);
   assert.match(finish, /box\.innerHTML = `<b>Чтобы сдать замер:<\/b>/, 'issues in place, not another window');
-  assert.match(html, /if \(film && windows\.some\(\(\{ win \}\) => !windowCatalog\(win\)\)\)/);
+  assert.match(html, /if \(film && windows\.some\(\(\{ win \}\) => !windowCatalog\(win\) && !win\.filmOnSite\)\)/ /* Owner 2026-11-12: «клиент выберет на месте» */);
   assert.match(html, /orderMeasurementCompletionIssues\(o, \{ film: currentUser\(\)\?\.role !== 'measurer' \}\)/);
 });
 
