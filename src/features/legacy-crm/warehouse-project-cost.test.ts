@@ -22,7 +22,7 @@ test('quick project cost is derived from priced warehouse stock and employee rat
   assert.match(html, /function projectQuickRequiredSqftByCatalog\(o, lines = projectQuickLines\(o\)\)/);
   assert.match(html, /demand\[line\.catalogId\] = \(demand\[line\.catalogId\] \|\| 0\) \+ requiredSqft/);
   assert.match(html, /function orderQuickLineMaterialCost\(o\)/);
-  assert.match(html, /sqftWithWaste \* warehouseCatalogCostPerSqft\(line\.catalogId, o\?\.quickEntry === true\)/);
+  assert.match(html, /\(Number\(line\.qty\) \|\| 0\) \* warehouseCatalogCostPerSqft\(line\.catalogId, o\?\.quickEntry === true\)/);
   assert.match(html, /if \(!measureAllWindows\(o\)\.length\) return orderQuickLineMaterialCost\(o\)/);
   // One rates directory (2026-10-24): the service rate, no personal overrides.
   assert.match(html, /function installerRateForQuickLine\(_user, line\)/);

@@ -3698,7 +3698,7 @@ function quickEntryRemoveSupply(i, j) {
 }
 /**
  * Что по одной услуге насчитают справочники: оплата монтажникам (ставка услуги
- * × объём, поровну на бригаду, старший +%), наёмный фиксом, плёнка с отходом по
+ * × объём, поровну на бригаду, старший +%), наёмный фиксом, плёнка по
  * закупке склада, расходники по их цене. Те же функции, что и в orderPSS —
  * здесь только показ до нажатия «Внести», ничего своего.
  */
@@ -3717,7 +3717,7 @@ function quickEntryLineCalc(line) {
   installers.forEach(id => { const u = getUser(id); if (u?.payConfig?.type === 'per_sqft') payout += qty * rate / n * installerSeniorFactor(u); });
   const hired = Number(line.hired ?? line.hiredAmount) || 0;
   const catalog = sized && catalogId ? getCatalogItem(catalogId) : null;
-  const film = catalog ? qty * (1 + (Number(catalog.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(catalogId, true) : 0;
+  const film = catalog ? qty * warehouseCatalogCostPerSqft(catalogId, true) : 0;
   const supplies = (line.supplyItems || line.supplies || []).reduce((sum, item) => {
     const supply = ensureSupplies().find(candidate => candidate.id === item.supplyId);
     return sum + (Number(item.qty) || 0) * (Number(supply?.costPerUnit) || 0);
@@ -4037,7 +4037,7 @@ function renderQuickEntry() {
     const seniorInCrew = (line.installers || []).some(id => typeof teamIsSeniorInstaller === 'function' && teamIsSeniorInstaller(getUser(id)));
     if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty} ${calc.n > 1 ? `÷ ${calc.n}` : ''}${seniorInCrew ? ` · ⭐ старшему +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} %` : ''})</span>`);
     if (hiredOn) calcParts.push(`Наёмный: <b>${fmtMoney(calc.hired)}</b>`);
-    if (calc.film > 0) calcParts.push(`Плёнка: <b>${fmtMoney(calc.film)}</b> <span>(с отходом, по закупке)</span>`);
+    if (calc.film > 0) calcParts.push(`Плёнка: <b>${fmtMoney(calc.film)}</b> <span>(по закупке со склада)</span>`);
     if (calc.supplies > 0) calcParts.push(`Расходники: <b>${fmtMoney(calc.supplies)}</b>${!sized && offering && serviceOfferingHasSupplies(offering) ? ` <span>(по норме услуги: ${academyEsc(serviceOfferingSupplies(offering).filter(x => x.supply).map(x => `${x.supply.name} ${x.qtyPerUnit} ${supplyUnitLabel(x.supply.unit)}/${serviceOfferingUnitShort(offering)}`).join(', '))})</span>` : ''}`);
     if (calc.price > 0) calcParts.push(`Маржа строки: <b class="${calc.marginPct >= 0.2 ? 'qe-ok' : 'qe-warn'}">${fmtMoney(calc.margin)} · ${(calc.marginPct * 100).toFixed(0)} %</b>`);
     return `<div class="qe-svc" style="--qe-color:${academyEsc(tone.color)};--qe-tint:${academyEsc(tone.tint)}">
@@ -4199,7 +4199,7 @@ function renderQuickEntry() {
           <div class="qe-row"><span>Выручка</span><b>${fmtMoney(sample.revenue)}</b></div>
           <div class="qe-row"><span>Монтаж (ставка услуги × объём, поровну на бригаду${seniorPct ? `, старший +${seniorPct} %` : ''})</span><b>${fmtMoney(sample.pss.installers)}</b></div>
           <div class="qe-row"><span>Менеджер (% от выручки)</span><b>${fmtMoney(sample.pss.manager)}</b></div>
-          <div class="qe-row"><span>Плёнка (закупка со склада + отход)</span><b>${fmtMoney(sample.pss.film)}</b></div>
+          <div class="qe-row"><span>Плёнка (закупка со склада)</span><b>${fmtMoney(sample.pss.film)}</b></div>
           <div class="qe-row"><span>Расходники услуг</span><b>${fmtMoney(sample.pss.consumables)}</b></div>
           ${sample.pss.manual > 0 ? `<div class="qe-row"><span>Наёмные и прямые расходы</span><b>${fmtMoney(sample.pss.manual)}</b></div>` : ''}
           <div class="qe-row"><span>Прочее (бензин, аренда, реклама)</span><b>${fmtMoney(sample.pss.total - sample.pss.installers - sample.pss.manager - sample.pss.film - sample.pss.consumables - sample.pss.manual)}</b></div>
@@ -4222,7 +4222,7 @@ function renderQuickEntry() {
           <div class="qe-row"><span>Менеджер на проценте</span><b>% от выручки проекта${!(Number(pd.managerPct) > 0) ? '' : ` (по умолчанию ${pd.managerPct} %)`}</b></div>
           <div class="qe-row"><span>Оклады</span><b>в постоянных, не на проекте</b></div>
           <div class="qe-row"><span>Расходы проекта</span><b>аренда, доставка, бензин, другое — прямо в проект</b></div>
-          <div class="qe-row"><span>Плёнка</span><b>объём + отход плёнки × закупка склада</b></div>
+          <div class="qe-row"><span>Плёнка</span><b>объём × закупка склада</b></div>
           <div class="qe-row"><span>Расходники</span><b>количество × цена со склада</b></div>
           <div class="qe-muted">Все ставки — «Ставки и расходы», цены и коридоры — «Услуги и цены», закупка — «Склад».</div>
         </section>

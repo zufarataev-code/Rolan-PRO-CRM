@@ -536,7 +536,7 @@ test('server: an owner can close only a persisted historical draft with a concre
     serviceSchedules: [{ id: 'line:line', installerIds: ['i1'], installationAt: '2026-09-01T12:00:00.000Z' }],
   });
   assert.equal(prepareServiceSolutions(current, next, true), null, 'the owner-authorized historical transition does not need global import mode');
-  assert.equal(next.orders[0]._historicalMaterialCost, 55, 'server freezes 10 sq ft + 10% waste at the current $5 purchase cost');
+  assert.equal(next.orders[0]._historicalMaterialCost, 50, 'server freezes 10 sq ft at the current $5 purchase cost — no flat waste percent');
   assert.equal(next.orders[0]._historicalSupplyCost, 6, 'server freezes two supply units at the current $3 warehouse average');
   assert.equal(next.orders[0].serviceSchedules[0].endsAt, '2026-09-03T17:00:00', 'the historical service keeps its full multi-day range');
   const forgedInventoryClose = structuredClone(next);
@@ -642,7 +642,7 @@ test('server: managers own only their historical drafts and completed imports ar
   managerCorrection.orders[0].extraServices[0].supplyItems[0].qty = 2;
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
-  assert.equal(managerCorrection.orders[0]._historicalMaterialCost, 125, 'an owner correction refreshes the frozen film cost on the server');
+  assert.equal(managerCorrection.orders[0]._historicalMaterialCost, 100, 'an owner correction refreshes the frozen film cost on the server');
   assert.equal(managerCorrection.orders[0]._historicalSupplyCost, 6, 'an owner correction refreshes the frozen supply cost on the server');
 
   const forgedCorrection = structuredClone(completedCurrent);

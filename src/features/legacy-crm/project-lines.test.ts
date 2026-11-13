@@ -95,7 +95,7 @@ test('a project is one list of lines: windows of a service together, every other
     ['line:wash', 'work'],
   ]);
   const [a1, solar, silicone, zone, wash] = lines;
-  assert.deepEqual(plain([a1.qty, a1.price, a1.materialCost, a1.installerPay, a1.unitShort, a1.windows.length]), [30, 420, 66, 90, 'sq ft', 2]);
+  assert.deepEqual(plain([a1.qty, a1.price, a1.materialCost, a1.installerPay, a1.unitShort, a1.windows.length]), [30, 420, 60, 90, 'sq ft', 2]);
   assert.deepEqual(plain([solar.qty, solar.price, solar.installerPay]), [5, 40, 12.5]);
   assert.deepEqual(plain([silicone.qty, silicone.price, Math.round(silicone.materialCost * 100) / 100, silicone.installerPay, silicone.unitShort, silicone.includedBy]), [56, 0, 22.4, 56, 'lin ft', 'a1']);
   assert.deepEqual(plain([zone.qty, zone.price, zone.materialCost, zone.installerPay, zone.unitShort]), [3, 300, 36, 150, 'зона']);
@@ -114,7 +114,7 @@ test('the lines add up to the project revenue and the reference installer pay', 
   assert.equal(sum('price'), c.orderRevenue(o));
   assert.equal(sum('price'), 840);
   assert.equal(sum('installerPay'), c.orderInstallerPayoutBreakdown(o).total);
-  assert.equal(sum('materialCost') - 66, c.orderExtraServicesCost(o), 'quantity services carry their own material');
+  assert.equal(sum('materialCost') - 60, c.orderExtraServicesCost(o), 'quantity services carry their own material');
 
   // Before measurement the quick lines are the project.
   const draft: Row = { id: 'd', serviceType: 'solar_film', measurements: { rooms: [] }, extraServices: [
@@ -136,9 +136,9 @@ test('the approved estimate snapshots every service line that later forms the pr
   assert.deepEqual(lines[0].materialNames, ['R 8 mil']);
   assert.equal(lines[0].measurements.length, 2);
   assert.equal(lines[0].clientPrice, 420);
-  assert.equal(lines[0].materialCost, 66);
+  assert.equal(lines[0].materialCost, 60);
   assert.equal(lines[0].installerPay, 90);
-  assert.equal(lines[0].directMargin, 264);
+  assert.equal(lines[0].directMargin, 270);
   assert.equal(lines[2].clientPrice, 0, 'an included service remains visible but is not billed twice');
 
   const manager = plain(c.projectEstimateLineSnapshots(project()));
