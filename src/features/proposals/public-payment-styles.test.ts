@@ -19,7 +19,10 @@ test('the payment and warranty sections are styled as part of the proposal docum
 test('a selected card payment shows one main «Pay $X by card» button into Stripe, not «Selected» plus a small link', () => {
   const ui = readFileSync('src/components/public-payment-options.tsx', 'utf8');
   assert.match(ui, /className="proposal-pay-link"/);
+  assert.match(ui, /onClick=\{\(\) => void selectMethod\(option, true\)\}/);
+  assert.match(ui, /window\.location\.assign\(freshCheckout\)/);
+  assert.match(ui, /freshCheckout\.startsWith\("https:\/\/checkout\.stripe\.com\/"\)/);
   assert.match(ui, /`Pay \$\{formatMoney\(option\.payable_amount, data\.currency\)\} by card →`/);
-  assert.match(ui, /!paid && !\(selected && option\.method === "payment_system" && option\.payment_link\) \?/);
+  assert.match(ui, /!paid && !\(selected && option\.method === "payment_system" && option\.available\) \?/);
   assert.match(css, /\.proposal-payment-section \.proposal-pay-link \{[^}]*background: var\(--rp-navy\);/);
 });

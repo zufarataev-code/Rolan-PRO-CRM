@@ -65,7 +65,7 @@ export function PublicPaymentOptions({
   const paid = data.deposit?.status === "paid";
   const baseAmount = data.deposit?.base_amount ?? data.suggested_base_amount;
 
-  async function selectMethod(option: PaymentOption) {
+  async function selectMethod(option: PaymentOption, redirectToCheckout = false) {
     if (paid || !option.available) return;
     setSaving(option.method);
     setError(null);
@@ -81,7 +81,19 @@ export function PublicPaymentOptions({
           payload?.errors?.[0]?.message || payload?.error?.message || (ru ? "Не удалось выбрать способ оплаты." : "Unable to select payment method."),
         );
       }
+      if (!payload?.data) throw new Error(ru ? "Ответ сервера оплаты неполный." : "Incomplete payment response.");
       setData(payload.data);
+      if (redirectToCheckout && option.method === "payment_system") {
+        // Create a fresh Checkout Session for every explicit payment click.
+        // Cached session URLs can expire and must never be reused here.
+        const freshCheckout = payload.data.options?.find(
+          (candidate: PaymentOption) => candidate.method === "payment_system",
+        )?.payment_link;
+        if (typeof freshCheckout !== "string" || !freshCheckout.startsWith("https://checkout.stripe.com/")) {
+          throw new Error(ru ? "Не удалось создать новую ссылку оплаты." : "Unable to create a new payment link.");
+        }
+        window.location.assign(freshCheckout);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : (ru ? "Не удалось выбрать способ оплаты." : "Unable to select payment method."));
     } finally {
@@ -171,29 +183,30 @@ export function PublicPaymentOptions({
                 </div>
               ) : null}
 
-              {selected && option.method === "payment_system" && option.payment_link ? (
-                // Owner, 2026-11-07: the way into Stripe is the main button of the card, not a small link next to «Selected».
-                <a href={option.payment_link} className="proposal-pay-link" style={{ display: "inline-block", marginTop: 14 }}>
-                  {ru ? `Оплатить ${formatMoney(option.payable_amount, data.currency)} картой →` : `Pay ${formatMoney(option.payable_amount, data.currency)} by card →`}
-                </a>
-              ) : null}
-
-              {selected && option.method === "payment_system" && option.available && !option.payment_link ? (
-                <div style={{ marginTop: 12, opacity: 0.72 }}>
-                  {ru
-                    ? "Безопасная форма оплаты готовится. Нажмите «Оплата картой» ещё раз, если нужна новая сессия."
-                    : "Secure checkout is being prepared. Choose Online payment again if you need a new payment session."}
-                </div>
+              {selected && option.method === "payment_system" && option.available && !paid ? (
+                <button
+                  type="button"
+                  className="proposal-pay-link"
+                  onClick={() => void selectMethod(option, true)}
+                  disabled={saving !== null || !data.agreement_signed}
+                  style={{ display: "inline-block", marginTop: 14 }}
+                >
+                  {saving === option.method
+                    ? (ru ? "Создаём безопасную оплату…" : "Preparing secure checkout…")
+                    : ru
+                      ? `Оплатить ${formatMoney(option.payable_amount, data.currency)} картой →`
+                      : `Pay ${formatMoney(option.payable_amount, data.currency)} by card →`}
+                </button>
               ) : null}
 
               {!option.available && !paid ? (
                 <div style={{ marginTop: 12, opacity: 0.72 }}>{ru ? "Этот способ оплаты пока не настроен." : "This payment method is not configured yet."}</div>
               ) : null}
 
-              {!paid && !(selected && option.method === "payment_system" && option.payment_link) ? (
+              {!paid && !(selected && option.method === "payment_system" && option.available) ? (
                 <button
                   type="button"
-                  onClick={() => selectMethod(option)}
+                  onClick={() => void selectMethod(option, option.method === "payment_system")}
                   disabled={saving !== null || !option.available || !data.agreement_signed}
                   style={{ marginTop: 14 }}
                 >
