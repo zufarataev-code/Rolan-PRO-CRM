@@ -54,9 +54,8 @@ function historicalMaterialCostSnapshot(order: Row, payload: Row): number {
   const total = rows(order.extraServices)
     .filter(line => line.quickProjectLine === true && line.unit === 'sqft' && typeof line.catalogId === 'string' && line.catalogId)
     .reduce((sum, line) => {
-      const film = catalog.find(item => item.id === line.catalogId);
-      const sqft = Math.max(0, Number(line.qty) || 0) * (1 + Math.max(0, Number(film?.wastePct) || 0) / 100);
-      return sum + sqft * costPerSqft(line.catalogId);
+      // No flat waste percent (Owner, 2026-11-13): waste is known only from a cut plan.
+      return sum + Math.max(0, Number(line.qty) || 0) * costPerSqft(line.catalogId);
     }, 0);
   return Number(total.toFixed(4));
 }

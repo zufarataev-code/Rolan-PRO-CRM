@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-13 — Карточка плёнки без закупки, ставки и отхода (Claude, PR pending)
+
+- Owner (screenshot «Новая модель плёнки»): «на приходе указываем цену закупки, и система уже считает закупку — сейчас задвоение; зарплата монтажнику считается не из плёнки, а из направления — тоже не нужно; что за 12 % отход — отход должен считаться после внесения размеров».
+- Branch `claude/film-card-single-source-20261113`: «Новая модель плёнки» no longer asks for «Закупка», «Ставка монтажнику», «Отход» (one hint line instead); new films store `costPerSqft`, `installerRatePerSqft`, `wastePct` as `null`. Настройки → каталог: columns «Cost» and «Waste %» removed. `windowFilmCost` = window area × `warehouseCatalogCostPerSqft(id, true)` (receipt price; the legacy catalog cost stays only as the existing historical fallback). The flat `wastePct` multiplier is removed from quick lines (`projectLines`, `orderQuickLineMaterialCost`, `projectQuickRequiredSqftByCatalog`, `quickEntryLineCalc`) and from the server freeze `historicalMaterialCostSnapshot`; real waste keeps coming from the cut plan (`orderFilmCutMaterialCost`). Installer pay was already read only from the service — the film field was dead data.
+- Effect to review: projects without sizes (quick entry) now cost film as sq ft × purchase price, without +N %; already frozen `_historicalMaterialCost` values are not rewritten. Stock demand for size-less lines is also the net sq ft.
+- Verification: legacy-crm + warehouse suites 740/742 (the 2 failures need a generated Prisma client, unavailable in the cloud session: engine download 403), new `film-card-single-source.test.ts` 4/4; full suite 992/1025 with all 33 failures being the same Prisma-client initialization, 0 assertion failures. `tsc` not conclusive here for the same reason; no errors in touched files. Not browser-verified.
+- Next: Codex review; owner checks the form after merge.
+
 ## 2026-11-13 — Общий список плёнок + категории на складе (Claude, PR pending)
 
 - Owner: «нужен общий список плёнок по категориям; у услуги (Black Silver) свой список — не могу выбрать из общего; нужна кнопка «выбрать плёнку из общего списка», а на складе — распределять плёнку между категориями».

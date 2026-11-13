@@ -17398,10 +17398,10 @@ function windowRetailPrice(w, complexity, orderOverridePerSqft) {
 function windowFilmCost(w) {
   const c = windowCatalog(w);
   if (!c) return 0;
-  // include waste %
-  const sqft = windowActualAreaSqft(w);
-  const withWaste = sqft * (1 + (c.wastePct || 0) / 100);
-  return withWaste * c.costPerSqft;
+  // One purchase price (Owner, 2026-11-13): the cost recorded when rolls are
+  // received. No flat waste percent — the real waste comes from the cut plan
+  // once sizes are entered (orderFilmCutMaterialCost).
+  return windowActualAreaSqft(w) * warehouseCatalogCostPerSqft(c.id, true);
 }
 // ONE SOURCE OF INSTALLER RATES (Owner, 2026-10-24: «единый справочник… единый
 // источник правды»). A window or line of a directory service pays that service's
@@ -24611,8 +24611,6 @@ function renderSettings() {
               <th class="px-2 py-2">Направление</th>
               <th class="px-2 py-2">Поставщик</th>
               <th class="px-2 py-2 w-24">${T('retailPrice')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('cost')} ($/sqft)</th>
-              <th class="px-2 py-2 w-20">${T('waste')}</th>
               <th class="px-2 py-2" title="В каких ширинах рулона выпускается модель. Раскрой берёт только их. Ничего не отмечено — стандартные 60″ и 72″">Рулон, ″</th>
               <th></th>
             </tr>
@@ -24636,8 +24634,6 @@ function renderSettings() {
                   </select>
                 </td>
                 <td class="px-2 py-1"><input type="number" step="0.5" value="${c.retailPerSqft}" onchange="updateCatalogItem('${c.id}','retailPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="0.1" value="${c.costPerSqft}" onchange="updateCatalogItem('${c.id}','costPerSqft',parseFloat(this.value)||0,this)"></td>
-                <td class="px-2 py-1"><input type="number" step="1" value="${c.wastePct}" onchange="updateCatalogItem('${c.id}','wastePct',parseFloat(this.value)||0,this)"></td>
                 <td class="px-2 py-1">${catalogRollWidthsCheckboxesHtml(c)}</td>
                 <td class="px-2 py-1"><button class="btn-ghost text-red-600 text-xs" onclick="deleteCatalogItem('${c.id}')">✕</button></td>
               </tr>
@@ -26348,8 +26344,7 @@ function projectQuickSqft(o) {
 function projectQuickRequiredSqftByCatalog(o, lines = projectQuickLines(o)) {
   return lines.reduce((demand, line) => {
     if (!line.catalogId) return demand;
-    const catalog = getCatalogItem(line.catalogId);
-    const requiredSqft = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
+    const requiredSqft = Number(line.qty) || 0;
     demand[line.catalogId] = (demand[line.catalogId] || 0) + requiredSqft;
     return demand;
   }, {});
@@ -28087,8 +28082,7 @@ function projectLines(o) {
     let materialCost = 0;
     let installerPay = 0;
     if (kind === 'quick') {
-      const catalog = getCatalogItem(line.catalogId);
-      if (line.unit === 'sqft' && line.catalogId) materialCost = qty * (1 + (Number(catalog?.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
+      if (line.unit === 'sqft' && line.catalogId) materialCost = qty * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
       if (line.unit === 'sqft') installerPay = qty * installerRateForQuickLine(null, line) * (typeof installerComplexityFactor === 'function' ? installerComplexityFactor(o) : 1);
     } else {
       // The same rates as orderAdditionalWorkPayoutForUser: a directory service
@@ -29164,9 +29158,7 @@ function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId
 function orderQuickLineMaterialCost(o) {
   if (measureAllWindows(o).length) return 0;
   return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
-    const catalog = getCatalogItem(line.catalogId);
-    const sqftWithWaste = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
-    return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
+    return sum + (Number(line.qty) || 0) * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
   }, 0);
 }
 
@@ -35241,9 +35233,7 @@ function openNewCatalogItemModal(presetVendorId, presetCategory = 'solar') {
         <div><label class="text-xs">Код / короткое имя</label><input id="ncat-code" placeholder="RP-PRV-FRS"></div>
         <div><label class="text-xs">Поставщик</label><select id="ncat-vendor"><option value="">не назначен</option>${vendors.map(v => `<option value="${academyEsc(v.id)}" ${v.id === presetVendorId ? 'selected' : ''}>${academyEsc(v.name)}</option>`).join('')}</select></div>
         <div><label class="text-xs">Цена клиенту, $ / sq ft</label><input id="ncat-retail" type="number" min="0" step="0.01" value="10"></div>
-        <div><label class="text-xs">Закупка, $ / sq ft</label><input id="ncat-cost" type="number" min="0" step="0.01" value="2.5"></div>
-        <div><label class="text-xs">Ставка монтажнику, $ / sq ft</label><input id="ncat-rate" type="number" min="0" step="0.01" value="0.27"></div>
-        <div><label class="text-xs">Отход, %</label><input id="ncat-waste" type="number" min="0" step="1" value="12"></div>
+        <div class="text-xs text-gray-500" style="align-self:end;line-height:1.35">Закупку берём из прихода рулонов, оплату монтажнику — из услуги, отход — из раскроя после размеров.</div>
         <div class="col-span-2"><label class="text-xs">Ширины рулона у модели (раскрой берёт только их)</label><div class="catalog-roll-widths mt-1">${FILM_ROLL_WIDTH_CHOICES_IN.map(w => `<label class="${w >= 60 ? 'on' : ''} ${w >= 72 ? 'wide' : ''}"><input type="checkbox" data-ncat-roll-width="${w}" ${w >= 60 ? 'checked' : ''} onchange="this.parentElement.classList.toggle('on', this.checked)">${w}″</label>`).join('')}</div></div>
         <div class="col-span-2"><label class="text-xs">Также показывать в категориях</label><div class="flex flex-wrap gap-2 mt-1">${categories.map(k => `<label class="text-sm" style="display:inline-flex;align-items:center;gap:5px"><input type="checkbox" data-ncat-extra="${k}" style="width:auto" ${k === category ? 'disabled' : ''}> ${academyEsc(catLabel(k))}</label>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Матовая живёт в декоративной, но продаётся и как приватная — отметьте обе.</div></div>
       </div>
@@ -35272,7 +35262,7 @@ function createCatalogItemFromModal() {
   const item = {
     id: uid(), brand, model: name, category, vendorId: v('ncat-vendor') || null,
     filmCategory: '', fullName: name, shortName: code, productName: name, modelCode: code, sku: code,
-    retailPerSqft: num('ncat-retail', 10), costPerSqft: num('ncat-cost', 2.5), installerRatePerSqft: num('ncat-rate', 0.27), wastePct: num('ncat-waste', 12),
+    retailPerSqft: num('ncat-retail', 10), costPerSqft: null, installerRatePerSqft: null, wastePct: null,
     extraCategories, rollWidthsIn, addedManuallyBy: currentUser()?.id || null, addedManuallyAt: new Date().toISOString(),
   };
   db.settings.catalog.push(item);

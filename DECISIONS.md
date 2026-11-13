@@ -891,3 +891,9 @@ Owner requires Claude and Codex to work as one team: same repository and project
 - The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
 - The owner sees active, overlapping, stale and owner-blocked work in `/legacy-crm/control-center` → «Агенты».
 
+## 2026-11-13 — A film card holds no purchase cost, installer rate or flat waste (Owner)
+
+- Purchase cost has one source: the cost recorded when rolls are received. The film card and the catalog settings table no longer accept a manual cost; the stored legacy `costPerSqft` remains only as the last historical fallback inside `warehouseCatalogCostPerSqft`.
+- Installer pay comes from the service (direction), never from a film. `installerRatePerSqft` on a catalog film is not entered and not read.
+- There is no flat waste percent. Waste is known only after sizes are entered, from the cut plan. Calculations without a cut plan (quick lines without sizes, per-window cost) use net area × purchase cost. This supersedes the «+ waste %» part of the earlier material-cost rule for quick lines.
+
