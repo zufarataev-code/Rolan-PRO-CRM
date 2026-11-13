@@ -4888,8 +4888,9 @@ function projectSetWindowFilmSpecial(o, room, win, value) {
   }
   const film = getCatalogItem(value);
   if (!film || film.archived) return null;
-  const scope = measureScopeByCatalog(film);
   const currentScope = measureScopeInfo(win.measureScope || o.serviceType).key;
+  // Codex review #509: a film placed «также в» this window's category stays in this direction.
+  const scope = typeof catalogItemInCategory === 'function' && catalogItemInCategory(film, windowScopeCategory(o, win)) ? currentScope : measureScopeByCatalog(film);
   if (scope === currentScope && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id)) {
     win.filmOnSite = false;
     return null; // the window's own service: the usual path

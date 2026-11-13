@@ -27965,7 +27965,8 @@ function projectSetWindowSolution(oid, rid, wid, field, value, inMeasurement = f
   // Owner, 2026-11-12: another direction's film or «на месте» — handled with the window's move.
   if (field === 'catalogId' && typeof projectSetWindowFilmSpecial === 'function') {
     const film = getCatalogItem(value);
-    const own = film && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id) && measureScopeByCatalog(film) === measureScopeInfo(win.measureScope || o.serviceType).key;
+    // Codex review #509: a film whose «также в» is this window's category is its own direction here.
+    const own = film && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id) && (measureScopeByCatalog(film) === measureScopeInfo(win.measureScope || o.serviceType).key || catalogItemInCategory(film, windowScopeCategory(o, win)));
     if (value === windowFilmOnSiteValue() || value === windowFilmFromListValue() || (film && !own)) { projectSetWindowFilm(oid, rid, wid, value, inMeasurement); return; }
     win.filmOnSite = false;
   }

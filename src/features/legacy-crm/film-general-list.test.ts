@@ -121,3 +121,14 @@ test("wiring: list option in the window select, warehouse buttons, extra categor
   assert.match(legacy, /filmCategoryEditorHtml\(item\)/);
   assert.match(legacy, /extra\.some\(key => canonicalServiceDirection\(key\) === target\)/);
 });
+
+test("Codex #509: a film placed «также в» the window's category stays in the window's direction", () => {
+  const { ctx, order, catalog } = makeContext();
+  catalog.find((c) => c.id === "matte").extraCategories = ["solar"];
+  ctx.applyWindowOffering = (win: any, offering: any) => { win.offeringId = offering?.id || ""; return win; };
+  assert.equal(ctx.projectSetWindowFilm("o1", "r1", "w1", "matte"), true);
+  const win = order.measurements.rooms[0].windows[0];
+  assert.equal(win.catalogId, "matte");
+  assert.equal(win.measureScope, "solar_film", "not moved to Decorative");
+  assert.match(legacy, /catalogItemInCategory\(film, windowScopeCategory\(o, win\)\)\);/);
+});
