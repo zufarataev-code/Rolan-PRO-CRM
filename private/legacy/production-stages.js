@@ -4838,7 +4838,7 @@ function projectWindowOtherDirectionFilms(o, win) {
 }
 function projectWindowExtraFilmOptionsHtml(o, win) {
   const other = projectWindowOtherDirectionFilms(o, win);
-  const onsite = `<option value="${windowFilmOnSiteValue()}" ${win.filmOnSite ? 'selected' : ''}>🎨 Клиент выберет на месте</option>`;
+  const onsite = projectWindowCurrentFilmOptionHtml(o, win) + `<option value="${windowFilmFromListValue()}">📚 Выбрать из общего списка…</option><option value="${windowFilmOnSiteValue()}" ${win.filmOnSite ? 'selected' : ''}>🎨 Клиент выберет на месте</option>`;
   const groups = {};
   other.forEach(film => { const key = measureScopeInfo(measureScopeByCatalog(film)).short || 'Другое'; (groups[key] = groups[key] || []).push(film); });
   return onsite + Object.keys(groups).map(key => `<optgroup label="${academyEsc(key)} — окно перейдёт в это направление">${groups[key].map(film => `<option value="${academyEsc(film.id)}">${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>`).join('');
@@ -4857,6 +4857,7 @@ function windowFilmQuickSelectHtml(o, room, win) {
   films.forEach(film => { const key = measureScopeInfo(measureScopeByCatalog(film)).short || 'Плёнка'; (groups[key] = groups[key] || []).push(film); });
   return `<label class="manager-window-field" data-window-film-quick>Плёнка этого окна<select onchange="projectSetWindowFilm('${o.id}','${room.id}','${win.id}',this.value,true)">
     <option value="">${windowCatalog(win) ? '' : 'Выберите плёнку'}</option>
+    <option value="${windowFilmFromListValue()}">📚 Выбрать из общего списка…</option>
     <option value="${windowFilmOnSiteValue()}" ${win.filmOnSite ? 'selected' : ''}>🎨 Клиент выберет на месте</option>
     ${Object.keys(groups).map(key => `<optgroup label="${academyEsc(key)}">${groups[key].map(film => `<option value="${academyEsc(film.id)}" ${!win.filmOnSite && win.catalogId === film.id ? 'selected' : ''}>${academyEsc(catalogShortLabel(film))}</option>`).join('')}</optgroup>`).join('')}
   </select></label>${windowFilmOnSiteNoteHtml(o, win)}`;
@@ -4887,8 +4888,9 @@ function projectSetWindowFilmSpecial(o, room, win, value) {
   }
   const film = getCatalogItem(value);
   if (!film || film.archived) return null;
-  const scope = measureScopeByCatalog(film);
   const currentScope = measureScopeInfo(win.measureScope || o.serviceType).key;
+  // Codex review #509: a film placed «также в» this window's category stays in this direction.
+  const scope = typeof catalogItemInCategory === 'function' && catalogItemInCategory(film, windowScopeCategory(o, win)) ? currentScope : measureScopeByCatalog(film);
   if (scope === currentScope && serviceOffering(win.offeringId) && serviceOfferingAllowedFilmIds(serviceOffering(win.offeringId)).includes(film.id)) {
     win.filmOnSite = false;
     return null; // the window's own service: the usual path
@@ -4916,6 +4918,7 @@ function projectSetWindowFilm(oid, rid, wid, value, inMeasurement = false) {
   const room = o?.measurements?.rooms?.find(item => item.id === rid);
   const win = room?.windows?.find(item => item.id === wid);
   if (!o || !win || !value || !projectUserCanPickFilm(o)) return false;
+  if (value === windowFilmFromListValue()) { openWindowFilmListModal(oid, rid, wid, inMeasurement); return false; }
   const result = projectSetWindowFilmSpecial(o, room, win, value);
   if (result?.rejected) {
     alert('Эта плёнка не привязана ни к одной услуге своего направления. Владелец может привязать её в «Услуги и цены».');
@@ -4995,4 +4998,144 @@ function openFilmOnSiteChooser(oid) {
 function projectFilmOnSiteProposalIssue(o) {
   if (!o || !projectHasFilmOnSite(o) || projectFilmVariants(o).length >= 2) return '';
   return 'Клиент выбирает плёнку на месте — отметьте 2–3 плёнки, которые везём (окно замера), и сформируйте КП заново.';
+}
+
+// ---------------------------------------------------------------------------
+// ОБЩИЙ СПИСОК ПЛЁНОК (Owner, 2026-11-13): «нужен общий список плёнок по
+// категориям; у услуги свой список — не могу выбрать из общего; нужна кнопка
+// «выбрать плёнку из общего списка», а на складе — распределять плёнку между
+// категориями». A window may take any film of the catalog; the warehouse shows
+// every film in one list where the main category and «также в» are set.
+function filmCategoryKeys() { return ['solar', 'protective', 'smart', 'privacy', 'decorative']; }
+function windowFilmFromListValue() { return '__list'; }
+function windowScopeCategory(o, win) {
+  return canonicalCatalogCategory(String(win?.measureScope || o?.serviceType || '').replace(/_film$/, '')) || 'solar';
+}
+function openWindowFilmListModal(oid, rid, wid, inMeasurement = false) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const win = room?.windows?.find(item => item.id === wid);
+  if (!o || !win || !projectUserCanPickFilm(o)) return;
+  state._filmList = { oid, rid, wid, inMeasurement: !!inMeasurement, query: state._filmList?.wid === wid ? state._filmList.query || '' : '' };
+  renderWindowFilmListModal();
+}
+function renderWindowFilmListModal() {
+  const ctx = state._filmList;
+  const o = getOrder(ctx?.oid);
+  const win = o?.measurements?.rooms?.find(item => item.id === ctx.rid)?.windows?.find(item => item.id === ctx.wid);
+  if (!o || !win) return;
+  const query = String(ctx.query || '').trim().toLowerCase();
+  const own = windowScopeCategory(o, win);
+  const groups = catalogByCategory();
+  const order = [own, ...filmCategoryKeys().filter(key => key !== own), ...Object.keys(groups).filter(key => !filmCategoryKeys().includes(key))];
+  const seen = new Set();
+  const sections = order.filter(key => groups[key]?.length).map(key => {
+    const films = groups[key].filter(film => !seen.has(film.id + key) && (!query || `${film.brand} ${film.model} ${catalogFilmCategory(film) || ''}`.toLowerCase().includes(query)));
+    films.forEach(film => seen.add(film.id + key));
+    if (!films.length) return '';
+    return `<div style="margin-top:12px"><div class="text-xs font-bold text-slate-500">${filmWarehouseCategoryIcon(key)} ${academyEsc(catLabel(key))}${key === own ? ' · направление этого окна' : ''}</div>
+      ${films.map(film => `<button type="button" class="btn-ghost" data-film-list-pick="${academyEsc(film.id)}" style="min-height:48px;width:100%;text-align:left;margin-top:6px;${win.catalogId === film.id ? 'border-color:#2563eb;background:#eff6ff' : ''}" onclick="projectPickWindowFilmFromList('${jsQuote(film.id)}')"><b>${academyEsc(catalogShortLabel(film))}</b>${catalogFilmCategory(film) ? ` <span class="text-xs text-gray-500">· ${academyEsc(catalogFilmCategory(film))}</span>` : ''}</button>`).join('')}</div>`;
+  }).join('');
+  state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeWindowFilmListModal()"><div class="modal-content p-6" style="max-width:34rem;max-height:90vh;overflow:auto" onclick="event.stopPropagation()">
+    <h3 class="font-bold text-lg">📚 Плёнка из общего списка</h3>
+    <div class="text-sm text-gray-600">Окно: ${academyEsc(win.name || 'Окно')}. Все плёнки склада по категориям.</div>
+    <input id="film-list-query" class="mt-3" value="${academyEsc(ctx.query || '')}" placeholder="🔎 Бренд, модель, серия" oninput="state._filmList.query=this.value;renderWindowFilmListModal();setTimeout(()=>{const el=document.getElementById('film-list-query');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0)">
+    ${sections || '<div class="text-sm mt-4">Ничего не найдено.</div>'}
+    <button type="button" class="btn-ghost mt-4" style="min-height:48px;width:100%" onclick="closeWindowFilmListModal()">Назад к замеру</button>
+  </div></div>`;
+  render();
+}
+function closeWindowFilmListModal() {
+  const ctx = state._filmList;
+  if (ctx?.inMeasurement && typeof openManagerMeasureModal === 'function') { openManagerMeasureModal(ctx.oid); return; }
+  closeModal();
+  if (ctx && typeof refreshProjectEstimateWorkspace === 'function') refreshProjectEstimateWorkspace(ctx.oid);
+}
+/**
+ * Any film from the list: a film of the window's category (main or «также в»)
+ * goes straight onto the window, even if the service links other films; a film
+ * of another direction moves the window when a service there sells it;
+ * otherwise the owner/manager can add the film to this category in one tap.
+ */
+function projectPickWindowFilmFromList(catalogId) {
+  const ctx = state._filmList;
+  const o = getOrder(ctx?.oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === ctx.rid);
+  const win = room?.windows?.find(item => item.id === ctx.wid);
+  const film = getCatalogItem(catalogId);
+  if (!o || !win || !film || film.archived || !projectUserCanPickFilm(o)) return false;
+  const own = windowScopeCategory(o, win);
+  let fits = catalogItemInCategory(film, own);
+  if (!fits && !projectOfferingForFilm(measureScopeByCatalog(film), film)) {
+    if (!['owner', 'manager'].includes(currentUser()?.role)) {
+      alert(`«${catalogShortLabel(film)}» не относится к категории «${catLabel(own)}». Попросите менеджера добавить её в эту категорию на складе.`);
+      return false;
+    }
+    if (!confirm(`Добавить «${catalogShortLabel(film)}» также в категорию «${catLabel(own)}» и поставить на это окно?`)) return false;
+    film.extraCategories = [...new Set([...(Array.isArray(film.extraCategories) ? film.extraCategories : []), own])];
+    fits = true;
+  }
+  if (fits) {
+    win.catalogId = film.id;
+    win.filmType = catalogLabel(film);
+    win.filmOnSite = false;
+    win.filmFromGeneralList = true;
+    invalidateProjectEstimate(o, 'Плёнка окна из общего списка');
+    save();
+  } else if (!projectSetWindowFilm(ctx.oid, ctx.rid, ctx.wid, film.id, false)) return false;
+  closeWindowFilmListModal();
+  return true;
+}
+/** The window's saved film is shown in its select even when the service links other films. */
+function projectWindowCurrentFilmOptionHtml(o, win) {
+  const film = windowCatalog(win);
+  const offering = serviceOffering(win.offeringId);
+  if (!film || win.filmOnSite || (offering && serviceOfferingAllowedFilmIds(offering).includes(film.id))) return '';
+  return `<option value="${academyEsc(film.id)}" selected>${academyEsc(catalogShortLabel(film))} · из общего списка</option>`;
+}
+
+// Warehouse: one list of every film, the main category and «также в».
+function filmCategoryCanEdit() { return ['owner', 'manager'].includes(currentUser()?.role); }
+function filmCategoryEditorHtml(item) {
+  if (!item) return '';
+  const main = canonicalCatalogCategory(item.category);
+  const extra = catalogExtraCategories(item);
+  const editable = filmCategoryCanEdit();
+  return `<div data-film-categories="${academyEsc(item.id)}" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <select ${editable ? '' : 'disabled'} aria-label="Основная категория" style="min-height:40px;max-width:170px" onchange="setFilmMainCategory('${jsQuote(item.id)}',this.value)">${filmCategoryKeys().map(key => `<option value="${key}" ${main === key ? 'selected' : ''}>${academyEsc(catLabel(key))}</option>`).join('')}</select>
+    ${filmCategoryKeys().filter(key => key !== main).map(key => `<button type="button" class="tag" data-film-extra="${key}" aria-pressed="${extra.includes(key)}" ${editable ? `onclick="event.stopPropagation();toggleFilmExtraCategory('${jsQuote(item.id)}','${key}')"` : 'disabled'} style="min-height:32px;border:1px solid ${extra.includes(key) ? '#2563eb' : '#e5e7eb'};background:${extra.includes(key) ? '#eff6ff' : '#fff'};color:${extra.includes(key) ? '#1d4ed8' : '#6b7280'}">${extra.includes(key) ? '✓ ' : '+ '}${academyEsc(catLabel(key))}</button>`).join('')}
+  </div>`;
+}
+function setFilmMainCategory(id, category) {
+  const item = getCatalogItem(id);
+  const key = canonicalCatalogCategory(category);
+  if (!item || !filmCategoryCanEdit() || !filmCategoryKeys().includes(key)) return;
+  item.category = key;
+  item.extraCategories = catalogExtraCategories(item).filter(k => k !== key);
+  save();
+  render();
+}
+function toggleFilmExtraCategory(id, category) {
+  const item = getCatalogItem(id);
+  const key = canonicalCatalogCategory(category);
+  if (!item || !filmCategoryCanEdit() || !filmCategoryKeys().includes(key) || key === canonicalCatalogCategory(item.category)) return;
+  const extra = catalogExtraCategories(item);
+  item.extraCategories = extra.includes(key) ? extra.filter(k => k !== key) : [...extra, key];
+  save();
+  render();
+}
+function renderAllFilmsList() {
+  const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
+  const items = (db.settings.catalog || []).filter(item => item && !item.archived && (!query || `${item.brand} ${item.model} ${catalogFilmCategory(item) || ''}`.toLowerCase().includes(query)))
+    .sort((a, b) => filmCategoryKeys().indexOf(canonicalCatalogCategory(a.category)) - filmCategoryKeys().indexOf(canonicalCatalogCategory(b.category)) || String(catalogShortLabel(a)).localeCompare(String(catalogShortLabel(b))));
+  return `<div class="card mb-4">
+    <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmCategory=null;state.inventoryFilmQuery='';render();">← Категории плёнки</button>
+    <h3 class="font-black text-xl">📚 Все плёнки</h3>
+    <p class="text-sm text-gray-500">Основная категория — где плёнка живёт. «+ Категория» — где её ещё можно выбрать (матовая: декоративная и приватная). ${filmCategoryCanEdit() ? '' : 'Менять категории может менеджер или владелец.'}</p>
+    <div class="mt-3"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Бренд, модель, серия" oninput="state.inventoryFilmQuery=this.value;render();"></div>
+  </div>
+  <div class="card">${items.length ? items.map(item => `<div class="border-t" data-all-films-row style="padding:10px 0;display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <button type="button" class="text-left" style="flex:1 1 220px" onclick="state.inventoryFilmCategory='${canonicalCatalogCategory(item.category)}';openFilmWarehouseModel('${jsQuote(item.id)}')"><b>${academyEsc(catalogShortLabel(item))}</b>${catalogFilmCategory(item) ? `<div class="text-xs text-gray-500">${academyEsc(catalogFilmCategory(item))}</div>` : ''}</button>
+      ${filmCategoryEditorHtml(item)}
+    </div>`).join('') : '<div class="empty-state"><div class="icon">🔎</div><div>Плёнки не найдены.</div></div>'}</div>`;
 }

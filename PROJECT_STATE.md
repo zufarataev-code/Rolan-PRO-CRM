@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-13 — Общий список плёнок + категории на складе (Claude, PR pending)
+
+- Owner: «нужен общий список плёнок по категориям; у услуги (Black Silver) свой список — не могу выбрать из общего; нужна кнопка «выбрать плёнку из общего списка», а на складе — распределять плёнку между категориями».
+- Branch `claude/film-general-list-20261113`: the window film select (manager and measurer) has «📚 Выбрать из общего списка…» — every catalog film grouped by category with search; a film of the window's category (main or «также в») goes straight onto the window even if the service links other films (shown as «· из общего списка»); a film of another direction moves the window when a service there sells it; otherwise the owner/manager adds the film to this category in one tap, a field user is asked to call the manager. Warehouse → Плёнка: «📚 Все плёнки · категории» — one list with the main category select and «+ Категория» chips (`extraCategories`), also on each model page; owner/manager only. Services without linked films now also offer films whose «также в» includes their direction.
+- Codex review #509: a film whose «также в» is the window's category is treated as its own direction in the normal select too (no move, no rejection).
+- Verification: full unit suite **1164/1164** (new `film-general-list.test.ts` 5/5), `tsc --noEmit` clean.
+
 ## 2026-11-12 — Плёнка у каждого окна + «клиент выберет на месте» (Claude, PR pending)
 
 - Owner: «клиенты говорят: приезжайте с плёнкой, на месте выберем — сейчас не можем сформировать КП и внести размеры, система просит плёнку»; «на разных окнах может быть разная плёнка — на одном матовую, на другом Black Silver».
