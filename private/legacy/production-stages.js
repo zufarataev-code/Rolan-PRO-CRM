@@ -3246,7 +3246,11 @@ function projectSetTotal(oid, value) {
   const factor = (target - fixed) / movable;
   // The owner's price corridor from «Услуги и цены» still binds everyone but the owner.
   if (currentUser()?.role !== 'owner') {
-    const blocked = adjustable.find(line => { const price = projectLineUnitPrice(o, line) * factor; const range = projectServicePriceRange(serviceOffering(line.offeringId)); return range && ((range.min > 0 && price < range.min - 0.005) || (range.max > 0 && price > range.max + 0.005)); });
+    // The corridor is per unit: every window's own rate, and a quick row's sum divided by its quantity.
+    const ratesAfter = line => line.kind === 'windows' ? line.windows.map(win => projectWindowRate(o, win) * factor)
+      : line.kind === 'quick' ? (Number(line.qty) > 0 ? [Number(line.price) * factor / Number(line.qty)] : [])
+      : [projectLineUnitPrice(o, line) * factor];
+    const blocked = adjustable.find(line => { const range = projectServicePriceRange(serviceOffering(line.offeringId)); return range && ratesAfter(line).some(price => (range.min > 0 && price < range.min - 0.005) || (range.max > 0 && price > range.max + 0.005)); });
     if (blocked) {
       const range = projectServicePriceRange(serviceOffering(blocked.offeringId));
       alert(`Итог ${fmtMoney(target)} выводит цену «${blocked.name}» за рамки прайса: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}. Такую сумму утверждает владелец.`);

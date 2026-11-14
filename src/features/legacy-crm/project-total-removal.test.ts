@@ -248,3 +248,19 @@ test('with counted rows only, the cents remainder still lands on the typed total
   assert.equal(Math.round(ctx.orderRevenue() * 100) / 100, 50);
   assert.equal(ctx.order.manualProjectTotal, 50);
 });
+
+test('the manager\'s corridor is checked per unit: a quick row by its rate, windows one by one', () => {
+  const quickCtx = loadTotal('manager');
+  const quick: Row = { id: 'q1', quickProjectLine: true, offeringId: 'film', qty: 40, unit: 'sqft', unitPrice: 10, price: 400 };
+  quickCtx.projectLines = () => [{ key: 'k', kind: 'quick', name: 'Black Silver', offeringId: 'film', qty: 40, price: quick.price, sources: [quick] }];
+  quickCtx.measureAllWindows = () => [];
+  assert.equal(vm.runInContext("projectSetTotal('o','440')", quickCtx), true, '$11 / sq ft is inside the corridor from $8');
+  assert.equal(vm.runInContext("projectSetTotal('o','300')", quickCtx), false, '$7.50 / sq ft is under it');
+
+  const ctx = loadTotal('manager');
+  const a: Row = { id: 'a', area: 10, pricePerSqft: 9 };
+  const b: Row = { id: 'b', area: 10, pricePerSqft: 20 };
+  ctx.projectLines = () => [{ key: 'w', kind: 'windows', name: 'Black Silver', offeringId: 'film', qty: 20, price: a.area * a.pricePerSqft + b.area * b.pricePerSqft, windows: [a, b], sources: [] }];
+  assert.equal(vm.runInContext("projectSetTotal('o','250')", ctx), false, 'the average stays above $8, but window «a» would fall to $7.76');
+  assert.deepEqual([a.pricePerSqft, b.pricePerSqft], [9, 20]);
+});
