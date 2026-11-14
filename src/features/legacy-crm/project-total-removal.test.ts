@@ -50,6 +50,8 @@ function loadTotal(role = 'owner') {
     CLOSED_PROJECT_STATUSES: ['completed'],
     getOrder: () => order, currentUser: () => ({ role }), orderUserCanSeeMoney: () => true,
     measureAllWindows: () => [{ win }],
+    windowRetailPrice: (item: Row) => item.area * (item.pricePerSqft ?? 9),
+    projectScopeApproved: (order_: Row, key: string) => (order_.serviceScopeApprovals || []).includes(key),
     serviceOffering: (id: string) => offerings[id] || null,
     windowActualAreaSqft: (item: Row) => item.area,
     projectLines: () => [
@@ -62,7 +64,7 @@ function loadTotal(role = 'owner') {
   ctx.orderRevenue = () => ctx.projectLines().reduce((sum: number, line: Row) => sum + line.price, 0);
   vm.createContext(ctx);
   vm.runInContext(fn(html, 'projectServicePriceRange') + fn(html, 'removalPricePerSqft')
-    + ['projectLineUnitPrice', 'projectLineListPrice', 'projectApplyLineUnitPrice', 'projectTotalAdjustableLines', 'projectTotalIsManual', 'projectSetTotal', 'projectResetTotal'].map(name => fn(stages, name)).join(''), ctx);
+    + ['projectLineUnitPrice', 'projectLineListPrice', 'projectApplyLineUnitPrice', 'projectTotalAdjustableLines', 'projectTotalIsManual', 'projectWindowRate', 'projectScaleLinePrice', 'projectSetTotal', 'projectResetTotal'].map(name => fn(stages, name)).join(''), ctx);
   return ctx;
 }
 
@@ -205,4 +207,44 @@ test('one crew and one date go to every service still to do; done services keep 
   const view = fn(stages, 'installWindowHtml');
   assert.match(view, /openRows\.length > 1 && projectCardCanPlan\(o\) \? `<button type="button" class="install-row open" data-install-whole/, 'offered only when there is more than one service to plan');
   assert.match(fn(stages, 'installWorkKind'), /if \(\/снят\|удален\|демонтаж\|removal\/\.test\(text\)\) return 'other';/, 'old film removal is not labelled «Монтаж плёнки»');
+});
+
+// Codex review of PR #512, second pass.
+test('windows of one service keep their own rates through a manual total and its reset', () => {
+  const ctx = loadTotal();
+  const a: Row = { id: 'a', area: 10, pricePerSqft: 10 };
+  const b: Row = { id: 'b', area: 10, pricePerSqft: 20 };
+  const c: Row = { id: 'c', area: 10 }; // no own rate: $9 from the catalog
+  const price = (item: Row) => item.area * (item.pricePerSqft ?? 9);
+  ctx.projectLines = () => [{ key: 'w', kind: 'windows', name: 'Black Silver', offeringId: 'film', qty: 30, price: price(a) + price(b) + price(c), windows: [a, b, c], sources: [] }];
+  assert.equal(ctx.orderRevenue(), 390);
+  vm.runInContext("projectSetTotal('o','780')", ctx);
+  assert.deepEqual([a.pricePerSqft, b.pricePerSqft, c.pricePerSqft], [20, 40, 18], 'each window doubles, none is flattened to the average');
+  vm.runInContext("projectResetTotal('o')", ctx);
+  assert.deepEqual([a.pricePerSqft, b.pricePerSqft, c.pricePerSqft], [10, 20, null], 'the window without its own rate reads the catalog again');
+  assert.equal(ctx.orderRevenue(), 390);
+});
+
+test('services waiting for scope approval are not repriced by the total', () => {
+  const ctx = loadTotal();
+  ctx.order.serviceScopeApprovals = ['w'];
+  const all = ctx.projectLines;
+  ctx.orderRevenue = () => all().filter((line: Row) => line.key === 'w').reduce((sum: number, line: Row) => sum + line.price, 0);
+  assert.equal(ctx.orderRevenue(), 450);
+  assert.equal(vm.runInContext("projectSetTotal('o','900')", ctx), true);
+  assert.deepEqual([ctx.win.pricePerSqft, ctx.silicone.unitPrice, ctx.removal.unitPrice, ctx.orderRevenue()], [18, 5, 2.5, 900]);
+});
+
+test('with counted rows only, the cents remainder still lands on the typed total', () => {
+  const ctx = loadTotal();
+  const one: Row = { id: 'x', offeringId: 'svc', qty: 3, unitPrice: 10.06 / 3, price: 10.06 };
+  const two: Row = { id: 'y', offeringId: 'svc', qty: 7, unitPrice: 29.94 / 7, price: 29.94 };
+  ctx.projectLines = () => [
+    { key: 'x', kind: 'quantity', name: 'A', offeringId: 'svc', qty: 3, unitShort: 'шт', price: one.price, sources: [one] },
+    { key: 'y', kind: 'quantity', name: 'B', offeringId: 'svc', qty: 7, unitShort: 'шт', price: two.price, sources: [two] },
+  ];
+  ctx.measureAllWindows = () => [];
+  assert.equal(vm.runInContext("projectSetTotal('o','50')", ctx), true);
+  assert.equal(Math.round(ctx.orderRevenue() * 100) / 100, 50);
+  assert.equal(ctx.order.manualProjectTotal, 50);
 });

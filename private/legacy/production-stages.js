@@ -3200,9 +3200,11 @@ function projectLineRateText(o, line) {
 // share, so the card, the proposal, the invoice and the payroll keep reading one
 // set of prices. «↺ по прайсу» puts the directory prices back.
 function projectTotalAdjustableLines(o) {
-  // Quick-entry rows count in the total only while the project has no measured windows (orderExtraServicesRevenue).
+  // The same set orderRevenue() counts: quick-entry rows only while the project has no measured
+  // windows, and — once scope approvals exist — only the approved services.
   const quickCounts = !measureAllWindows(o).length;
-  return projectLines(o).filter(line => !line.excluded && (['windows', 'quantity', 'work'].includes(line.kind) || (line.kind === 'quick' && quickCounts)) && Number(line.price) > 0);
+  const approved = line => !Array.isArray(o.serviceScopeApprovals) || projectScopeApproved(o, line.key);
+  return projectLines(o).filter(line => !line.excluded && approved(line) && (['windows', 'quantity', 'work'].includes(line.kind) || (line.kind === 'quick' && quickCounts)) && Number(line.price) > 0);
 }
 function projectTotalIsManual(o) {
   return Number(o?.manualProjectTotal) > 0 && Math.abs(orderRevenue(o) - Number(o.manualProjectTotal)) < 0.01;
@@ -3214,6 +3216,18 @@ function projectTotalEditHtml(o) {
     ${manual ? `<span class="rp-price-manual">итог вручную</span><button type="button" class="rp-price-reset" onclick="projectCardResetTotal('${o.id}')">↺ вернуть цены</button>` : ''}
     <label style="display:flex;align-items:center;gap:.4rem;font-weight:800;font-size:.85rem;color:#0f172a">Итог проекта, $<input type="number" min="0" step="1" inputmode="decimal" value="${total}" aria-label="Итог проекта" title="Поменяйте сумму — цены услуг подстроятся пропорционально" style="width:7.5rem;min-height:40px;font-weight:900;text-align:right" onchange="projectCardSetTotal('${o.id}',this.value)"></label>
   </span>`;
+}
+/** The rate a window is sold at now: its own, else what the order or the catalog gives it. */
+function projectWindowRate(o, win) {
+  if (win.pricePerSqft != null && win.pricePerSqft !== '') return parseFloat(win.pricePerSqft) || 0;
+  const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
+  const area = windowActualAreaSqft(win) || 0;
+  return area > 0 ? windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft) / area / coefficient : 0;
+}
+/** Moves one line by a share. Every window keeps its own rate relative to the others. */
+function projectScaleLinePrice(o, line, factor) {
+  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = projectWindowRate(o, win) * factor; });
+  else projectApplyLineUnitPrice(line, projectLineUnitPrice(o, line) * factor);
 }
 /** Sets the project total by moving every priced line proportionally. Returns true when saved. */
 function projectSetTotal(oid, value) {
@@ -3230,36 +3244,42 @@ function projectSetTotal(oid, value) {
     return false;
   }
   const factor = (target - fixed) / movable;
-  const next = adjustable.map(line => ({ line, price: projectLineUnitPrice(o, line) * factor }));
   // The owner's price corridor from «Услуги и цены» still binds everyone but the owner.
   if (currentUser()?.role !== 'owner') {
-    const blocked = next.find(({ line, price }) => { const range = projectServicePriceRange(serviceOffering(line.offeringId)); return range && ((range.min > 0 && price < range.min - 0.005) || (range.max > 0 && price > range.max + 0.005)); });
+    const blocked = adjustable.find(line => { const price = projectLineUnitPrice(o, line) * factor; const range = projectServicePriceRange(serviceOffering(line.offeringId)); return range && ((range.min > 0 && price < range.min - 0.005) || (range.max > 0 && price > range.max + 0.005)); });
     if (blocked) {
-      const range = projectServicePriceRange(serviceOffering(blocked.line.offeringId));
-      alert(`Итог ${fmtMoney(target)} выводит цену «${blocked.line.name}» за рамки прайса: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}. Такую сумму утверждает владелец.`);
+      const range = projectServicePriceRange(serviceOffering(blocked.offeringId));
+      alert(`Итог ${fmtMoney(target)} выводит цену «${blocked.name}» за рамки прайса: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}. Такую сумму утверждает владелец.`);
       return false;
     }
   }
-  // The prices before the first manual total are kept, so «↺ вернуть цены» restores exactly them —
-  // also for custom work that has no directory price to fall back to.
+  // The prices before the first manual total are kept, so «↺ вернуть цены» restores exactly them:
+  // each window's own value (also «no own rate») and each row's price, custom work included.
   // A total that is no longer the manual one (a line was repriced or added since) starts a fresh snapshot.
-  if (!o.manualProjectTotalBase || !projectTotalIsManual(o)) o.manualProjectTotalBase = Object.fromEntries(adjustable.map(line => {
-    // Windows with one typed rate keep it to the cent; the area-weighted rate is only for mixed ones.
-    const typed = line.kind === 'windows' ? [...new Set(line.windows.map(win => win.pricePerSqft))] : [];
-    return [line.key, typed.length === 1 && typed[0] != null && typed[0] !== '' ? Number(typed[0]) : projectLineUnitPrice(o, line)];
-  }));
-  next.forEach(({ line, price }) => projectApplyLineUnitPrice(line, price));
-  // Counted rows round to cents; the remainder goes to the largest window line so the total is exact.
+  if (!o.manualProjectTotalBase || !projectTotalIsManual(o)) {
+    const base = { windows: {}, lines: {} };
+    adjustable.forEach(line => {
+      if (line.kind === 'windows') line.windows.forEach(win => { base.windows[win.id] = win.pricePerSqft != null && win.pricePerSqft !== '' ? parseFloat(win.pricePerSqft) || 0 : null; });
+      else base.lines[line.key] = projectLineUnitPrice(o, line);
+    });
+    o.manualProjectTotalBase = base;
+  }
+  adjustable.forEach(line => projectScaleLinePrice(o, line, factor));
+  // Counted rows round to cents; the remainder goes to one line so the saved total is the typed one.
   const rest = target - orderRevenue(o);
   if (Math.abs(rest) >= 0.005) {
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
-    const lines = projectTotalAdjustableLines(o);
-    const anchor = lines.filter(line => line.kind === 'windows' && line.qty > 0).sort((a, b) => b.price - a.price)[0];
-    const sum = lines.find(line => line.kind === 'work' && !line.unitPriced);
-    if (anchor) {
-      const area = anchor.windows.reduce((part, win) => part + (windowActualAreaSqft(win) || 0), 0);
-      if (area > 0) projectApplyLineUnitPrice(anchor, projectLineUnitPrice(o, anchor) + rest / area / coefficient);
-    } else if (sum) projectApplyLineUnitPrice(sum, Number(sum.price) + rest);
+    const lines = projectTotalAdjustableLines(o).sort((a, b) => b.price - a.price);
+    const anchor = lines.find(line => line.kind === 'windows' && line.qty > 0);
+    const row = lines.find(line => line.kind !== 'windows' && line.sources?.[0]);
+    const area = anchor ? anchor.windows.reduce((part, win) => part + (windowActualAreaSqft(win) || 0), 0) : 0;
+    if (area > 0) anchor.windows.forEach(win => { win.pricePerSqft = projectWindowRate(o, win) + rest / area / coefficient; });
+    else if (row) {
+      // A counted row takes the cents on its sum; its rate stays the scaled one.
+      const source = row.sources[0];
+      source.price = Math.round((Number(source.price) + rest) * 100) / 100;
+      if (row.kind === 'quick' && Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
+    }
   }
   o.manualProjectTotal = Math.round(orderRevenue(o) * 100) / 100;
   projectEstimateMarkChanged(o, `Итог проекта задан вручную: ${fmtMoney(current)} → ${fmtMoney(o.manualProjectTotal)}`);
@@ -3272,8 +3292,15 @@ function projectResetTotal(oid) {
   if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
   const base = o.manualProjectTotalBase || {};
   projectTotalAdjustableLines(o).forEach(line => {
-    const before = Number(base[line.key]);
     const list = projectLineListPrice(line);
+    if (line.kind === 'windows') {
+      line.windows.forEach(win => {
+        if (base.windows && win.id in base.windows) win.pricePerSqft = base.windows[win.id];
+        else if (list != null && list > 0) win.pricePerSqft = list;
+      });
+      return;
+    }
+    const before = Number(base.lines?.[line.key]);
     if (before > 0) projectApplyLineUnitPrice(line, before);
     else if (list != null && list > 0) projectApplyLineUnitPrice(line, list);
   });
