@@ -43296,7 +43296,11 @@ function renderFilmCategoryModels(category) {
   const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category) && (!item.archived || filmWarehouseRolls(item.id).length));
   const blank = currentUser()?.role === 'owner' ? blankCatalogItems().filter(item => catalogItemInCategory(item, category)) : [];
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
-  const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
+  // Owner, 2026-11-13: «где тут фильтр по производителю» — the category opens on
+  // one manufacturer (Rolan PRO by default); a search looks through every manufacturer.
+  const hasBrands = typeof filmBrandActive === 'function' && typeof setInventoryFilmBrand === 'function';
+  const brand = hasBrands ? filmBrandActive(all, state.inventoryFilmBrand) : '__all';
+  const items = all.filter(item => query ? `${item.brand} ${item.model}`.toLowerCase().includes(query) : (brand === '__all' || filmBrandKey(item) === brand));
   const colors = catColor(category);
   return `<div class="card mb-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -43304,6 +43308,7 @@ function renderFilmCategoryModels(category) {
       <div class="flex gap-2 flex-wrap">${blank.length ? `<button class="btn-ghost text-sm" onclick="removeBlankCatalogItems()">Удалить пустые · ${blank.length}</button>` : ''}<button class="btn-primary text-sm" onclick="addCatalogItem(null,'${category}')">+ Добавить модель</button></div>
     </div>
     <div class="mt-4"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Найти бренд или модель в этой категории" oninput="state.inventoryFilmQuery=this.value;render();"></div>
+    ${hasBrands && !query ? `<div class="mt-3" data-film-category-brands>${filmBrandChipsHtml(all, brand, 'setInventoryFilmBrand')}</div>` : ''}
   </div>
   <div class="card">
     ${items.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Модель</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Ширины</th><th class="text-left p-2">Статус</th><th></th></tr></thead><tbody>${items.map(item => {

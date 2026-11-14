@@ -137,3 +137,59 @@ test("the list and the cleanup run once; cashier, window list and warehouse use 
   assert.match(stages, /function setFilmArchived\(id, archived\)[\s\S]*?currentUser\(\)\?\.role !== 'owner'/);
   assert.match(stages, /function restoreFilmBrand\(key\)/);
 });
+
+test("a warehouse category opens on Rolan PRO and filters its models by manufacturer", () => {
+  // Owner, 2026-11-13: «и где тут фильтр по производителю» — Склад → Плёнка → Солнцезащитная.
+  const view = legacy.slice(legacy.indexOf("function renderFilmCategoryModels(category) {"), legacy.indexOf("function renderFilmModelStock(catalogId) {"));
+  const catalog = [
+    { id: "r1", brand: "RolanPRO", model: "Titan Prime", category: "solar" },
+    { id: "r2", brand: "Rolan PRO", model: "Lux IR80 20%", category: "solar" },
+    { id: "m1", brand: "Madico", model: "Sunscape Select 10", category: "solar" },
+    { id: "j1", brand: "Johnson Window Films", model: "Trident", category: "solar" },
+    { id: "x1", brand: "Madico", model: "SafetyShield", category: "protective" },
+  ];
+  const ctx: any = vm.createContext({
+    canonicalCatalogCategory: (value: string) => String(value || "").replace(/_film$/, ""),
+    academyEsc: (value: unknown) => String(value),
+    jsQuote: (value: unknown) => String(value),
+    db: { settings: { catalog, inventoryAlerts: {} } },
+    state: { inventoryFilmQuery: "", inventoryFilmBrand: "" },
+    currentUser: () => ({ role: "manager" }),
+    blankCatalogItems: () => [],
+    catalogItemInCategory: (item: any, category: string) => item.category === category,
+    filmWarehouseRolls: () => [],
+    catColor: () => ({ dot: "#000" }),
+    filmWarehouseCategoryIcon: () => "",
+    catLabel: (value: string) => value,
+    catalogSpecLabel: () => "",
+    rpStockBadge: () => "",
+    setInventoryFilmBrand: () => undefined,
+  });
+  vm.runInContext(`${block}\n${view}\nthis.render = renderFilmCategoryModels;`, ctx);
+  const rows = (html: string) => [...html.matchAll(/openFilmWarehouseModel\('([^']+)'\)/g)].map((match) => match[1]);
+
+  const opened = ctx.render("solar");
+  same(rows(opened), ["r1", "r2"]);
+  assert.match(opened, /data-film-category-brands/);
+  assert.match(opened, /data-film-brand="rolanpro" aria-pressed="true" onclick="setInventoryFilmBrand\('rolanpro'\)"/);
+  assert.match(opened, /Johnson <span[^>]*>1<\/span>/);
+  assert.match(opened, /Madico <span[^>]*>1<\/span>/);
+
+  ctx.state.inventoryFilmBrand = "madico";
+  same(rows(ctx.render("solar")), ["m1"]);
+  ctx.state.inventoryFilmBrand = "__all";
+  same(rows(ctx.render("solar")), ["r1", "r2", "m1", "j1"]);
+
+  // A search looks through every manufacturer and hides the switch.
+  ctx.state.inventoryFilmBrand = "madico";
+  ctx.state.inventoryFilmQuery = "trident";
+  const found = ctx.render("solar");
+  same(rows(found), ["j1"]);
+  assert.doesNotMatch(found, /data-film-category-brands/);
+
+  // One manufacturer in the category: nothing to switch, every model is shown.
+  ctx.state.inventoryFilmQuery = "";
+  const single = ctx.render("protective");
+  same(rows(single), ["x1"]);
+  assert.doesNotMatch(single, /data-film-brands/);
+});
