@@ -3723,6 +3723,7 @@ function quickEntryDefaultForm(keep = {}) {
     date: keep.date || localDateKey(), measurementDate: keep.measurementDate || '', manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
     client: '', phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '', paid: '', complexity: 'standard',
+    pricingMode: keep.pricingMode || 'auto', manualTotal: keep.manualTotal || '',
     lines: [quickEntryNewLine(keep)],
     // Owner, 2026-11-06: прямые расходы проекта — аренда, доставка, бензин, другое — списываются в этот проект.
     expenses: [],
@@ -3747,7 +3748,7 @@ function quickEntryExpensesTotal(f = quickEntryState().form) {
 }
 function quickEntryNewLine(keep = {}) {
   return {
-    key: uid(), date: keep.date || localDateKey(), dir: keep.dir || filmDirections()[0]?.id || 'solar_film',
+    key: uid(), date: keep.date || localDateKey(), endDate: keep.endDate || keep.date || localDateKey(), dir: keep.dir || filmDirections()[0]?.id || 'solar_film',
     offering: '', film: '', filmManual: '', qty: '', price: '', installers: [], hired: '', hiredName: '', supplies: [],
   };
 }
@@ -3778,10 +3779,10 @@ function quickEntryReadForm() {
   const s = quickEntryState();
   const v = id => document.getElementById(id)?.value;
   const f = s.form;
-  const keys = ['date','measurementDate','manager','method','client','phone','street','city','source','site','measurer','notes','paid','complexity'];
+  const keys = ['date','measurementDate','manager','method','client','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
   keys.forEach(k => { const val = v('qe-' + k); if (val != null) f[k] = val; });
   quickEntryLines().forEach((line, i) => {
-    ['date','dir','offering','film','filmManual','qty','price','hired','hiredName'].forEach(k => { const val = v(`qe-l${i}-${k}`); if (val != null) line[k] = val; });
+    ['date','endDate','dir','offering','film','filmManual','qty','price','hired','hiredName'].forEach(k => { const val = v(`qe-l${i}-${k}`); if (val != null) line[k] = val; });
     const boxes = [...document.querySelectorAll(`input[data-qe-installer][data-qe-line="${i}"]`)];
     if (boxes.length) line.installers = boxes.filter(b => b.checked).map(b => b.getAttribute('data-qe-installer'));
     (line.supplies || []).forEach((item, j) => {
@@ -3801,10 +3802,11 @@ function quickEntrySet(field, value) {
   render();
 }
 function quickEntrySetLine(i, field, value) {
-  quickEntryReadForm();
+  const f = quickEntryReadForm();
   const line = quickEntryLines()[i];
   if (!line) return;
   line[field] = value;
+  if (field === 'date' && (!line.endDate || line.endDate < value)) line.endDate = value;
   if (field === 'dir') { line.offering = ''; line.film = ''; line.filmManual = ''; }
   if (field === 'offering') {
     // Материал принадлежит услуге, как в кассе: A1 → её плёнка 12 mil, силикон в пакете.
@@ -3824,6 +3826,7 @@ function quickEntrySetLine(i, field, value) {
       line.supplies = (line.supplies || []).filter(item => !item.auto);
     }
   }
+  if (f.pricingMode === 'manual' && Number(f.manualTotal) > 0) quickEntryDistributeTotal(f, Number(f.manualTotal), false);
   preservePositionForNextRender();
   render();
 }
@@ -3831,7 +3834,7 @@ function quickEntryAddLine() {
   quickEntryReadForm();
   const lines = quickEntryLines();
   const last = lines[lines.length - 1];
-  lines.push(quickEntryNewLine({ date: last?.date, dir: last?.dir }));
+  lines.push(quickEntryNewLine({ date: last?.date, endDate: last?.endDate, dir: last?.dir }));
   preservePositionForNextRender();
   render();
   setTimeout(() => document.getElementById(`qe-l${lines.length - 1}-offering`)?.focus(), 0);
@@ -3868,7 +3871,7 @@ function quickEntryRemoveSupply(i, j) {
  * закупке склада, расходники по их цене. Те же функции, что и в orderPSS —
  * здесь только показ до нажатия «Внести», ничего своего.
  */
-function quickEntryLineCalc(line) {
+function quickEntryLineCalc(line, complexity = quickEntryState().form.complexity) {
   const offeringId = line.offeringId || line.offering || '';
   const offering = serviceOffering(offeringId);
   const sized = offering ? serviceOfferingNeedsSizes(offering) : true;
@@ -3878,9 +3881,10 @@ function quickEntryLineCalc(line) {
   const installers = [...new Set(line.installerIds || line.installers || [])].filter(Boolean);
   const ref = { offeringId, catalogId, serviceType: line.serviceType || line.dir, unit: sized ? 'sqft' : serviceOfferingUnit(offering) };
   const rate = sized ? installerRateForQuickLine(null, ref) : (Number(offering?.installerRatePerSqft) || 0);
+  const complexityFactor = sized ? (Number(db.settings?.complexityCoefs?.[complexity || 'standard']) || 1) : 1;
   const n = Math.max(1, installers.length);
   let payout = 0;
-  installers.forEach(id => { const u = getUser(id); if (u?.payConfig?.type === 'per_sqft') payout += qty * rate / n * installerSeniorFactor(u); });
+  installers.forEach(id => { const u = getUser(id); if (u?.payConfig?.type === 'per_sqft') payout += qty * rate * complexityFactor / n * installerSeniorFactor(u); });
   const hired = Number(line.hired ?? line.hiredAmount) || 0;
   const catalog = sized && catalogId ? getCatalogItem(catalogId) : null;
   const film = catalog ? qty * (1 + (Number(catalog.wastePct) || 0) / 100) * warehouseCatalogCostPerSqft(catalogId, true) : 0;
@@ -3890,7 +3894,66 @@ function quickEntryLineCalc(line) {
   }, 0);
   const unitMaterial = !sized && offering ? qty * serviceOfferingMaterialCost({ offeringId }) : 0;
   const margin = price - payout - hired - film - supplies - unitMaterial;
-  return { qty, price, rate, n, payout, hired, film, supplies: supplies + unitMaterial, margin, marginPct: price > 0 ? margin / price : 0, sized };
+  return { qty, price, rate, complexityFactor, n, payout, hired, film, supplies: supplies + unitMaterial, margin, marginPct: price > 0 ? margin / price : 0, sized };
+}
+
+/** Directory price before an optional project-total override. */
+function quickEntryLineBasePrice(line) {
+  const offering = serviceOffering(line.offering);
+  const qty = Math.max(0, Number(line.qty) || 0);
+  if (!offering || !(qty > 0)) return 0;
+  const range = projectServicePriceRange(offering);
+  const unit = Number(offering.pricePerSqft) || Number(range?.min) || 0;
+  return Math.max(0, unit * qty);
+}
+/**
+ * A typed project total is distributed over the service rows, never stored as a
+ * second total beside them. The saved row prices therefore remain the only
+ * source for proposal, payroll, warehouse cost and project economics.
+ */
+function quickEntryDistributeTotal(f, value, warn = true) {
+  const target = Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
+  const rows = quickEntryLines();
+  if (!(target > 0) || !rows.length) { if (warn) alert('Введите итог проекта больше нуля.'); return false; }
+  const bases = rows.map(line => Math.max(0, Number(line.price) || quickEntryLineBasePrice(line)));
+  const basis = bases.reduce((sum, price) => sum + price, 0);
+  if (!(basis > 0) || rows.some(line => !(Number(line.qty) > 0) || !serviceOffering(line.offering))) {
+    if (warn) alert('Сначала выберите услуги и укажите объём каждой услуги.');
+    return false;
+  }
+  const prices = bases.map(price => Math.round(target * price / basis * 100) / 100);
+  const anchor = bases.indexOf(Math.max(...bases));
+  prices[anchor] = Math.round((prices[anchor] + target - prices.reduce((sum, price) => sum + price, 0)) * 100) / 100;
+  if (currentUser()?.role !== 'owner') {
+    const blocked = rows.find((line, i) => {
+      const range = projectServicePriceRange(serviceOffering(line.offering));
+      const unit = prices[i] / Math.max(1, Number(line.qty) || 0);
+      return range && ((Number(range.min) > 0 && unit < Number(range.min) - 0.005) || (Number(range.max) > 0 && unit > Number(range.max) + 0.005));
+    });
+    if (blocked) { if (warn) alert(`Итог выводит цену «${serviceOffering(blocked.offering)?.name || 'услуги'}» за разрешённый коридор. Такую сумму утверждает владелец.`); return false; }
+  }
+  rows.forEach((line, i) => { line.price = String(prices[i]); });
+  f.pricingMode = 'manual';
+  f.manualTotal = String(target);
+  return true;
+}
+function quickEntryApplyManualTotal() {
+  const f = quickEntryReadForm();
+  if (!quickEntryDistributeTotal(f, f.manualTotal, true)) return;
+  preservePositionForNextRender();
+  render();
+}
+function quickEntrySetPricingMode(mode) {
+  const f = quickEntryReadForm();
+  f.pricingMode = mode === 'manual' ? 'manual' : 'auto';
+  if (f.pricingMode === 'auto') {
+    quickEntryLines().forEach(line => { const price = quickEntryLineBasePrice(line); line.price = price > 0 ? String(Math.round(price * 100) / 100) : ''; });
+    f.manualTotal = '';
+  } else if (!(Number(f.manualTotal) > 0)) {
+    f.manualTotal = String(quickEntryLines().reduce((sum, line) => sum + (Number(line.price) || quickEntryLineBasePrice(line)), 0) || '');
+  }
+  preservePositionForNextRender();
+  render();
 }
 function quickEntrySetMonth(key) {
   quickEntryReadForm();
@@ -4035,7 +4098,7 @@ function quickEntryCreateDraft() {
 }
 /** Строка проекта из карточки услуги в форме: по замеру → quickProjectLine с плёнкой, без размеров → строка услуги из справочника. */
 function quickEntryBuildLine(p) {
-  const { line: src, date, offering, qty, price, installers, hired } = p;
+  const { line: src, date, endDate, offering, qty, price, installers, hired } = p;
   const supplyItems = (src.supplies || []).filter(item => item.supplyId && Number(item.qty) > 0).map(item => ({ id: 'qsi_' + uid(), supplyId: item.supplyId, qty: Number(item.qty), ...(item.auto ? { auto: true } : {}) }));
   let line;
   if (serviceOfferingNeedsSizes(offering)) {
@@ -4046,7 +4109,7 @@ function quickEntryBuildLine(p) {
       catalogId: film?.id || '', manualFilmName: film || noFilm ? '' : String(src.filmManual || '').trim(), label: '',
       ...(noFilm ? { noFilm: true } : {}),
       qty, unit: 'sqft', unitPrice: qty > 0 ? price / qty : 0, price, pricingMode: 'total',
-      startDate: date, endDate: date, installerIds: installers, supplyItems,
+      startDate: date, endDate, installerIds: installers, supplyItems,
     };
     if (currentUser()?.role === 'owner') line.offeringInstallerRate = Number(offering.installerRatePerSqft) || 0;
     line.label = projectQuickLineLabel(line, film);
@@ -4055,7 +4118,7 @@ function quickEntryBuildLine(p) {
     line = projectOfferingLine(offering, qty, src.dir);
     line.price = price;
     line.unitPrice = qty > 0 ? price / qty : 0;
-    Object.assign(line, { startDate: date, endDate: date, installerIds: installers, supplyItems });
+    Object.assign(line, { startDate: date, endDate, installerIds: installers, supplyItems });
   }
   if (hired > 0) line.hiredAmount = hired;
   return line;
@@ -4075,11 +4138,14 @@ function quickEntryCommit() {
   const prepared = quickEntryLines().map((line, i) => {
     const n = `услуга ${i + 1}`;
     const date = projectQuickDateValue(line.date);
+    const endDate = projectQuickDateValue(line.endDate || line.date);
     const offering = serviceOffering(line.offering);
     const qty = Number(line.qty) || 0, price = Number(line.price) || 0;
     const installers = [...new Set(line.installers || [])].filter(Boolean);
     const hired = Math.max(0, Number(line.hired) || 0);
-    if (!date) problems.push(`${n}: дата работ`);
+    if (!date) problems.push(`${n}: дата начала работ`);
+    if (!endDate) problems.push(`${n}: дата окончания работ`);
+    if (date && endDate && endDate < date) problems.push(`${n}: окончание раньше начала`);
     if (!offering) problems.push(`${n}: услуга`);
     if (offering && serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) && !line.film) problems.push(`${n}: плёнка`);
     if (offering && !serviceOfferingNoFilm(offering) && line.film === '__manual' && !String(line.filmManual || '').trim()) problems.push(`${n}: название плёнки`);
@@ -4087,13 +4153,14 @@ function quickEntryCommit() {
     if (!(price > 0)) problems.push(`${n}: сумма клиенту`);
     if (!installers.length && !(hired > 0)) problems.push(`${n}: хотя бы один исполнитель или наёмный с суммой`);
     if ((line.supplies || []).some(item => !item.supplyId || !(Number(item.qty) > 0))) problems.push(`${n}: незаполненный расходник`);
-    return { line, date, offering, qty, price, installers, hired };
+    return { line, date, endDate, offering, qty, price, installers, hired };
   });
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const total = prepared.reduce((sum, p) => sum + p.price, 0);
   const paid = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
-  const dates = prepared.map(p => p.date).sort();
-  const firstDate = dates[0], lastDate = dates[dates.length - 1];
+  const starts = prepared.map(p => p.date).sort();
+  const ends = prepared.map(p => p.endDate).sort();
+  const firstDate = starts[0], lastDate = ends[ends.length - 1];
   const found = quickEntryFindOrCreateClient(f);
   if (!found) return;
   const { client, address } = found;
@@ -4119,6 +4186,8 @@ function quickEntryCommit() {
   syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
   projectQuickSyncProjectInstallers(o);
+  o.quickEntryPricingMode = f.pricingMode === 'manual' ? 'manual' : 'auto';
+  if (o.quickEntryPricingMode === 'manual') o.manualProjectTotal = Math.round(total * 100) / 100;
   o.timeline[0].note = `Быстрый ввод в одно окно: ${(o.serviceTypes || []).map(d => primaryServiceInfo(d)?.title || d).join(' + ')} · ${prepared.length} ${projectPlural(prepared.length, 'услуга', 'услуги', 'услуг')}`;
   db.orders.push(o);
   const s = quickEntryState();
@@ -4196,12 +4265,13 @@ function renderQuickEntry() {
     const films = offering && sized ? projectQuickLineFilms({ serviceType: line.dir, offeringId: line.offering, catalogId: line.film }, { allowOutOfStock: true }) : [];
     const tone = toneOf(line.dir);
     const range = offering ? projectServicePriceRange(offering) : null;
-    const unitHint = offering ? `${fmtMoney(Number(offering.pricePerSqft) || Number(range?.min) || 0)} / ${serviceOfferingNeedsSizes(offering) ? 'sq ft' : academyEsc(serviceOfferingUnitShort(offering))}${range?.min ? ` · коридор от ${fmtMoney(range.min)}` : ''}` : 'выберите услугу';
-    const calc = quickEntryLineCalc(line);
+    const actualUnit = Number(line.qty) > 0 ? (Number(line.price) || 0) / Number(line.qty) : 0;
+    const unitHint = offering ? `${actualUnit > 0 ? `сейчас ${fmtMoney(actualUnit)} · ` : ''}прайс ${fmtMoney(Number(offering.pricePerSqft) || Number(range?.min) || 0)} / ${serviceOfferingNeedsSizes(offering) ? 'sq ft' : academyEsc(serviceOfferingUnitShort(offering))}${range?.min ? ` · коридор от ${fmtMoney(range.min)}` : ''}` : 'выберите услугу';
+    const calc = quickEntryLineCalc(line, f.complexity);
     const hiredOn = Number(line.hired) > 0;
     const calcParts = [];
     const seniorInCrew = (line.installers || []).some(id => typeof teamIsSeniorInstaller === 'function' && teamIsSeniorInstaller(getUser(id)));
-    if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty} ${calc.n > 1 ? `÷ ${calc.n}` : ''}${seniorInCrew ? ` · ⭐ старшему +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} %` : ''})</span>`);
+    if ((line.installers || []).length) calcParts.push(`З/п монтаж: <b>${fmtMoney(calc.payout)}</b> <span>(${fmtMoney(calc.rate)}/sq ft × ${calc.qty}${calc.complexityFactor !== 1 ? ` × ${calc.complexityFactor} сложность` : ''} ${calc.n > 1 ? `÷ ${calc.n}` : ''}${seniorInCrew ? ` · ⭐ старшему +${Number(db.settings?.seniorInstallerBonusPct ?? 10)} %` : ''})</span>`);
     if (hiredOn) calcParts.push(`Наёмный: <b>${fmtMoney(calc.hired)}</b>`);
     if (calc.film > 0) calcParts.push(`Плёнка: <b>${fmtMoney(calc.film)}</b> <span>(с отходом, по закупке)</span>`);
     if (calc.supplies > 0) calcParts.push(`Расходники: <b>${fmtMoney(calc.supplies)}</b>${!sized && offering && serviceOfferingHasSupplies(offering) ? ` <span>(по норме услуги: ${academyEsc(serviceOfferingSupplies(offering).filter(x => x.supply).map(x => `${x.supply.name} ${x.qtyPerUnit} ${supplyUnitLabel(x.supply.unit)}/${serviceOfferingUnitShort(offering)}`).join(', '))})</span>` : ''}`);
@@ -4209,7 +4279,8 @@ function renderQuickEntry() {
     return `<div class="qe-svc" style="--qe-color:${academyEsc(tone.color)};--qe-tint:${academyEsc(tone.tint)}">
       <div class="qe-svc-head"><span class="qe-num">${i + 1}</span>
         <div class="qe-grid qe-grid-line">
-          <label>Дата работ<input id="qe-l${i}-date" type="date" value="${academyEsc(line.date)}"></label>
+          <label>Начало работ<input id="qe-l${i}-date" type="date" value="${academyEsc(line.date)}" onchange="quickEntrySetLine(${i}, 'date', this.value)"></label>
+          <label>Окончание<input id="qe-l${i}-endDate" type="date" min="${academyEsc(line.date)}" value="${academyEsc(line.endDate || line.date)}" onchange="quickEntrySetLine(${i}, 'endDate', this.value)"></label>
           <label>Направление<select id="qe-l${i}-dir" onchange="quickEntrySetLine(${i}, 'dir', this.value)">${dirs.map(d => opt(d.id, d.title, line.dir)).join('')}</select></label>
           <label>Услуга<select id="qe-l${i}-offering" onchange="quickEntrySetLine(${i}, 'offering', this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'В направлении нет услуг — добавьте в «Услуги и цены»'}</option>${offerings.map(item => opt(item.id, `${item.name} · ${fmtMoney(Number(item.pricePerSqft) || 0)}/${serviceOfferingNeedsSizes(item) ? 'sq ft' : serviceOfferingUnitShort(item)}`, line.offering)).join('')}</select></label>
           ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'без материала'))}"></label>`}
@@ -4240,6 +4311,7 @@ function renderQuickEntry() {
   const projectExpenses = quickEntryExpensesTotal(f);
   const previewMargin = total - material - labor - managerPay - projectExpenses;
   const dates = lines.map(l => projectQuickDateValue(l.date)).filter(Boolean).sort();
+  const endDates = lines.map(l => projectQuickDateValue(l.endDate || l.date)).filter(Boolean).sort();
   const paidShown = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
   const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'){event.preventDefault();quickEntryCommit();}">
     <div class="qe-form-head"><span class="qe-kicker">Новый проект · клиент один, услуг сколько угодно</span><span class="qe-muted">обязательны: клиент, менеджер; у каждой услуги — дата, услуга, объём, сумма, исполнитель или наёмный</span></div>
@@ -4250,6 +4322,14 @@ function renderQuickEntry() {
       <label>Город<input id="qe-city" value="${academyEsc(f.city)}" placeholder="Los Angeles"></label>
       <label>Откуда лид<select id="qe-source">${quickEntrySources().map(([id, label]) => opt(id, label, f.source)).join('')}</select></label>
       <label>Объект<select id="qe-site">${opt('RESIDENTIAL', 'Жилой', f.site)}${opt('COMMERCIAL', 'Коммерческий', f.site)}</select></label>
+    </div>
+    <div class="qe-pricing">
+      <input id="qe-pricingMode" type="hidden" value="${academyEsc(f.pricingMode || 'auto')}">
+      <div class="qe-pricing-tabs" role="group" aria-label="Способ ввода суммы проекта">
+        <button type="button" class="${f.pricingMode !== 'manual' ? 'on' : ''}" onclick="quickEntrySetPricingMode('auto')">Авто · сумма из услуг</button>
+        <button type="button" class="${f.pricingMode === 'manual' ? 'on' : ''}" onclick="quickEntrySetPricingMode('manual')">Итог проекта вручную</button>
+      </div>
+      ${f.pricingMode === 'manual' ? `<div class="qe-manual-total"><label>Итоговая сумма проекта, $<input id="qe-manualTotal" type="number" min="0" step="1" inputmode="decimal" value="${academyEsc(f.manualTotal || total)}" placeholder="${total || 0}"></label><button type="button" class="btn-primary" onclick="quickEntryApplyManualTotal()">Распределить по услугам</button><span>CRM пропорционально изменит суммы строк и покажет новую цену за sq ft / единицу. Зарплата, склад и расходы продолжат считаться по своим правилам.</span></div>` : `<input id="qe-manualTotal" type="hidden" value=""><div class="qe-pricing-note">Сумма проекта складывается из услуг по ценам справочника. Цену каждой строки можно поправить отдельно.</div>`}
     </div>
     <div class="qe-form-head"><span class="qe-kicker">Услуги проекта · ${lines.length}</span><span class="qe-muted">направление → услуга → материал прикреплён к услуге · ставки из «Ставки и расходы», цены из «Услуги и цены»</span></div>
     ${lines.map(lineHtml).join('')}
@@ -4268,7 +4348,7 @@ function renderQuickEntry() {
       <label>Менеджер<select id="qe-manager" ${owner ? '' : 'disabled title="Менеджер создаёт исторический проект только на себя"'} onchange="quickEntrySet('manager', this.value)">${managerChoices.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, f.manager)).join('')}</select></label>
       <label>Замерщик<select id="qe-measurer" onchange="quickEntrySet('measurer', this.value)"><option value="">не было замера</option>${measurers.map(u => opt(u.id, `${u.name}${u.role === 'owner' ? ' · владелец' : ''}`, f.measurer)).join('')}</select></label>
       ${f.measurer ? `<label>Фактическая дата замера<input id="qe-measurementDate" type="date" value="${academyEsc(f.measurementDate || '')}"></label>` : ''}
-      <label>Сложность объекта<select id="qe-complexity">${Object.entries(coefs).map(([k, v]) => opt(k, `${coefName(k)} ×${v}`, f.complexity)).join('')}</select></label>
+      <label>Сложность объекта<select id="qe-complexity" onchange="quickEntrySet('complexity', this.value)">${Object.entries(coefs).map(([k, v]) => opt(k, `${coefName(k)} ×${v}`, f.complexity)).join('')}</select><span class="qe-hint">умножает оплату монтажа плёнки</span></label>
       <label>Оплачено, $<input id="qe-paid" type="number" min="0" step="1" value="${academyEsc(f.paid)}" placeholder="= ${fmtMoney(total)}" onchange="quickEntrySet('paid', this.value)"></label>
       <label>Как<select id="qe-method">${PAYMENT_METHODS.map(m => opt(m.id, m.label, f.method)).join('')}</select></label>
       <label>Заметка<input id="qe-notes" value="${academyEsc(f.notes)}" placeholder="необязательно"></label>
@@ -4280,9 +4360,9 @@ function renderQuickEntry() {
       ${projectExpenses > 0 ? `<div><small>Расходы проекта</small><b>${fmtMoney(projectExpenses)}</b></div>` : ''}
       <div><small>Зарплата</small><b>${fmtMoney(labor + managerPay)}</b><small>монтаж и наём ${fmtMoney(labor)}${managerPay > 0 ? ` · менеджер ${fmtMoney(managerPay)}` : ''}</small></div>
       <div><small>Маржа</small><b class="${total > 0 && previewMargin / total >= 0.2 ? 'qe-ok' : 'qe-warn'}">${fmtMoney(previewMargin)}${total > 0 ? ` · ${(previewMargin / total * 100).toFixed(0)} %` : ''}</b></div>
-      <div><small>Срок</small><b>${dates.length ? `${fmtDate(dates[0])}${dates.length > 1 && dates[dates.length - 1] !== dates[0] ? ` → ${fmtDate(dates[dates.length - 1])}` : ''} · ${lines.length} ${projectPlural(lines.length, 'выезд', 'выезда', 'выездов')}` : '—'}</b></div>
+      <div><small>Срок</small><b>${dates.length ? `${fmtDate(dates[0])}${endDates.length && endDates[endDates.length - 1] !== dates[0] ? ` → ${fmtDate(endDates[endDates.length - 1])}` : ''} · ${lines.length} ${projectPlural(lines.length, 'услуга', 'услуги', 'услуг')}` : '—'}</b></div>
       ${total - paidShown > 0.5 ? `<div><small>Остаток</small><b class="qe-warn">${fmtMoney(total - paidShown)}</b></div>` : ''}
-      <span class="qe-bill-note">Чек = Σ услуг · з/п и материалы по каждой услуге · оклады в постоянных · точный расчёт — после «Внести», по orderPSS</span>
+      <span class="qe-bill-note">Проект ${dates.length ? `${fmtDate(dates[0])} → ${fmtDate(endDates[endDates.length - 1] || dates[dates.length - 1])}` : 'без дат'} · чек = Σ услуг · з/п и материалы по каждой услуге · точный расчёт после «Внести» по orderPSS</span>
       <a href="#draft" class="qe-link" style="color:#9AA3B2;font-size:11px" onclick="quickEntryCreateDraft(); return false;">только черновик без услуг →</a>
     </div>
     ${s.notice ? `<div class="qe-notice">✓ ${academyEsc(s.notice)}</div>` : ''}
@@ -4307,7 +4387,7 @@ function renderQuickEntry() {
     const openProject = s.openProject === o.id;
     const multi = qlines.length > 1;
     const detail = openProject ? qlines.map((l, i) => {
-      const lc = quickEntryLineCalc(l);
+      const lc = quickEntryLineCalc(l, o.complexity);
       const lcrew = (l.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ');
       const hiredRows = (o.extraExpenses || []).filter(x => x.type === 'subcontractor' && (x.lineId === l.id || String(x.label || '').endsWith(l.label)));
       const hiredSum = hiredRows.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);

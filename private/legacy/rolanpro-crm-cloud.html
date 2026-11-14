@@ -2177,9 +2177,9 @@
   .qe-month select { min-width:170px; } .qe-month { display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:#5A6577; }
   .qe-pill { font-size:12px;color:#92400E;background:#FFF4E0;border-radius:4px;padding:6px 10px; }
   .qe-body { display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap; } .qe-main { flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:14px;container-type:inline-size;container-name:qe-main; } .qe-side { flex:1 1 320px;max-width:420px;min-width:0;overflow-wrap:normal;word-break:normal;display:flex;flex-direction:column;gap:14px; }
-  .qe-form { background:#FFF9EA;border:2px solid #C9A24A;border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px; }
+  .qe-form { background:#fff;border:1px solid #D9DEE6;border-top:4px solid #178DB5;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(15,36,64,.06); }
   .qe-form-head { display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline; }
-  .qe-kicker { font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5A6577; } .qe-form .qe-kicker { color:#8A6D1E; }
+  .qe-kicker { font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5A6577; } .qe-form .qe-kicker { color:#167CA6; }
   .qe-muted { font-size:12px;color:#5A6577; } .qe-hint { font-size:11px;color:#5A6577;font-weight:400; }
   .qe-grid { display:grid;gap:8px; } .qe-grid-a { grid-template-columns:130px 1.2fr 1fr 1.4fr .9fr 1fr .8fr; } .qe-grid-b { grid-template-columns:1fr 1.6fr 1.6fr 110px 150px; } .qe-grid-c { grid-template-columns:2fr 1fr 1.1fr 110px .9fr 1fr auto;align-items:end; }
   .qe-grid label, .qe-field { display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:#5A6577;min-width:0; }
@@ -2191,7 +2191,7 @@
   /* Услуги проекта в быстром вводе (Owner, 2026-11-04): карточка на услугу, «+ услуга» */
   .qe-svc { background:#fff;border:1px solid #E3E7EE;border-left:5px solid var(--qe-color,#2563eb);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:8px; }
   .qe-svc-head { display:flex;align-items:flex-end;gap:10px; } .qe-svc-head .qe-grid { flex:1;min-width:0; }
-  .qe-grid-line { grid-template-columns:128px 140px minmax(150px,1.3fr) minmax(190px,1.8fr) 84px 124px; } .qe-grid-line select { text-overflow:ellipsis; }
+  .qe-grid-line { grid-template-columns:116px 116px 132px minmax(145px,1.25fr) minmax(180px,1.65fr) 78px 126px; } .qe-grid-line select { text-overflow:ellipsis; }
   .qe-num { width:24px;height:24px;border-radius:4px;background:#141A26;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;margin-bottom:8px; }
   .qe-x { border:0;background:none;color:#9AA3B2;font-size:18px;line-height:1;cursor:pointer;padding:0 4px;flex:none;font-family:inherit; } .qe-svc-head .qe-x { margin-bottom:10px; } .qe-x:hover { color:#B91C1C; }
   .qe-svc-body { display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start; } .qe-svc-body .qe-field { flex:1 1 320px; }
@@ -2200,7 +2200,16 @@
   .qe-supplies { display:flex;flex-direction:column;gap:6px;align-items:stretch;min-height:36px; } .qe-supplies > .qe-link { align-self:flex-start; }
   .qe-supply { display:grid;grid-template-columns:minmax(0,1fr) 70px auto auto;gap:4px;align-items:center;border:1px solid #D9DEE6;border-radius:4px;background:#fff;padding:2px 4px 2px 8px;width:100%;box-sizing:border-box; } .qe-supply select { height:28px;border:0;background:transparent;font-size:12px;min-width:0;width:100%;text-overflow:ellipsis; } .qe-supply input { width:70px;height:28px;border:0;border-left:1px solid #EEF1F5;background:transparent;font-size:12px;padding:0 6px; } .qe-supply em { font-style:normal;font-size:11px;color:#5A6577;padding:0 4px;white-space:nowrap;text-align:right;min-width:44px; } .qe-supply-auto { grid-template-columns:auto minmax(0,1fr) 70px auto auto;border-style:dashed;border-color:#7C3AED;background:#F8F4FF; } .qe-supply-auto > em:first-child { color:#6D28D9;font-weight:700;padding-right:6px;border-right:1px solid #E3D5FF;min-width:0; }
   .qe-calc { display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#5A6577;padding-top:8px;border-top:1px dashed #E3E7EE;overflow-wrap:normal;word-break:normal; } .qe-calc b { color:#141A26;font-weight:700; } .qe-calc span { color:#8A97AA; } .qe-calc i { display:none; }
-  .qe-add { height:40px;border-radius:4px;border:1.5px dashed var(--qe-color,#7C3AED);background:#F8F4FF;color:#6D28D9;font:700 13px inherit;font-family:inherit;cursor:pointer;padding:0 16px;width:100%; } .qe-add:hover { background:#F1E8FF; }
+  .qe-add { height:42px;border-radius:8px;border:1.5px dashed #73B3CA;background:#F1F9FC;color:#126D8E;font:700 13px inherit;font-family:inherit;cursor:pointer;padding:0 16px;width:100%; } .qe-add:hover { background:#E5F4F9; }
+  .qe-pricing { border:1px solid #D9E5EC;border-radius:10px;background:#F5F9FB;padding:10px;display:flex;flex-direction:column;gap:9px; }
+  .qe-pricing-tabs { display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#E8EEF3;border-radius:8px;padding:4px; }
+  .qe-pricing-tabs button { border:0;border-radius:6px;background:transparent;color:#5A6577;min-height:36px;font-weight:800;cursor:pointer; }
+  .qe-pricing-tabs button.on { background:#fff;color:#10213B;box-shadow:0 2px 8px rgba(15,36,64,.12); }
+  .qe-manual-total { display:grid;grid-template-columns:minmax(180px,260px) auto minmax(220px,1fr);gap:8px;align-items:end; }
+  .qe-manual-total label { display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:#5A6577; }
+  .qe-manual-total input { height:40px;border:1px solid #7ABCD3;border-radius:6px;padding:0 10px;font-size:18px;font-weight:900;background:#fff; }
+  .qe-manual-total button { min-height:40px;white-space:nowrap; }
+  .qe-manual-total span,.qe-pricing-note { font-size:11px;color:#5A6577;line-height:1.35; }
   .qe-expenses { margin:10px 0 2px; padding:8px 10px; border:1px dashed #d9dee6; border-radius:4px; background:#fbfcfe; }
   .qe-expenses-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; font-size:12px; font-weight:800; color:#10213b; margin-bottom:6px; }
   .qe-expenses-head small { font-weight:500; color:#5a6577; }
@@ -2233,9 +2242,11 @@
     .qe-grid-a, .qe-grid-b, .qe-grid-c, .qe-grid-line { grid-template-columns:repeat(2, minmax(0,1fr)); }
     .qe-expense { grid-template-columns:1fr 1fr; } .qe-expense input[id$="-label"] { grid-column:1 / -1; }
     .qe-svc-head { flex-wrap:wrap; }
+    .qe-manual-total { grid-template-columns:1fr 1fr; } .qe-manual-total span { grid-column:1/-1; }
   }
   @container qe-main (max-width: 420px) {
     .qe-grid-a, .qe-grid-b, .qe-grid-c, .qe-grid-line { grid-template-columns:1fr; }
+    .qe-pricing-tabs,.qe-manual-total { grid-template-columns:1fr; } .qe-manual-total span { grid-column:auto; }
   }
   /* Старые браузеры без container queries — прежние пороги по ширине экрана */
   @supports not (container-type: inline-size) {
