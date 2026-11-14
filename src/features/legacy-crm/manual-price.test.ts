@@ -27,7 +27,7 @@ function load(offering: any, user = { role: 'manager' }) {
     fmtMoney: (n: number) => `$${n}`, alert: (m: string) => alerts.push(m), projectEstimateMarkChanged: () => {}, save: () => {},
   };
   vm.createContext(ctx);
-  vm.runInContext(['projectServicePriceRange'].map(n => fn(readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8'), n)).join('') + fn(stages, 'projectSetLinePrice') + fn(stages, 'projectLineUnitPrice') + fn(stages, 'projectLineListPrice') + fn(stages, 'projectLinePriceIsManual'), ctx);
+  vm.runInContext(['projectServicePriceRange'].map(n => fn(readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8'), n)).join('') + fn(stages, 'projectApplyLineUnitPrice') + fn(stages, 'projectSetLinePrice') + fn(stages, 'projectLineUnitPrice') + fn(stages, 'projectLineListPrice') + fn(stages, 'projectLinePriceIsManual'), ctx);
   return { ctx, lines };
 }
 

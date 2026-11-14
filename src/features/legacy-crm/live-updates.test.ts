@@ -31,7 +31,7 @@ test('an open CRM polls, pulls newer data without a reload and reloads a new rel
   assert.match(check, /Number\(data\.revision\) > cloudRevision && !cloudHasPendingChanges\(\) && !state\.modal\) await cloudPullRemoteChanges\(\)/, 'remote data is pulled only when nothing local is unsaved');
   const pull = fn('cloudPullRemoteChanges');
   assert.match(pull, /mergeCloudWorkspaceSnapshots\(cloudBaseSnapshot, JSON\.parse\(JSON\.stringify\(db\)\), remotePayload\)/, 'the same 3-way merge as a save conflict');
-  assert.match(pull, /preservePositionForNextRender\(\);\s*render\(\);/, 'no page reload for data');
+  assert.match(pull, /renderBackground\(\);/, 'no page reload for data, and the redraw waits while a person is entering data');
   const busy = fn('cloudUserIsBusy');
   assert.match(busy, /!!state\.modal \|\| typing \|\| cloudHasPendingChanges\(\)/);
   const apply = fn('cloudApplyNewRelease');

@@ -17562,6 +17562,9 @@ function syncOrderWindowRemovalService(o) {
   line.unit = 'sqft';
   line.unitPrice = unitPrice;
   line.price = Number((area * unitPrice).toFixed(2));
+  // Owner, 2026-11-13: «это услуга универсальная — спутник всех направлений»,
+  // not a solar service: it lives in «Общее по объекту».
+  line.serviceType = 'general_works';
   if (!existing) o.extraServices.push(line);
 }
 // Legacy m² helpers (kept for compatibility)
@@ -19771,6 +19774,52 @@ function restoreRenderPositionStable(snapshot) {
  * следующим кадром. Для вызывающего кода ничего не меняется — он
  * по-прежнему пишет render().
  */
+// ---------- ФОНОВАЯ ПЕРЕРИСОВКА НЕ СТИРАЕТ ВВОД (Owner, 2026-11-13) ----------
+// «Заполняю данные — происходит обновление, и данные удаляются.» Экран
+// собирается целиком в innerHTML, поэтому любая перерисовка, которую начал не
+// человек (почта раз в 5 минут, звонки и SMS, новые лиды, чужие правки с
+// сервера), стирала всё, что он успел набрать в полях, но ещё не подтвердил.
+// Фоновая перерисовка теперь ждёт: пока человек печатает или в форме есть
+// введённое и не сохранённое, экран не трогаем и пробуем снова через 3 секунды.
+// Данные при этом уже обновлены — откладывается только картинка.
+let __lastFieldInputAt = 0;
+let __backgroundRenderTimer = null;
+/** Fields whose on-screen value differs from the value the page was drawn with. */
+function formUnsavedFieldCount() {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return 0;
+  let count = 0;
+  document.querySelectorAll('input, textarea, select').forEach(el => {
+    if (el.disabled || ['hidden', 'file', 'button', 'submit', 'reset', 'search'].includes(el.type) || /search/i.test(el.id || '')) return;
+    if (el.tagName === 'SELECT') {
+      const options = Array.from(el.options || []);
+      if (el.multiple) { if (options.some(option => option.selected !== option.defaultSelected)) count += 1; return; }
+      const drawn = options.findIndex(option => option.defaultSelected);
+      if (el.selectedIndex !== (drawn === -1 ? 0 : drawn)) count += 1;
+      return;
+    }
+    if (el.type === 'checkbox' || el.type === 'radio') { if (el.checked !== el.defaultChecked) count += 1; return; }
+    if (el.value !== el.defaultValue) count += 1;
+  });
+  return count;
+}
+/** True while a person is typing or has typed something the CRM has not taken yet. */
+function userIsEnteringData() {
+  if (typeof document === 'undefined') return false;
+  const sinceInput = Date.now() - __lastFieldInputAt;
+  const active = document.activeElement;
+  if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && sinceInput < 20000) return true;
+  // Five minutes after the last keystroke an abandoned field no longer holds the screen.
+  return sinceInput < 300000 && formUnsavedFieldCount() > 0;
+}
+/** render() for anything the person did not start: waits while they are entering data. */
+function renderBackground() {
+  clearTimeout(__backgroundRenderTimer);
+  __backgroundRenderTimer = null;
+  if (userIsEnteringData()) { __backgroundRenderTimer = setTimeout(renderBackground, 3000); return; }
+  preservePositionForNextRender();
+  render();
+}
+
 let __renderScheduled = false;
 
 function render() {
@@ -23980,7 +24029,7 @@ async function fetchCanonicalLeads(options = {}) {
   } catch (error) {
     console.warn('[Cloud CRM] canonical leads unavailable', error);
   }
-  if (options.renderIfVisible && state.view === 'leads') render();
+  if (options.renderIfVisible && state.view === 'leads') { if (options.background) renderBackground(); else render(); }
   if (options.renderIfVisible && state.view === 'orderDetails' && !state.modal && previous !== JSON.stringify(canonicalLeads)) {
     // Update customer history in place: an incoming enquiry must not redraw the
     // Project card while its manager is editing an unrelated inline field.
@@ -23992,7 +24041,7 @@ async function fetchCanonicalLeads(options = {}) {
 function startCanonicalLeadsPolling() {
   if (canonicalLeadsPollTimer) clearInterval(canonicalLeadsPollTimer);
   canonicalLeadsPollTimer = setInterval(() => {
-    if (state.view === 'leads' || (state.view === 'orderDetails' && !state.modal && ['owner', 'manager'].includes(currentUser()?.role) && getOrder(state.openOrderId)?.canonicalLeadId)) fetchCanonicalLeads({ renderIfVisible: true });
+    if (state.view === 'leads' || (state.view === 'orderDetails' && !state.modal && ['owner', 'manager'].includes(currentUser()?.role) && getOrder(state.openOrderId)?.canonicalLeadId)) fetchCanonicalLeads({ renderIfVisible: true, background: true });
   }, 10000);
 }
 function callrailRecentCallsHtml() {
@@ -24200,7 +24249,7 @@ function startLeadAutoProjects() {
   if (leadAutoProjectTimer) clearInterval(leadAutoProjectTimer);
   const tick = async () => {
     if (!['owner', 'manager'].includes(currentUser()?.role)) return;
-    await fetchCanonicalLeads({ renderIfVisible: true });
+    await fetchCanonicalLeads({ renderIfVisible: true, background: true });
     await autoCreateDirectionProjects();
   };
   setTimeout(tick, 4000);
@@ -28324,7 +28373,10 @@ function projectLines(o) {
       kind,
       offeringId: line.offeringId || '',
       includedBy: line.includedBy || '',
-      direction: line.serviceType || '',
+      direction: line.serviceType || (line.autoWindowRemoval ? 'general_works' : ''),
+      // A work row counted by area with its own rate (old film removal) is priced
+      // per unit like a service: the rate is edited, the sum follows the area.
+      unitPriced: kind === 'work' && line.unit === 'sqft' && Number(line.unitPrice) > 0 && qty > 0,
       unit: kind === 'work' ? (line.unit || '') : serviceOfferingUnit(line),
       unitShort: kind === 'work' ? (line.unit === 'sqft' ? 'sq ft' : '') : serviceOfferingUnitShort(line),
       qty,
@@ -41338,7 +41390,7 @@ async function syncZadarmaCalls() {
     });
     cfg.processedCallIds=[...processed].slice(-1000);
     zadarmaLastSyncAt = new Date().toISOString();
-    if (changed) { save(); render(); }
+    if (changed) { save(); renderBackground(); }
   } catch (e) { console.warn('[Zadarma] call sync failed', e); }
 }
 async function twilioApi(path, options = {}) {
@@ -41358,7 +41410,7 @@ async function twilioApi(path, options = {}) {
 async function refreshTwilioStatus() {
   try { twilioServerStatus = await twilioApi('/status'); }
   catch (e) { twilioServerStatus = {connected:false, error:e.message}; }
-  render();
+  renderBackground();
 }
 async function syncTwilioMessages() {
   if (!ROLANPRO_CLOUD) return;
@@ -41399,7 +41451,7 @@ async function syncTwilioMessages() {
     }
     if (before !== after) {
       if (state.clientConversationOrderId) refreshClientConversationDialog();
-      else render();
+      else renderBackground();
     }
   } catch (e) {
     console.warn('[Twilio] message sync failed', e);
@@ -41433,7 +41485,7 @@ async function refreshEmailChannelStatus(sync = false) {
   }
   try { marketingEmailStatus = await marketingEmailApi('/status'); }
   catch (e) { marketingEmailStatus = { configured:false, error:e.message || String(e) }; }
-  render();
+  renderBackground();
 }
 async function sendSmsViaTwilio(to, body, context = {}) {
   return twilioApi('/messages', {
@@ -44825,7 +44877,7 @@ function cloudHasPendingChanges() {
 function cloudUserIsBusy() {
   const active = document.activeElement;
   const typing = active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && Date.now() - cloudLiveUpdate.lastInputAt < 20000;
-  return !!state.modal || typing || cloudHasPendingChanges();
+  return !!state.modal || typing || cloudHasPendingChanges() || !!document.getElementById('rp-cashier-layer') || userIsEnteringData();
 }
 async function cloudPullRemoteChanges() {
   const response = await fetch('/api/v1/legacy-crm/state', { cache: 'no-store' });
@@ -44842,8 +44894,7 @@ async function cloudPullRemoteChanges() {
   migrateSchema();
   projectSettleChangedServices(false);
   localStorage.setItem('rolanpro_crm', JSON.stringify(db));
-  preservePositionForNextRender();
-  render();
+  renderBackground();
   cloudStatus('Обновлено с сервера', 'green');
   return true;
 }
@@ -44873,6 +44924,7 @@ async function cloudCheckForUpdates() {
     cloudLiveUpdate.inFlight = false;
   }
 }
+if (typeof document !== 'undefined') ['input', 'change', 'keydown'].forEach(type => document.addEventListener(type, () => { __lastFieldInputAt = Date.now(); }, true));
 if (ROLANPRO_CLOUD) {
   document.addEventListener('input', () => { cloudLiveUpdate.lastInputAt = Date.now(); }, true);
   cloudLiveUpdate.timer = setInterval(cloudCheckForUpdates, 30000);
