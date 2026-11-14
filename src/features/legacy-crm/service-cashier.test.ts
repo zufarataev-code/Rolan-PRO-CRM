@@ -74,6 +74,8 @@ function load(role = 'owner') {
     jsQuote: (value: string) => value,
     academyEsc: (value: unknown) => String(value ?? ''),
   });
+  // Manufacturer switch (Owner, 2026-11-13): the cashier filters its films by brand.
+  vm.runInContext(html.slice(html.indexOf('const CORE_FILM_BRANDS = ['), html.indexOf('// The supplier card the house line is ordered through')), context);
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function offeringServiceType('), html.indexOf('function newOrderSelectedOfferings(')), context);
@@ -393,4 +395,36 @@ test('a per-sq-ft service cannot be shared and sharing is dropped when a service
   assert.doesNotMatch(editor, /toggleServiceOfferingDirection\('svc_Герметик','protective'/, 'the home direction is not a checkbox');
   context.updateServiceOffering(sil.id, 'unit', 'sqft');
   assert.deepEqual([...(sil.directions || [])], []);
+});
+
+test('the film step opens on Rolan PRO and the manufacturer switch brings that manufacturer\'s list (Owner, 2026-11-13)', () => {
+  const { context, db, state, add } = fixture();
+  db.settings.catalog.push(
+    { id: 'p_rp1', brand: 'Rolan PRO', filmCategory: 'Зеркальная · Sputter', productName: 'Elegance', modelCode: '20%', model: 'Elegance 20%', category: 'privacy', archived: false },
+    { id: 'p_rp2', brand: 'Rolan PRO', filmCategory: 'Непрозрачная', productName: 'Blackout', modelCode: '', model: 'Blackout', category: 'privacy', archived: false },
+    { id: 'p_j1', brand: 'Johnson Window Films', filmCategory: 'Specialty', productName: 'Black', modelCode: 'BLKOUT', model: 'Black BLKOUT', category: 'privacy', archived: false },
+    { id: 'p_ll', brand: 'LLumar', productName: 'Mirror', modelCode: 'R15', model: 'Mirror R15', category: 'privacy', archived: true },
+  );
+  const mirror = add({ name: 'Приватность', direction: 'privacy', unit: 'sqft', pricePerSqft: 11 });
+  context.openServiceCashier('o', 'card');
+  context.serviceCashierPick('direction', 'privacy_film');
+  context.serviceCashierPick('offering', mirror.id);
+  assert.match(state.modal, /Производитель/);
+  assert.match(state.modal, /data-film-brand="rolanpro" aria-pressed="true"/);
+  assert.match(state.modal, /Elegance 20%/, 'a bare shade is shown with its product name');
+  assert.match(state.modal, /serviceCashierPick\('material','p_rp2'\)/);
+  assert.match(state.modal, /data-cashier-film-category[^>]*>Зеркальная · Sputter<[\s\S]*data-cashier-film-category[^>]*>Непрозрачная</);
+  assert.doesNotMatch(state.modal, /serviceCashierPick\('material','p_j1'\)/);
+  assert.doesNotMatch(state.modal, /p_ll/, 'an archived manufacturer is not offered at all');
+
+  context.serviceCashierPickBrand('johnson');
+  assert.match(state.modal, /data-film-brand="johnson" aria-pressed="true"/);
+  assert.match(state.modal, /serviceCashierPick\('material','p_j1'\)/);
+  assert.doesNotMatch(state.modal, /serviceCashierPick\('material','p_rp1'\)/);
+
+  context.serviceCashierPick('material', 'p_j1');
+  context.serviceCashierPickBrand('');
+  assert.match(state.modal, /data-film-brand="johnson" aria-pressed="true"/, 'with no explicit choice the list follows the chosen film');
+  context.serviceCashierPickBrand('__all');
+  assert.match(state.modal, /serviceCashierPick\('material','p_rp1'\)[\s\S]*serviceCashierPick\('material','p_j1'\)/);
 });
