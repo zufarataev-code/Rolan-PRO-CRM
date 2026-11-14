@@ -596,8 +596,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const offering = serviceOffering(line.offeringId);
     const range = projectServicePriceRange(offering);
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
-    const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
-    const priceUnit = line.kind === 'work' ? 'сумма' : `/ ${line.kind === 'windows' ? 'sq ft' : line.unitShort}${line.kind === 'windows' && coefficient !== 1 ? ` × ${coefficient} сложность` : ''}`;
+    const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' || line.unitPriced ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
+    const priceUnit = line.kind === 'work' && !line.unitPriced ? 'сумма' : `/ ${line.kind === 'windows' ? 'sq ft' : line.unitShort}${line.kind === 'windows' && coefficient !== 1 ? ` × ${coefficient} сложность` : ''}`;
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     return `<div data-project-line="${academyEsc(line.key)}">
       <div class="project-service-row ${selected ? 'selected' : ''}">
@@ -633,7 +633,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const tone = typeof rpDir === 'function' ? rpDir(direction.key) : null;
     const count = directionLines.length + direction.pending.length;
     const open = `openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')`;
-    const compactRow = line => `<button type="button" class="project-direction-line" onclick="${open}"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</span><span>${academyEsc(projectLineQtyText(line))}${money ? ` · ${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}` : ''}</span></button>`;
+    const compactRow = line => `<button type="button" class="project-direction-line" onclick="${open}"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</span><span>${academyEsc(projectLineQtyText(line))}${money ? `${projectLineRateText(o, line)} · ${line.kind === 'included' ? 'в пакете' : `<b>${fmtMoney(line.price)}</b>`}` : ''}</span></button>`;
     const compactPending = offering => `<button type="button" class="project-direction-line pending" onclick="${open}"><span>${academyEsc(offering.name)}</span><span>нужен замер</span></button>`;
     return `<section class="project-direction-card ${excluded?'excluded':''}" data-project-direction="${academyEsc(direction.key)}" style="--direction-color:${academyEsc(tone?.color || '#2563eb')}">
       <button type="button" class="project-direction-tile" onclick="${open}" aria-label="Открыть направление ${academyEsc(direction.title)}">
@@ -649,7 +649,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div></div>
     ${typeof projectCashierMapHtml === 'function' ? projectCashierMapHtml(o, directions, { money, edit }) : ''}
     <div class="project-service-list">${directionCards || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}</div>
-    <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>` : ''}</div>
+    <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? (edit && lines.length ? projectTotalEditHtml(o) : `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>`) : ''}</div>
     ${manage ? projectRecommendationsHtml(o) : ''}
     ${manage && money ? projectDirectExpensesHtml(o) : ''}
     ${production ? renderProjectCardSchedule(o, projectCardUnplanned(o), plan) : ''}
@@ -2578,6 +2578,8 @@ function installWorkKind(group) {
   if (group?.windows?.length) return 'film';
   if (/силикон|silicon|герметик|sealant/.test(text) || offering?.unit === 'lft') return 'silicone';
   if (/блок|питан|электр|провод|power|wiring|electric/.test(text)) return 'electric';
+  // Removing old film is preparation, not «Монтаж плёнки» (Owner's screenshot, 2026-11-13).
+  if (/снят|удален|демонтаж|removal/.test(text)) return 'other';
   if (/плёнк|пленк|film|монтаж/.test(text)) return 'film';
   return 'other';
 }
@@ -2631,15 +2633,23 @@ function installBusyWith(userId, startIso, endIso, skipOrderId, skipKey) {
   const end = Date.parse(endIso || '') || (start + 8 * 3600 * 1000);
   if (Number.isNaN(start)) return [];
   return (db.orders || []).flatMap(order => (order.serviceSchedules || [])
-    .filter(plan => (plan.installerIds || []).includes(userId) && !(order.id === skipOrderId && plan.id === skipKey) && !CLOSED_PROJECT_STATUSES.includes(order.status) && order.status !== 'cancelled')
+    .filter(plan => (plan.installerIds || []).includes(userId) && !(order.id === skipOrderId && (skipKey === installWholeProjectKey() || plan.id === skipKey)) && !CLOSED_PROJECT_STATUSES.includes(order.status) && order.status !== 'cancelled')
     .filter(plan => { const s = Date.parse(plan.installationAt || ''); const e = installPlanEnd(plan)?.getTime(); return !Number.isNaN(s) && e && s < end && e > start; })
     .map(() => order.number));
 }
+// Owner, 2026-11-13: «нужна возможность выбрать исполнителей на весь проект» —
+// one crew and one date for every service still to do, instead of opening each.
+// (A function, not a constant: only functions of this module are composed into the page.)
+function installWholeProjectKey() { return '*'; }
 function openInstallWindow(oid, key = '') {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   state._installWindow = { oid, key, draft: null };
-  if (key) {
+  if (key === installWholeProjectKey()) {
+    // Start from what is already planned, so «на весь проект» extends a first choice instead of erasing it.
+    const seed = installWindowRows(o).find(item => !item.done && item.planned)?.plan || {};
+    state._installWindow.draft = { installerIds: [...(seed.installerIds || [])], installationAt: seed.installationAt || '', endsAt: seed.endsAt || installPlanEnd(seed)?.toISOString() || '', note: seed.note || '' };
+  } else if (key) {
     const row = installWindowRows(o).find(item => item.group.id === key);
     if (row) state._installWindow.draft = { installerIds: [...(row.plan.installerIds || [])], installationAt: row.plan.installationAt || '', endsAt: row.plan.endsAt || installPlanEnd(row.plan)?.toISOString() || '', note: row.plan.note || '' };
   }
@@ -2677,7 +2687,11 @@ function installWindowHtml(o) {
     </header>`;
   const shell = (color, inner) => `<div class="modal-backdrop order-workspace-backdrop" onclick="if(event.target===this) closeInstallWindow()">
     <div class="modal-content workspace-modal order-workspace-modal rp-dirwin install-window" style="--workspace-color:${color};--dir-color:${color}" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Назначить монтаж">${inner}</div></div>`;
-  const row = rows.find(item => item.group.id === w.key);
+  const openRows = rows.filter(item => !item.done);
+  const whole = w.key === installWholeProjectKey();
+  const row = whole
+    ? (openRows.length ? { index: -1, group: { id: installWholeProjectKey(), name: 'Весь проект', windows: [] }, meta: { color: '#0F2440', label: 'Все услуги' }, done: false, planned: false } : null)
+    : rows.find(item => item.group.id === w.key);
   if (row && w.draft) {
     const d = w.draft;
     const users = usersByRole('installer').filter(user => user.active !== false);
@@ -2689,8 +2703,9 @@ function installWindowHtml(o) {
     }).join('') || '<div class="text-sm text-gray-500">В команде нет специалистов по установке — добавьте их в «Команде».</div>';
     const quick = [['4 часа', 4, 0], ['1 день', 0, 1], ['2 дня', 0, 2], ['3 дня', 0, 3]].map(([label, hours, days]) => `<button type="button" class="install-quick" onclick="installDraftDuration(${hours}, ${days})">${label}</button>`).join('')
       + (prev?.planned ? `<button type="button" class="install-quick" onclick="installDraftAfterPrevious()">После услуги ${prev.index + 1}</button>` : '');
-    return shell(row.meta.color, `${head(`УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
+    return shell(row.meta.color, `${head(whole ? `ВЕСЬ ПРОЕКТ · ${openRows.length} ${projectPlural(openRows.length, 'услуга', 'услуги', 'услуг')}` : `УСЛУГА ${row.index + 1} ИЗ ${rows.length} · ${academyEsc(row.meta.label)}`, academyEsc(row.group.name), `${academyEsc(o.number)} · ${academyEsc(getClient(o.clientId)?.name || '')}`, `openInstallWindow('${o.id}')`)}
       <div class="order-workspace-modal-body rp-dirwin-body">
+        ${whole ? `<div class="install-hint">Одни исполнители и одна дата на все услуги проекта: ${openRows.map(item => academyEsc(item.group.name)).join(', ')}. Потом любую услугу можно поправить отдельно.</div>` : ''}
         ${row.done ? '<div class="rp-dirwin-warn">Услуга выполнена — её даты и исполнители остаются как история.</div>' : ''}
         ${readinessBox}
         ${warningBox}
@@ -2701,7 +2716,7 @@ function installWindowHtml(o) {
         <label class="install-note">Заметка бригаде<input value="${academyEsc(d.note || '')}" placeholder="доступ, парковка, что взять" onchange="installDraftSet('note', this.value)"></label>
       </div>
       <div class="rp-dirwin-foot install-foot">
-        ${row.done ? '' : `<button type="button" class="btn-primary rp-dirwin-next" style="background:${row.meta.color} !important;border-color:${row.meta.color} !important;color:#fff !important" onclick="installSaveService('${o.id}','${jsQuote(row.group.id)}')">Назначить эту услугу</button>`}
+        ${row.done ? '' : `<button type="button" class="btn-primary rp-dirwin-next" style="background:${row.meta.color} !important;border-color:${row.meta.color} !important;color:#fff !important" onclick="installSaveService('${o.id}','${jsQuote(row.group.id)}')">${whole ? 'Назначить на весь проект' : 'Назначить эту услугу'}</button>`}
         <button type="button" class="btn-ghost w-full" onclick="openInstallWindow('${o.id}')">Пока не назначать</button>
         ${row.planned && !row.done && !PROJECT_SCHEDULED_STATUSES.includes(o.status) ? `<button type="button" class="btn-ghost w-full text-red-600" onclick="installClearService('${o.id}','${jsQuote(row.group.id)}')">Снять назначение</button>` : ''}
       </div>`);
@@ -2723,6 +2738,7 @@ function installWindowHtml(o) {
     <div class="order-workspace-modal-body rp-dirwin-body">
       ${readinessBox}
       ${warningBox}
+      ${openRows.length > 1 && projectCardCanPlan(o) ? `<button type="button" class="install-row open" data-install-whole style="--work-color:#0F2440" onclick="openInstallWindow('${o.id}','${installWholeProjectKey()}')"><span class="install-row-top"><b>👷 Исполнители на весь проект</b></span><span class="install-row-meta">Одна бригада и одна дата сразу на ${openRows.length} ${projectPlural(openRows.length, 'услугу', 'услуги', 'услуг')}</span><span class="install-row-go">Назначить всё сразу →</span></button>` : ''}
       <div class="rp-dirwin-sub">Услуги проекта по порядку</div>
       ${list || '<div class="rp-dirwin-empty">В проекте нет услуг.</div>'}
       ${installTravelHtml(o)}
@@ -2786,17 +2802,21 @@ function installSaveService(oid, key) {
   if (!d.installerIds.length) return alert('Выберите хотя бы одного исполнителя.');
   if (!d.installationAt) return alert('Укажите дату и время начала — без времени монтаж не назначается.');
   const endsAt = d.endsAt && Date.parse(d.endsAt) > Date.parse(d.installationAt) ? d.endsAt : new Date(Date.parse(d.installationAt) + 8 * 3600 * 1000).toISOString();
-  const entry = projectCardSchedule(o, key);
-  const next = { ...entry, installerIds: [...d.installerIds], installationAt: d.installationAt, endsAt, note: d.note || '' };
-  if (!projectCardKeepsPlan(o, entry, next)) return;
-  const wasPlanned = installPlanComplete(entry);
-  Object.assign(entry, next);
+  // «На весь проект» writes the same crew and dates to every service still to do; done ones keep their history.
+  const whole = key === installWholeProjectKey();
+  const keys = whole ? installWindowRows(o).filter(item => !item.done).map(item => item.group.id) : [key];
+  if (!keys.length) return;
+  const changes = keys.map(id => { const entry = projectCardSchedule(o, id); return { entry, next: { ...entry, installerIds: [...d.installerIds], installationAt: d.installationAt, endsAt, note: d.note || '' } }; });
+  if (!changes.every(({ entry, next }) => projectCardKeepsPlan(o, entry, next))) return;
+  const newlyPlanned = changes.some(({ entry }) => !installPlanComplete(entry));
+  changes.forEach(({ entry, next }) => Object.assign(entry, next));
   projectCardSyncCrew(o);
   o.timeline = o.timeline || [];
-  o.timeline.push({ at: new Date().toISOString(), key: 'service_planned', by: state.currentUserId, note: `${projectServiceGroups(o).find(group => group.id === key)?.name || 'Услуга'}: ${installRangeText(entry)} · ${installCrewText(entry)}` });
+  const first = changes[0].entry;
+  o.timeline.push({ at: new Date().toISOString(), key: 'service_planned', by: state.currentUserId, note: `${whole ? `Весь проект (${keys.length})` : projectServiceGroups(o).find(group => group.id === key)?.name || 'Услуга'}: ${installRangeText(first)} · ${installCrewText(first)}` });
   save();
   // Once the project is scheduled, a newly planned service is the client's news too.
-  if (PROJECT_SCHEDULED_STATUSES.includes(o.status) && !wasPlanned && typeof notifyClientEventScheduled === 'function') notifyClientEventScheduled(oid, 'install');
+  if (PROJECT_SCHEDULED_STATUSES.includes(o.status) && newlyPlanned && typeof notifyClientEventScheduled === 'function') notifyClientEventScheduled(oid, 'install');
   openInstallWindow(oid);
 }
 function installClearService(oid, key) {
@@ -3106,12 +3126,14 @@ function installDraftPart(which, part, value) {
 function projectLineUnitPrice(o, line) {
   const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
   if (line.kind === 'windows') return line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows?.[0]?.pricePerSqft) || 0;
-  if (line.kind === 'quantity') return Number(line.sources?.[0]?.unitPrice) || 0;
+  if (line.kind === 'quantity' || line.unitPriced) return Number(line.sources?.[0]?.unitPrice) || 0;
   return Number(line.price) || 0;
 }
 /** The directory price of a line, or null when it has none (custom work). */
 function projectLineListPrice(line) {
   const offering = serviceOffering(line.offeringId);
+  // Old film removal has its list rate in «Услуги и цены», not a directory service.
+  if (line.unitPriced && line.sources?.[0]?.autoWindowRemoval && typeof removalPricePerSqft === 'function') return removalPricePerSqft();
   if (!offering || !['windows', 'quantity'].includes(line.kind)) return null;
   return Number(offering.pricePerSqft) || 0;
 }
@@ -3121,17 +3143,32 @@ function projectLinePriceIsManual(o, line) {
 }
 function projectPriceRowHtml(o, directionKey, line) {
   if (line.kind === 'included') return `<div class="rp-dirwin-row"><div><b>↳ ${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}<b>в пакете</b></div></div>`;
-  const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' ? '' : line.unitShort;
+  const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' && !line.unitPriced ? '' : line.unitShort;
   const list = projectLineListPrice(line);
   const manual = projectLinePriceIsManual(o, line);
   const range = projectServicePriceRange(serviceOffering(line.offeringId));
   const bound = range ? `можно от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}` : '';
   const value = Math.round(projectLineUnitPrice(o, line) * 100) / 100;
   return `<div class="rp-dirwin-row rp-price-row ${manual ? 'manual' : ''}" data-price-line="${academyEsc(line.key)}">
-    <div class="rp-price-main"><b>${academyEsc(line.name)}</b><span>${academyEsc(projectLineQtyText(line))}${list != null ? ` · прайс ${fmtMoney(list)}${unit ? ' / ' + academyEsc(unit) : ''}` : ''}${bound ? ` · ${bound}` : ''}</span></div>
+    <div class="rp-price-main"><b>${academyEsc(line.name)}</b><span>${academyEsc(projectLineQtyText(line))}${list != null ? ` · прайс ${unit ? fmtSqftPrice(list) : fmtMoney(list)}${unit ? ' / ' + academyEsc(unit) : ''}` : ''}${bound ? ` · ${bound}` : ''}</span></div>
     <label class="rp-price-input"><span>${unit ? `Цена, $ / ${academyEsc(unit)}` : 'Сумма, $'}</span><input type="number" min="0" step="0.25" inputmode="decimal" value="${value}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectDirectionSetPrice('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}',this.value)"></label>
     <div class="rp-price-total"><b>${fmtMoney(line.price)}</b>${manual ? `<span class="rp-price-manual">вручную</span><button type="button" class="rp-price-reset" onclick="projectDirectionSetPrice('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}','${list}')">↺ прайс</button>` : ''}</div>
   </div>`;
+}
+/** Writes a line's unit price to its windows or its row; the sum of a counted row follows its quantity. */
+function projectApplyLineUnitPrice(line, price) {
+  const source = line.sources?.[0];
+  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = price; });
+  else if ((line.kind === 'quantity' || line.unitPriced) && source) {
+    source.unitPrice = price;
+    source.price = Math.round(price * (Number(source.qty) || 0) * 100) / 100;
+  } else if (line.kind === 'quick' && source) {
+    // A quick-entry row keeps its total; its unit price is derived from it.
+    source.price = Math.round(price * 100) / 100;
+    if (Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
+  } else if (source) source.price = price;
+  else return false;
+  return true;
 }
 /** One price setter for the card and the direction window. Returns true when saved. */
 function projectSetLinePrice(oid, key, value) {
@@ -3146,16 +3183,145 @@ function projectSetLinePrice(oid, key, value) {
     alert(`Цена «${offering.name}»: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}`);
     return false;
   }
-  const source = line.sources?.[0];
-  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = price; });
-  else if (line.kind === 'quantity' && source) {
-    source.unitPrice = price;
-    source.price = Math.round(price * (Number(source.qty) || 0) * 100) / 100;
-  } else if (source) source.price = price;
-  else return false;
+  if (!projectApplyLineUnitPrice(line, price)) return false;
   projectEstimateMarkChanged(o, `Изменена цена «${line.name}»: ${fmtMoney(price)}`);
   save();
   return true;
+}
+/** « × $2.50 / sq ft» after a line's volume — the rate the sum is made of (Owner, 2026-11-13: «цена за sq ft и общая»). */
+function projectLineRateText(o, line) {
+  if (line.kind === 'included' || !(Number(line.qty) > 0)) return '';
+  const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'quantity' || line.unitPriced ? line.unitShort : '';
+  return unit ? ` × ${fmtSqftPrice(projectLineUnitPrice(o, line))} / ${academyEsc(unit)}` : '';
+}
+// ---------- ИТОГ ПРОЕКТА ВРУЧНУЮ (Owner, 2026-11-13) ----------
+// «Внизу общее поле — сумма, и её можно поменять.» The total is never a second
+// number beside the lines: a typed total moves every priced line by the same
+// share, so the card, the proposal, the invoice and the payroll keep reading one
+// set of prices. «↺ по прайсу» puts the directory prices back.
+function projectTotalAdjustableLines(o) {
+  // The same set orderRevenue() counts: quick-entry rows only while the project has no measured
+  // windows, and — once scope approvals exist — only the approved services.
+  const quickCounts = !measureAllWindows(o).length;
+  const approved = line => !Array.isArray(o.serviceScopeApprovals) || projectScopeApproved(o, line.key);
+  return projectLines(o).filter(line => !line.excluded && approved(line) && (['windows', 'quantity', 'work'].includes(line.kind) || (line.kind === 'quick' && quickCounts)) && Number(line.price) > 0);
+}
+function projectTotalIsManual(o) {
+  return Number(o?.manualProjectTotal) > 0 && Math.abs(orderRevenue(o) - Number(o.manualProjectTotal)) < 0.01;
+}
+function projectTotalEditHtml(o) {
+  const total = Math.round(orderRevenue(o) * 100) / 100;
+  const manual = projectTotalIsManual(o);
+  return `<span class="project-total-edit" data-project-total style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+    ${manual ? `<span class="rp-price-manual">итог вручную</span><button type="button" class="rp-price-reset" onclick="projectCardResetTotal('${o.id}')">↺ вернуть цены</button>` : ''}
+    <label style="display:flex;align-items:center;gap:.4rem;font-weight:800;font-size:.85rem;color:#0f172a">Итог проекта, $<input type="number" min="0" step="1" inputmode="decimal" value="${total}" aria-label="Итог проекта" title="Поменяйте сумму — цены услуг подстроятся пропорционально" style="width:7.5rem;min-height:40px;font-weight:900;text-align:right" onchange="projectCardSetTotal('${o.id}',this.value)"></label>
+  </span>`;
+}
+/** The rate a window is sold at now: its own, else what the order or the catalog gives it. */
+function projectWindowRate(o, win) {
+  if (win.pricePerSqft != null && win.pricePerSqft !== '') return parseFloat(win.pricePerSqft) || 0;
+  const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
+  const area = windowActualAreaSqft(win) || 0;
+  return area > 0 ? windowRetailPrice(win, o.complexity || 'standard', o.priceOverridePerSqft) / area / coefficient : 0;
+}
+/** Moves one line by a share. Every window keeps its own rate relative to the others. */
+function projectScaleLinePrice(o, line, factor) {
+  if (line.kind === 'windows') line.windows.forEach(win => { win.pricePerSqft = projectWindowRate(o, win) * factor; });
+  else projectApplyLineUnitPrice(line, projectLineUnitPrice(o, line) * factor);
+}
+/** Sets the project total by moving every priced line proportionally. Returns true when saved. */
+function projectSetTotal(oid, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  const target = Math.round(Math.max(0, parseFloat(value) || 0) * 100) / 100;
+  const current = orderRevenue(o);
+  if (Math.abs(target - current) < 0.005) return false;
+  const adjustable = projectTotalAdjustableLines(o);
+  const movable = adjustable.reduce((sum, line) => sum + Number(line.price), 0);
+  const fixed = current - movable;
+  if (!(target > 0) || !(movable > 0) || target <= fixed) {
+    alert(movable > 0 ? `Итог не может быть меньше ${fmtMoney(Math.max(fixed, 0))}.` : 'Сначала добавьте услуги с ценой — менять пока нечего.');
+    return false;
+  }
+  const factor = (target - fixed) / movable;
+  // The owner's price corridor from «Услуги и цены» still binds everyone but the owner.
+  if (currentUser()?.role !== 'owner') {
+    // The corridor is per unit: every window's own rate, and a quick row's sum divided by its quantity.
+    const ratesAfter = line => line.kind === 'windows' ? line.windows.map(win => projectWindowRate(o, win) * factor)
+      : line.kind === 'quick' ? (Number(line.qty) > 0 ? [Number(line.price) * factor / Number(line.qty)] : [])
+      : [projectLineUnitPrice(o, line) * factor];
+    const blocked = adjustable.find(line => { const range = projectServicePriceRange(serviceOffering(line.offeringId)); return range && ratesAfter(line).some(price => (range.min > 0 && price < range.min - 0.005) || (range.max > 0 && price > range.max + 0.005)); });
+    if (blocked) {
+      const range = projectServicePriceRange(serviceOffering(blocked.offeringId));
+      alert(`Итог ${fmtMoney(target)} выводит цену «${blocked.name}» за рамки прайса: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}. Такую сумму утверждает владелец.`);
+      return false;
+    }
+  }
+  // The prices before the first manual total are kept, so «↺ вернуть цены» restores exactly them:
+  // each window's own value (also «no own rate») and each row's price, custom work included.
+  // A total that is no longer the manual one (a line was repriced or added since) starts a fresh snapshot.
+  if (!o.manualProjectTotalBase || !projectTotalIsManual(o)) {
+    const base = { windows: {}, lines: {} };
+    adjustable.forEach(line => {
+      if (line.kind === 'windows') line.windows.forEach(win => { base.windows[win.id] = win.pricePerSqft != null && win.pricePerSqft !== '' ? parseFloat(win.pricePerSqft) || 0 : null; });
+      else base.lines[line.key] = projectLineUnitPrice(o, line);
+    });
+    o.manualProjectTotalBase = base;
+  }
+  adjustable.forEach(line => projectScaleLinePrice(o, line, factor));
+  // Counted rows round to cents; the remainder goes to one line so the saved total is the typed one.
+  const rest = target - orderRevenue(o);
+  if (Math.abs(rest) >= 0.005) {
+    const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
+    const lines = projectTotalAdjustableLines(o).sort((a, b) => b.price - a.price);
+    const anchor = lines.find(line => line.kind === 'windows' && line.qty > 0);
+    const row = lines.find(line => line.kind !== 'windows' && line.sources?.[0]);
+    const area = anchor ? anchor.windows.reduce((part, win) => part + (windowActualAreaSqft(win) || 0), 0) : 0;
+    if (area > 0) anchor.windows.forEach(win => { win.pricePerSqft = projectWindowRate(o, win) + rest / area / coefficient; });
+    else if (row) {
+      // A counted row takes the cents on its sum, and its rate follows, so a later
+      // «rate × quantity» sync (Smart services, old film removal) rebuilds the same sum.
+      const source = row.sources[0];
+      source.price = Math.round((Number(source.price) + rest) * 100) / 100;
+      if ((row.kind !== 'work' || row.unitPriced) && Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
+    }
+  }
+  o.manualProjectTotal = Math.round(orderRevenue(o) * 100) / 100;
+  projectEstimateMarkChanged(o, `Итог проекта задан вручную: ${fmtMoney(current)} → ${fmtMoney(o.manualProjectTotal)}`);
+  save();
+  return true;
+}
+/** Back to the prices the lines had before the manual total (the directory price for a line added later). */
+function projectResetTotal(oid) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  const base = o.manualProjectTotalBase || {};
+  projectTotalAdjustableLines(o).forEach(line => {
+    const list = projectLineListPrice(line);
+    if (line.kind === 'windows') {
+      line.windows.forEach(win => {
+        if (base.windows && win.id in base.windows) win.pricePerSqft = base.windows[win.id];
+        else if (list != null && list > 0) win.pricePerSqft = list;
+      });
+      return;
+    }
+    const before = Number(base.lines?.[line.key]);
+    if (before > 0) projectApplyLineUnitPrice(line, before);
+    else if (list != null && list > 0) projectApplyLineUnitPrice(line, list);
+  });
+  delete o.manualProjectTotal;
+  delete o.manualProjectTotalBase;
+  projectEstimateMarkChanged(o, `Ручной итог снят, цены возвращены: ${fmtMoney(orderRevenue(o))}`);
+  save();
+  return true;
+}
+function projectCardSetTotal(oid, value) {
+  projectSetTotal(oid, value);
+  preservePositionForNextRender(); render();
+}
+function projectCardResetTotal(oid) {
+  projectResetTotal(oid);
+  preservePositionForNextRender(); render();
 }
 function projectCardSetPrice(oid, key, value) {
   projectSetLinePrice(oid, key, value);
@@ -3170,7 +3336,7 @@ function projectDirectionSetPrice(oid, directionKey, key, value) {
 function proposalWizardSummaryHtml(o, groups, total, deposit, client) {
   const unitText = line => {
     if (line.kind === 'included') return 'в пакете';
-    const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' ? '' : line.unitShort;
+    const unit = line.kind === 'windows' ? 'sq ft' : line.kind === 'work' && !line.unitPriced ? '' : line.unitShort;
     return unit ? `${fmtMoney(projectLineUnitPrice(o, line))} / ${unit}` : 'сумма';
   };
   const lines = groups.flatMap(direction => direction.lines.filter(line => !line.excluded).map(line => `<div class="rp-kpsum-line">
