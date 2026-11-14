@@ -247,6 +247,7 @@ test('with counted rows only, the cents remainder still lands on the typed total
   assert.equal(vm.runInContext("projectSetTotal('o','50')", ctx), true);
   assert.equal(Math.round(ctx.orderRevenue() * 100) / 100, 50);
   assert.equal(ctx.order.manualProjectTotal, 50);
+  for (const row of [one, two]) assert.equal(Math.round(row.unitPrice * row.qty * 100) / 100, row.price, 'rate × quantity rebuilds the same sum after a sync');
 });
 
 test('the manager\'s corridor is checked per unit: a quick row by its rate, windows one by one', () => {

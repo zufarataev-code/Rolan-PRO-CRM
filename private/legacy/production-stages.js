@@ -3279,10 +3279,11 @@ function projectSetTotal(oid, value) {
     const area = anchor ? anchor.windows.reduce((part, win) => part + (windowActualAreaSqft(win) || 0), 0) : 0;
     if (area > 0) anchor.windows.forEach(win => { win.pricePerSqft = projectWindowRate(o, win) + rest / area / coefficient; });
     else if (row) {
-      // A counted row takes the cents on its sum; its rate stays the scaled one.
+      // A counted row takes the cents on its sum, and its rate follows, so a later
+      // «rate × quantity» sync (Smart services, old film removal) rebuilds the same sum.
       const source = row.sources[0];
       source.price = Math.round((Number(source.price) + rest) * 100) / 100;
-      if (row.kind === 'quick' && Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
+      if ((row.kind !== 'work' || row.unitPriced) && Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
     }
   }
   o.manualProjectTotal = Math.round(orderRevenue(o) * 100) / 100;
