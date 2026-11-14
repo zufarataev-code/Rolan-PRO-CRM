@@ -3162,6 +3162,10 @@ function projectApplyLineUnitPrice(line, price) {
   else if ((line.kind === 'quantity' || line.unitPriced) && source) {
     source.unitPrice = price;
     source.price = Math.round(price * (Number(source.qty) || 0) * 100) / 100;
+  } else if (line.kind === 'quick' && source) {
+    // A quick-entry row keeps its total; its unit price is derived from it.
+    source.price = Math.round(price * 100) / 100;
+    if (Number(source.qty) > 0) source.unitPrice = source.price / Number(source.qty);
   } else if (source) source.price = price;
   else return false;
   return true;
@@ -3196,7 +3200,9 @@ function projectLineRateText(o, line) {
 // share, so the card, the proposal, the invoice and the payroll keep reading one
 // set of prices. «↺ по прайсу» puts the directory prices back.
 function projectTotalAdjustableLines(o) {
-  return projectLines(o).filter(line => !line.excluded && ['windows', 'quantity', 'work'].includes(line.kind) && Number(line.price) > 0);
+  // Quick-entry rows count in the total only while the project has no measured windows (orderExtraServicesRevenue).
+  const quickCounts = !measureAllWindows(o).length;
+  return projectLines(o).filter(line => !line.excluded && (['windows', 'quantity', 'work'].includes(line.kind) || (line.kind === 'quick' && quickCounts)) && Number(line.price) > 0);
 }
 function projectTotalIsManual(o) {
   return Number(o?.manualProjectTotal) > 0 && Math.abs(orderRevenue(o) - Number(o.manualProjectTotal)) < 0.01;
@@ -3205,7 +3211,7 @@ function projectTotalEditHtml(o) {
   const total = Math.round(orderRevenue(o) * 100) / 100;
   const manual = projectTotalIsManual(o);
   return `<span class="project-total-edit" data-project-total style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
-    ${manual ? `<span class="rp-price-manual">итог вручную</span><button type="button" class="rp-price-reset" onclick="projectCardResetTotal('${o.id}')">↺ по прайсу</button>` : ''}
+    ${manual ? `<span class="rp-price-manual">итог вручную</span><button type="button" class="rp-price-reset" onclick="projectCardResetTotal('${o.id}')">↺ вернуть цены</button>` : ''}
     <label style="display:flex;align-items:center;gap:.4rem;font-weight:800;font-size:.85rem;color:#0f172a">Итог проекта, $<input type="number" min="0" step="1" inputmode="decimal" value="${total}" aria-label="Итог проекта" title="Поменяйте сумму — цены услуг подстроятся пропорционально" style="width:7.5rem;min-height:40px;font-weight:900;text-align:right" onchange="projectCardSetTotal('${o.id}',this.value)"></label>
   </span>`;
 }
@@ -3234,6 +3240,14 @@ function projectSetTotal(oid, value) {
       return false;
     }
   }
+  // The prices before the first manual total are kept, so «↺ вернуть цены» restores exactly them —
+  // also for custom work that has no directory price to fall back to.
+  // A total that is no longer the manual one (a line was repriced or added since) starts a fresh snapshot.
+  if (!o.manualProjectTotalBase || !projectTotalIsManual(o)) o.manualProjectTotalBase = Object.fromEntries(adjustable.map(line => {
+    // Windows with one typed rate keep it to the cent; the area-weighted rate is only for mixed ones.
+    const typed = line.kind === 'windows' ? [...new Set(line.windows.map(win => win.pricePerSqft))] : [];
+    return [line.key, typed.length === 1 && typed[0] != null && typed[0] !== '' ? Number(typed[0]) : projectLineUnitPrice(o, line)];
+  }));
   next.forEach(({ line, price }) => projectApplyLineUnitPrice(line, price));
   // Counted rows round to cents; the remainder goes to the largest window line so the total is exact.
   const rest = target - orderRevenue(o);
@@ -3252,13 +3266,20 @@ function projectSetTotal(oid, value) {
   save();
   return true;
 }
-/** Back to the directory prices for every line that has one. */
+/** Back to the prices the lines had before the manual total (the directory price for a line added later). */
 function projectResetTotal(oid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
-  projectTotalAdjustableLines(o).forEach(line => { const list = projectLineListPrice(line); if (list != null && list > 0) projectApplyLineUnitPrice(line, list); });
+  const base = o.manualProjectTotalBase || {};
+  projectTotalAdjustableLines(o).forEach(line => {
+    const before = Number(base[line.key]);
+    const list = projectLineListPrice(line);
+    if (before > 0) projectApplyLineUnitPrice(line, before);
+    else if (list != null && list > 0) projectApplyLineUnitPrice(line, list);
+  });
   delete o.manualProjectTotal;
-  projectEstimateMarkChanged(o, `Итог проекта возвращён к прайсу: ${fmtMoney(orderRevenue(o))}`);
+  delete o.manualProjectTotalBase;
+  projectEstimateMarkChanged(o, `Ручной итог снят, цены возвращены: ${fmtMoney(orderRevenue(o))}`);
   save();
   return true;
 }

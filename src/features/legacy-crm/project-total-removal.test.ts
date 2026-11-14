@@ -49,6 +49,7 @@ function loadTotal(role = 'owner') {
     db: { settings: { complexityCoefs: { standard: 1 }, removalPricePerSqft: 2.5 } }, alerts, order, win, removal, silicone,
     CLOSED_PROJECT_STATUSES: ['completed'],
     getOrder: () => order, currentUser: () => ({ role }), orderUserCanSeeMoney: () => true,
+    measureAllWindows: () => [{ win }],
     serviceOffering: (id: string) => offerings[id] || null,
     windowActualAreaSqft: (item: Row) => item.area,
     projectLines: () => [
@@ -76,8 +77,39 @@ test('a typed project total moves every priced line by the same share and lands 
   assert.equal(vm.runInContext('projectTotalIsManual(order)', ctx), true);
 
   assert.equal(vm.runInContext("projectResetTotal('o')", ctx), true);
-  assert.deepEqual([ctx.win.pricePerSqft, ctx.silicone.unitPrice, ctx.removal.unitPrice, ctx.orderRevenue()], [9, 5, 2.5, 625], '«↺ по прайсу» restores the directory prices');
+  assert.deepEqual([ctx.win.pricePerSqft, ctx.silicone.unitPrice, ctx.removal.unitPrice, ctx.orderRevenue()], [9, 5, 2.5, 625], '«↺ вернуть цены» restores the prices from before the manual total');
   assert.equal(ctx.order.manualProjectTotal, undefined);
+  assert.equal(ctx.order.manualProjectTotalBase, undefined);
+});
+
+test('the reset restores custom work and hand-typed prices too, not only directory prices', () => {
+  const ctx = loadTotal();
+  const custom: Row = { id: 'c1', price: 300 };
+  const lines = ctx.projectLines();
+  ctx.win.pricePerSqft = 11; // typed by hand before the total: not the $9 list price
+  ctx.projectLines = () => [
+    { key: 'w', kind: 'windows', name: 'Black Silver', offeringId: 'film', qty: 50, price: ctx.win.area * ctx.win.pricePerSqft, windows: [ctx.win], sources: [] },
+    { key: 'c', kind: 'work', name: 'Подрядчик', offeringId: '', qty: 1, price: custom.price, sources: [custom] },
+  ];
+  assert.equal(lines.length, 3);
+  assert.equal(ctx.orderRevenue(), 850);
+  vm.runInContext("projectSetTotal('o','1000')", ctx);
+  vm.runInContext("projectSetTotal('o','1200')", ctx); // a second total keeps the first snapshot
+  assert.ok(Math.abs(ctx.orderRevenue() - 1200) < 0.005);
+  vm.runInContext("projectResetTotal('o')", ctx);
+  assert.deepEqual([ctx.win.pricePerSqft, custom.price, ctx.orderRevenue()], [11, 300, 850]);
+});
+
+test('a quick-entry project can be repriced by its total; quick rows of a measured project stay out', () => {
+  const ctx = loadTotal();
+  const quick: Row = { id: 'q1', quickProjectLine: true, qty: 40, unit: 'sqft', unitPrice: 10, price: 400 };
+  ctx.projectLines = () => [{ key: 'k', kind: 'quick', name: 'Solar', offeringId: '', qty: 40, price: quick.price, sources: [quick] }];
+  ctx.measureAllWindows = () => [];
+  assert.equal(vm.runInContext("projectSetTotal('o','500')", ctx), true);
+  assert.deepEqual([quick.price, quick.unitPrice], [500, 12.5]);
+
+  ctx.measureAllWindows = () => [{ win: ctx.win }];
+  assert.equal(vm.runInContext('projectTotalAdjustableLines(order).length', ctx), 0, 'measured windows carry the revenue then');
 });
 
 test('the price corridor binds a manager\'s total but not the owner\'s; a closed project is not repriced', () => {
