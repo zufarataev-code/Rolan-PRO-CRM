@@ -8893,6 +8893,198 @@ function ensureRolanSmartCatalog(catalog) {
   return added;
 }
 
+// ---------------------------------------------------------------------------
+// ТРИ ПРОИЗВОДИТЕЛЯ И ЛИНЕЙКА ROLAN PRO (Owner, 2026-11-13): «загрузи этот
+// список; Джонсон, Мадико, Ролан ПРО — остальное удали, оставь как базу, чтобы
+// могли достать; при выборе бренда подтягивается его список; по умолчанию
+// Rolan PRO; приватная — это зеркальные плёнки, у каждой категории свои».
+// The owner's price list (39 rows, rolls 60"/72" × 100 ft) becomes the Rolan PRO
+// house line: one catalog model per shade. The roll prices are kept as the
+// supplier's list price only — the purchase cost still comes from the warehouse
+// receipt, and retail prices stay on the services.
+const CORE_FILM_BRANDS = [
+  { key: 'rolanpro', label: 'Rolan PRO', test: /rolan\s*pro|magnitronic/i },
+  { key: 'johnson', label: 'Johnson', test: /johnson/i },
+  { key: 'madico', label: 'Madico', test: /madico/i },
+];
+/**
+ * One manufacturer key per film: «Rolan PRO MS» and «Magnitronic» are Rolan PRO,
+ * «Johnson Window Films» is Johnson. A film without a brand (or the old «Custom»
+ * placeholder, or a «Service» row such as silicone) is the company's own, so it is Rolan PRO too.
+ */
+function filmBrandKey(film) {
+  const brand = String(film?.brand || '').trim();
+  if (!brand || /^(custom|service)$/i.test(brand)) return 'rolanpro';
+  const core = CORE_FILM_BRANDS.find(item => item.test.test(brand));
+  return core ? core.key : `other:${brand.toLowerCase()}`;
+}
+function filmBrandLabel(film) {
+  const core = CORE_FILM_BRANDS.find(item => item.key === filmBrandKey(film));
+  return core ? core.label : String(film?.brand || '').trim();
+}
+/** Manufacturers present in a film list: Rolan PRO, Johnson, Madico first, then any other the owner brought back. */
+function filmBrandOptions(films) {
+  const map = new Map();
+  (films || []).forEach(film => {
+    const key = filmBrandKey(film);
+    if (!map.has(key)) map.set(key, { key, label: filmBrandLabel(film), count: 0 });
+    map.get(key).count++;
+  });
+  const order = key => { const index = CORE_FILM_BRANDS.findIndex(item => item.key === key); return index === -1 ? 99 : index; };
+  return [...map.values()].sort((a, b) => order(a.key) - order(b.key) || a.label.localeCompare(b.label, 'ru'));
+}
+/**
+ * The manufacturer a film list opens on: the asked one when it is in the list,
+ * else the manufacturer of the already chosen film, else Rolan PRO, else all.
+ */
+function filmBrandActive(films, wanted = '', selectedFilm = null) {
+  const options = filmBrandOptions(films);
+  if (wanted === '__all' || options.length < 2) return '__all';
+  if (options.some(item => item.key === wanted)) return wanted;
+  const selectedKey = selectedFilm ? filmBrandKey(selectedFilm) : '';
+  if (options.some(item => item.key === selectedKey)) return selectedKey;
+  return options.some(item => item.key === 'rolanpro') ? 'rolanpro' : '__all';
+}
+function filmBrandFilter(films, active) {
+  return active === '__all' ? (films || []) : (films || []).filter(film => filmBrandKey(film) === active);
+}
+/** The switch itself: one button per manufacturer; `handler` receives the key. */
+function filmBrandChipsHtml(films, active, handler) {
+  const options = filmBrandOptions(films);
+  if (options.length < 2) return '';
+  const chip = (key, label, count) => `<button type="button" class="tag" data-film-brand="${academyEsc(key)}" aria-pressed="${active === key}" onclick="${handler}('${jsQuote(key)}')" style="min-height:40px;padding:0 14px;font-weight:800;cursor:pointer;border:1px solid ${active === key ? '#0f172a' : '#e5e7eb'};background:${active === key ? '#0f172a' : '#fff'};color:${active === key ? '#fff' : '#334155'}">${academyEsc(label)} <span style="opacity:.6;font-weight:600">${count}</span></button>`;
+  return `<div data-film-brands style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:.2rem 0 .6rem"><span class="text-xs font-bold text-slate-500" style="margin-right:2px">Производитель</span>${options.map(item => chip(item.key, item.label, item.count)).join('')}${chip('__all', 'Все', (films || []).length)}</div>`;
+}
+/** Films of one manufacturer split by the film category inside the direction (зеркальная, керамика, матовая…). */
+function filmGroupsByFilmCategory(films) {
+  const groups = [];
+  (films || []).forEach(film => {
+    const title = String(film.filmCategory || '').trim() || 'Плёнки';
+    let group = groups.find(item => item.title === title);
+    if (!group) { group = { title, films: [] }; groups.push(group); }
+    group.films.push(film);
+  });
+  return groups;
+}
+
+// The supplier card the house line is ordered through (warehouse and procurement only).
+const ROLAN_PRO_HOUSE_SUPPLIER = 'NEXFIL';
+// [основная категория, «также в», категория плёнки, название, оттенки, [[ширина рулона ″, цена рулона $]], доп. поля]
+const ROLAN_PRO_HOUSE_FILMS = [
+  ['privacy', ['solar'], 'Зеркальная · Sputter', 'Elegance', ['20%', '35%'], [[60, 295]], { composition: 'Ni + Chrome' }],
+  ['privacy', ['solar'], 'Зеркальная · Sputter', 'Solar Bronze', ['20%', '35%'], [[60, 300]], { composition: 'Copper' }],
+  ['privacy', ['solar'], 'Зеркальная · Sputter', 'Prestigious HP Silver', ['20%', '35%'], [[60, 265], [72, 315]], { composition: 'Aluminium' }],
+  ['privacy', ['solar'], 'Зеркальная · двусторонняя', 'Twilight 10', [''], [[60, 300]], {}],
+  ['privacy', ['solar'], 'Зеркальная · Silver', 'Silver', ['5%', '15%', '35%', '50%', '60%'], [[60, 155]], {}],
+  ['privacy', ['solar'], 'Зеркальная · Silver', 'Silver', ['20%', '35%'], [[72, 210]], {}],
+  ['solar', [], 'Нано-керамика', 'Lux IR80', ['5%', '15%', '20%', '35%', '50%'], [[60, 365]], { irBlock: 80 }],
+  ['solar', [], 'Нано-керамика', 'OnyVa IR90', ['5%', '15%', '20%', '35%', '50%', '70%'], [[60, 380]], { irBlock: 90 }],
+  ['solar', [], 'Нано-керамика', 'Top-Dni IR99', ['5%', '15%', '35%', '50%'], [[60, 490]], { irBlock: 99 }],
+  ['solar', [], 'Carbon', 'Centurion IR30', ['3%'], [[60, 190]], { irBlock: 30 }],
+  ['solar', [], 'Carbon', 'Centurion IR30', ['5%', '15%', '20%', '35%', '50%', '70%'], [[60, 185]], { irBlock: 30 }],
+  ['solar', [], 'Carbon', 'Nuvo IR55', ['5%', '20%', '35%', '50%'], [[60, 295]], { irBlock: 55 }],
+  ['solar', [], 'Carbon', 'HP Centurion IR50', ['5%', '15%', '20%', '35%', '50%'], [[60, 300]], { irBlock: 50, composition: 'Carbon Sputter' }],
+  ['solar', [], 'Тонировочная', 'Professional Black', ['3%'], [[60, 105]], { composition: 'Non Reflective · 1 ply · 1 mil' }],
+  ['solar', [], 'Тонировочная', 'Professional Black', ['5%', '20%', '35%', '42%', '50%'], [[60, 100]], { composition: 'Non Reflective · 1 ply · 1 mil' }],
+  ['solar', [], 'Тонировочная', 'Premium Black', ['5%', '15%', '20%', '35%', '42%', '50%', '57%'], [[60, 145]], { composition: 'Non Reflective · 2 ply · 1.5 mil' }],
+  ['solar', [], 'Тонировочная', 'Economy Charcoal', ['5%', '20%', '35%', '50%'], [[60, 90]], { composition: 'Non Reflective · 1 ply · 1 mil · Charcoal or Black' }],
+  ['solar', [], 'Тонировочная', 'NRNX Charcoal', ['5%', '20%', '35%', '50%', '70%'], [[60, 135]], { composition: 'Non Reflective · 2 ply · 1.5 mil' }],
+  ['protective', [], 'Защитная прозрачная', 'Safety', ['2 mil'], [[60, 110], [72, 145]], { composition: '1 ply' }],
+  ['protective', [], 'Защитная прозрачная', 'Safety', ['4 mil'], [[60, 150], [72, 185]], { composition: '1 ply' }],
+  ['protective', [], 'Защитная прозрачная', 'Safety', ['7 mil'], [[60, 255], [72, 295]], { composition: '1 ply' }],
+  ['protective', [], 'Защитная прозрачная', 'Safety', ['8 mil'], [[60, 325], [72, 385]], { composition: '2 ply' }],
+  ['protective', [], 'Защитная прозрачная', 'Safety', ['12 mil'], [[60, 480]], { composition: '2 ply' }],
+  ['protective', ['solar'], 'Защитная тонированная', 'Safety Black 4 mil', ['5%', '20%', '35%', '50%'], [[60, 200]], { thickness: '4 mil', composition: 'Dyed · 2 ply' }],
+  ['protective', [], 'Антиграффити', 'Anti-Graffiti', ['4 mil'], [[60, 295]], { composition: 'Exterior' }],
+  ['decorative', ['privacy'], 'Матовая', 'White Frost', [''], [[60, 150], [72, 195]], {}],
+  ['decorative', ['privacy'], 'Матовая', 'Silver Color Matte Series', [''], [[60, 185]], {}],
+  ['decorative', ['privacy'], 'Матовая', 'Dyed Color Matte Series', [''], [[60, 185]], {}],
+  ['decorative', [], 'Декоративная', 'Interior Film INT 100 Series', [''], [[60, 150]], {}],
+  ['decorative', [], 'Декоративная', 'Silver Color #P Series', [''], [[60, 185]], {}],
+  ['privacy', ['decorative'], 'Непрозрачная', 'Whiteout', [''], [[60, 150]], { composition: 'INT 100-10' }],
+  ['privacy', ['decorative'], 'Непрозрачная', 'Blackout', [''], [[60, 155], [72, 205]], {}],
+];
+/** The price list unfolded into catalog models: one per shade, roll sizes of the same model merged. */
+function rolanProHouseCatalogItems() {
+  const items = new Map();
+  ROLAN_PRO_HOUSE_FILMS.forEach(([category, extraCategories, filmCategory, productName, shades, rolls, extra]) => {
+    shades.forEach(shade => {
+      const id = `film_rolanpro_${`${productName}_${shade}`.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`;
+      let item = items.get(id);
+      if (!item) {
+        const percent = /^\d+%$/.test(shade) ? Number(shade.replace('%', '')) : null;
+        item = {
+          id, brand: 'Rolan PRO', category, extraCategories: [...extraCategories], filmCategory,
+          productName, series: productName, modelCode: shade, model: [productName, shade].filter(Boolean).join(' '),
+          vlt: percent, irBlock: extra.irBlock ?? null,
+          thickness: extra.thickness || (/mil$/.test(shade) ? shade : null),
+          composition: extra.composition || '',
+          rollWidthsIn: [], supplierRolls: [],
+          retailPerSqft: null, costPerSqft: null, installerRatePerSqft: null, wastePct: null, archived: false,
+          specSource: 'Прайс поставщика · 2026-11 (номинальные значения)',
+          houseList: 'rolanpro-2026-11',
+        };
+        items.set(id, item);
+      }
+      rolls.forEach(([widthIn, priceUsd]) => {
+        if (!item.rollWidthsIn.includes(widthIn)) item.rollWidthsIn.push(widthIn);
+        if (!item.supplierRolls.some(roll => roll.widthIn === widthIn)) item.supplierRolls.push({ widthIn, lengthFt: 100, priceUsd });
+      });
+    });
+  });
+  return [...items.values()];
+}
+/**
+ * Adds the Rolan PRO house line once. A model the owner already has (same id)
+ * only gets its empty fields filled; a model he later deletes or archives does
+ * not come back, because the list is loaded a single time.
+ */
+function ensureRolanProHouseCatalog(catalog, vendors) {
+  if (!Array.isArray(catalog)) return 0;
+  const supplier = (Array.isArray(vendors) ? vendors : []).find(vendor => String(vendor?.name || '').toLowerCase() === ROLAN_PRO_HOUSE_SUPPLIER.toLowerCase());
+  let added = 0;
+  rolanProHouseCatalogItems().forEach(source => {
+    let item = catalog.find(candidate => candidate?.id === source.id);
+    if (!item) { item = { id: source.id }; catalog.push(item); added++; }
+    Object.entries(source).forEach(([key, value]) => {
+      if (item[key] == null || item[key] === '' || (Array.isArray(item[key]) && !item[key].length && Array.isArray(value) && value.length)) item[key] = Array.isArray(value) ? value.map(entry => (entry && typeof entry === 'object' ? { ...entry } : entry)) : value;
+    });
+    if (!item.vendorId && supplier) item.vendorId = supplier.id;
+  });
+  return added;
+}
+const FILM_BRAND_ARCHIVE_REASON = 'Производитель скрыт: в работе Rolan PRO, Johnson, Madico';
+/**
+ * Moves every film of another manufacturer to the archive — nothing is
+ * deleted, the owner brings a film back from «Склад → Все плёнки → Архив».
+ * A film stays in work when hiding it would break something real: it has
+ * rolls on the warehouse, a service sells it, a project uses it, or the team
+ * wrote it in by hand. Those are listed in the archive view for the owner.
+ */
+function archiveNonCoreFilmBrands(data) {
+  const catalog = Array.isArray(data?.settings?.catalog) ? data.settings.catalog : [];
+  const stocked = new Set((data?.inventory || []).map(roll => roll?.catalogId).filter(Boolean));
+  const sold = new Set((data?.settings?.serviceOfferings || []).flatMap(offering => [...(Array.isArray(offering?.filmIds) ? offering.filmIds : []), offering?.defaultFilmId]).filter(Boolean));
+  const projects = JSON.stringify([data?.orders || [], data?.archivedOrders || []]);
+  const result = { archived: 0, kept: [] };
+  catalog.forEach(item => {
+    if (!item || item.archived || !filmBrandKey(item).startsWith('other:')) return;
+    // Only films: «Удаление старой плёнки» and other non-film catalog rows stay.
+    if (!['solar', 'protective', 'smart', 'privacy', 'decorative'].includes(canonicalCatalogCategory(item.category))) return;
+    if (/^service$/i.test(String(item.brand || '').trim())) return;
+    const why = stocked.has(item.id) ? 'есть рулоны на складе'
+      : sold.has(item.id) ? 'привязана к услуге'
+      : projects.includes(`"${item.id}"`) ? 'стоит в проекте'
+      : item.addedManuallyAt ? 'добавлена вручную' : '';
+    if (why) { result.kept.push({ id: item.id, why }); return; }
+    item.archived = true;
+    item.archiveReason = FILM_BRAND_ARCHIVE_REASON;
+    item.archivedAt = new Date().toISOString();
+    result.archived++;
+  });
+  return result;
+}
+
 // Official manufacturer catalogs used by Warehouse and Procurement.
 // Only manufacturer-published architectural products are listed. Purchase
 // prices, dealer SKUs, lead times and warranty terms intentionally stay empty
@@ -9354,6 +9546,16 @@ function migrateSchema() {
   }
   ensureOfficialSupplierCatalog(s.catalog, db.vendors);
   db._officialSupplierCatalogV1 = true;
+  // Owner, 2026-11-13: the Rolan PRO house line is loaded once; films of every
+  // manufacturer except Rolan PRO, Johnson and Madico go to the archive once.
+  if (!db._rolanProHouseCatalogV1) {
+    ensureRolanProHouseCatalog(s.catalog, db.vendors);
+    db._rolanProHouseCatalogV1 = true;
+  }
+  if (!db._filmBrandCleanup20261113) {
+    const cleanup = archiveNonCoreFilmBrands(db);
+    db._filmBrandCleanup20261113 = { at: new Date().toISOString(), archived: cleanup.archived, kept: cleanup.kept };
+  }
   if (!s.inventoryAlerts) {
     s.inventoryAlerts = { reorderBelowM: 5, criticalBelowM: 2 };
   }
@@ -17119,7 +17321,7 @@ function catalogShortLabel(c) {
   const has = (hay, needle) => needle && String(hay).toLowerCase().includes(String(needle).toLowerCase());
   const shownBrand = /^custom$/i.test(brand) || has(name, brand) || has(model, brand) ? '' : brand;
   if (!model) return [shownBrand, name].filter(Boolean).join(' ') || catalogLabel(c);
-  const family = name.split(/\s+/)[0] || '';
+  const family = (typeof catalogModelIsBare === 'function' && catalogModelIsBare(model) ? name : name.split(/\s+/)[0]) || '';
   const parts = [shownBrand, has(model, family) || has(brand, family) ? '' : family, model];
   return [...new Set(parts.filter(Boolean))].join(' ') || catalogLabel(c);
 }
@@ -27173,6 +27375,22 @@ function renderServiceCashier() {
   state.modal = serviceCashierHtml(c);
   render();
 }
+/** A bare shade or thickness («20%», «4 mil») is not a name on its own — the card says «Lux IR80 20%». */
+function catalogModelIsBare(model) {
+  return /^[\d.]+\s*(%|mil)$/i.test(String(model || '').trim());
+}
+function serviceCashierFilmTitle(item) {
+  const model = catalogFilmModel(item);
+  if (!model) return catalogFilmName(item) || catalogLabel(item);
+  return catalogModelIsBare(model) ? [catalogFilmName(item), model].filter(Boolean).join(' ') : model;
+}
+/** The manufacturer switch only changes which films are shown; the chosen film and variants stay. */
+function serviceCashierPickBrand(key) {
+  const c = serviceCashierState();
+  if (!c) return;
+  c.brand = String(key || '');
+  renderServiceCashier();
+}
 function serviceCashierPick(field, value) {
   const c = serviceCashierState();
   if (!c) return;
@@ -27312,20 +27530,25 @@ function serviceCashierHtml(c) {
       ? `<p class="rp-cashier-selection-note">Выберите линейку плёнки или основную работу. Если клиент ещё не определился — «Уточнить на замере».</p><div class="rp-cashier-grid">${directionOnlyCard}${items.map(item => { const taken = inProject.has(item.id) && serviceOfferingNeedsSizes(item); return `<button type="button" class="rp-cashier-card ${taken ? 'taken' : ''}" style="${serviceCashierCardStyle(c.directionId)}" ${taken ? 'disabled' : `onclick="serviceCashierPick('offering','${jsQuote(item.id)}')"`}><span class="rp-cashier-kind">Линейка / услуга</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span>${taken ? '<span class="rp-cashier-badge">уже в проекте</span>' : ''}</button>`; }).join('')}</div>`
       : `<div class="service-directory-empty"><div class="text-3xl mb-2">${academyEsc(direction?.icon || '🎞')}</div><b>В направлении пока нет активных услуг</b><div class="text-sm mt-1">Сначала добавьте и заполните услугу в разделе «Услуги и цены».</div></div>`;
   } else {
-    const films = serviceCashierFilms(offering);
-    const addons = serviceCashierAddons(o, offering, c.directionId);
+    // Owner, 2026-11-13: «выбираем производителя, а он подтягивает свой список;
+    // по умолчанию Rolan PRO». Inside the manufacturer the films go by film category.
+    const allFilms = serviceCashierFilms(offering);
     const film = c.catalogId ? getCatalogItem(c.catalogId) : null;
+    const brand = filmBrandActive(allFilms, c.brand, film);
+    const films = filmGroupsByFilmCategory(filmBrandFilter(allFilms, brand)).flatMap(group => group.films);
+    const filmGroupCount = new Set(films.map(item => String(item.filmCategory || '').trim())).size;
+    const addons = serviceCashierAddons(o, offering, c.directionId);
     const chosen = addons.filter(item => c.addonIds.includes(item.id));
     const includes = serviceOfferingIncludes(offering);
     const variantMark = id => { const index = c.variantIds.indexOf(id); return index === -1 ? '' : index === 0 ? '★' : String.fromCharCode(65 + index); };
     const filmOn = item => c.clientChoice ? c.variantIds.includes(item.id) : item.id === c.catalogId;
-    const filmCard = item => `<button type="button" class="rp-cashier-card material ${filmOn(item) ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${filmOn(item)}" onclick="serviceCashierPick('material','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.clientChoice ? variantMark(item.id) : filmOn(item) ? '✓' : ''}</span><span class="rp-cashier-kind">${c.clientChoice ? 'Вариант для клиента' : 'Плёнка'}</span><span class="rp-cashier-title">${academyEsc(catalogFilmModel(item) || catalogLabel(item))}</span><span class="rp-cashier-meta">${academyEsc([item.vlt ? `VLT ${item.vlt}%` : '', item.tser ? `TSER ${item.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(item) || '')}</span></button>`;
+    const filmCard = (item, index, list) => `${filmGroupCount > 1 && String(item.filmCategory || '') !== String(list[index - 1]?.filmCategory || '') ? `<div class="rp-cashier-group-title" data-cashier-film-category style="grid-column:1/-1;margin:.5rem 0 0">${academyEsc(String(item.filmCategory || '').trim() || 'Плёнки')}</div>` : ''}<button type="button" class="rp-cashier-card material ${filmOn(item) ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${filmOn(item)}" onclick="serviceCashierPick('material','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.clientChoice ? variantMark(item.id) : filmOn(item) ? '✓' : ''}</span><span class="rp-cashier-kind">${c.clientChoice ? 'Вариант для клиента' : 'Плёнка'}</span><span class="rp-cashier-title">${academyEsc(serviceCashierFilmTitle(item))}</span><span class="rp-cashier-meta">${academyEsc([item.vlt ? `VLT ${item.vlt}%` : '', item.tser ? `TSER ${item.tser}%` : ''].filter(Boolean).join(' · ') || catalogFilmCategory(item) || '')}</span></button>`;
     const unknownOn = !c.catalogId && !c.clientChoice;
-    const clientChoiceCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) && films.length >= 2 ? `<button type="button" class="rp-cashier-card material ${c.clientChoice ? 'selected' : ''}" data-cashier-client-choice style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${c.clientChoice}" onclick="serviceCashierPick('clientChoice','')"><span class="rp-cashier-check">${c.clientChoice ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Клиент выберет</span><span class="rp-cashier-meta">${c.clientChoice ? 'Отметьте 2–3 плёнки — клиент выберет одну в КП' : 'Дать клиенту 2–3 варианта на выбор'}</span></button>` : '';
+    const clientChoiceCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) && allFilms.length >= 2 ? `<button type="button" class="rp-cashier-card material ${c.clientChoice ? 'selected' : ''}" data-cashier-client-choice style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${c.clientChoice}" onclick="serviceCashierPick('clientChoice','')"><span class="rp-cashier-check">${c.clientChoice ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Клиент выберет</span><span class="rp-cashier-meta">${c.clientChoice ? 'Отметьте 2–3 плёнки — клиент выберет одну в КП' : 'Дать клиенту 2–3 варианта на выбор'}</span></button>` : '';
     const unknownFilmCard = serviceOfferingNeedsSizes(offering) && !serviceOfferingNoFilm(offering) ? `<button type="button" class="rp-cashier-card material ${unknownOn ? 'selected' : ''}" style="${serviceCashierCardStyle(c.directionId)}" aria-pressed="${unknownOn}" onclick="serviceCashierPick('material','')"><span class="rp-cashier-check">${unknownOn ? '✓' : ''}</span><span class="rp-cashier-kind">Плёнка</span><span class="rp-cashier-title">Уточнить на замере</span><span class="rp-cashier-meta">Замерщик выберет точную модель на объекте</span></button>` : '';
     const addonCard = item => `<button type="button" class="rp-cashier-card rp-cashier-addon ${c.addonIds.includes(item.id) ? 'selected' : ''}" style="${serviceCashierCardStyle(item.direction === 'general' ? 'general_works' : c.directionId)}" aria-pressed="${c.addonIds.includes(item.id)}" onclick="serviceCashierPick('addon','${jsQuote(item.id)}')"><span class="rp-cashier-check">${c.addonIds.includes(item.id) ? '✓' : '+'}</span><span class="rp-cashier-kind">Доп. работа</span><span class="rp-cashier-title">${academyEsc(item.name)}</span><span class="rp-cashier-meta">${serviceCashierOfferingMeta(item)}</span></button>`;
     body = `<p class="rp-cashier-selection-note">Выберите одну плёнку. Дополнительных работ можно выбрать несколько — все варианты находятся рядом, без отдельного скрытого шага.</p>
-      <div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(offering?.name || 'Услуга')} · плёнка и дополнительные работы</div><div class="rp-cashier-grid compact">${unknownFilmCard}${clientChoiceCard}${films.map(filmCard).join('')}${addons.map(addonCard).join('')}</div></div>
+      <div class="rp-cashier-group"><div class="rp-cashier-group-title">${academyEsc(offering?.name || 'Услуга')} · плёнка и дополнительные работы</div>${filmBrandChipsHtml(allFilms, brand, 'serviceCashierPickBrand')}<div class="rp-cashier-grid compact">${unknownFilmCard}${clientChoiceCard}${films.map(filmCard).join('')}${addons.map(addonCard).join('')}</div></div>
       <div class="rp-cashier-summary" style="${serviceCashierCardStyle(c.directionId)}">
         <div class="rp-cashier-summary-title">В проект ${academyEsc(o.number || '')}</div>
         <div class="rp-cashier-summary-line"><b>${academyEsc(offering.name)}</b><span>${serviceCashierOfferingMeta(offering)}</span></div>
@@ -43070,10 +43293,14 @@ function renderFilmCategoryDirectory() {
   </div>`;
 }
 function renderFilmCategoryModels(category) {
-  const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category));
+  const all = (db.settings.catalog || []).filter(item => catalogItemInCategory(item, category) && (!item.archived || filmWarehouseRolls(item.id).length));
   const blank = currentUser()?.role === 'owner' ? blankCatalogItems().filter(item => catalogItemInCategory(item, category)) : [];
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
-  const items = all.filter(item => !query || `${item.brand} ${item.model}`.toLowerCase().includes(query));
+  // Owner, 2026-11-13: «где тут фильтр по производителю» — the category opens on
+  // one manufacturer (Rolan PRO by default); a search looks through every manufacturer.
+  const hasBrands = typeof filmBrandActive === 'function' && typeof setInventoryFilmBrand === 'function';
+  const brand = hasBrands ? filmBrandActive(all, state.inventoryFilmBrand) : '__all';
+  const items = all.filter(item => query ? `${item.brand} ${item.model}`.toLowerCase().includes(query) : (brand === '__all' || filmBrandKey(item) === brand));
   const colors = catColor(category);
   return `<div class="card mb-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -43081,6 +43308,7 @@ function renderFilmCategoryModels(category) {
       <div class="flex gap-2 flex-wrap">${blank.length ? `<button class="btn-ghost text-sm" onclick="removeBlankCatalogItems()">Удалить пустые · ${blank.length}</button>` : ''}<button class="btn-primary text-sm" onclick="addCatalogItem(null,'${category}')">+ Добавить модель</button></div>
     </div>
     <div class="mt-4"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Найти бренд или модель в этой категории" oninput="state.inventoryFilmQuery=this.value;render();"></div>
+    ${hasBrands && !query ? `<div class="mt-3" data-film-category-brands>${filmBrandChipsHtml(all, brand, 'setInventoryFilmBrand')}</div>` : ''}
   </div>
   <div class="card">
     ${items.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Модель</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Ширины</th><th class="text-left p-2">Статус</th><th></th></tr></thead><tbody>${items.map(item => {
@@ -43102,6 +43330,7 @@ function renderFilmModelStock(catalogId) {
     <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmModel=null;render();">← ${academyEsc(catLabel(item.category))} · все модели</button>
     <div class="flex items-start justify-between gap-3 flex-wrap"><div><div class="text-xs text-gray-500">${academyEsc(catLabel(item.category))}</div><h3 class="font-black text-2xl">${academyEsc(item.brand)} — ${academyEsc(item.model)}</h3><div class="text-sm mt-1">${catalogSpecLabel(item)}</div>${typeof filmCategoryEditorHtml === 'function' ? `<div class="mt-2"><div class="text-xs text-gray-500 mb-1">Категория и где ещё её можно выбрать</div>${filmCategoryEditorHtml(item)}</div>` : ''}</div><div class="flex gap-2 flex-wrap"><button class="btn-ghost text-sm" onclick="openCatalogSpecModal('${item.id}')">Характеристики</button><button class="btn-ghost text-sm" onclick="openPurchaseRequestModal('film','${item.id}')">В закупку</button><button class="btn-primary text-sm" onclick="openAddRollModal('${item.id}')">+ Принять рулон</button></div></div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Рулонов</div><b class="text-lg">${rolls.length}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Остаток</div><b class="text-lg">${stats.lengthM.toFixed(2)} м</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Стоимость</div><b class="text-lg text-emerald-700">${fmtMoney(stats.value)}</b></div><div class="p-3 bg-slate-50 border"><div class="text-xs text-gray-500">Поставщик</div><b>${academyEsc(vendor?.name || 'не назначен')}</b></div></div>
+    ${currentUser()?.role === 'owner' && Array.isArray(item.supplierRolls) && item.supplierRolls.length ? `<div class="text-sm text-gray-600 mt-3" data-supplier-list-price>Прайс поставщика (справочно, закупка считается из прихода): ${item.supplierRolls.map(roll => `${roll.widthIn}″ × ${roll.lengthFt} ft — <b>${fmtMoney(roll.priceUsd)}</b>`).join(' · ')}</div>` : ''}
   </div>
   <div class="card"><h3 class="font-semibold mb-3">Рулоны модели</h3>${rolls.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-xs text-gray-500 border-b"><th class="text-left p-2">Код</th><th class="text-left p-2">Lot #</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Принято</th><th class="text-left p-2">Остаток</th><th class="text-left p-2">Локация</th><th class="text-left p-2">Поставщик</th><th class="text-left p-2">Закупка / sq ft</th><th></th></tr></thead><tbody>${rolls.map(roll => {
     const rollVendor = db.vendors.find(v => v.id === roll.vendorId);

@@ -5016,7 +5016,7 @@ function openWindowFilmListModal(oid, rid, wid, inMeasurement = false) {
   const room = o?.measurements?.rooms?.find(item => item.id === rid);
   const win = room?.windows?.find(item => item.id === wid);
   if (!o || !win || !projectUserCanPickFilm(o)) return;
-  state._filmList = { oid, rid, wid, inMeasurement: !!inMeasurement, query: state._filmList?.wid === wid ? state._filmList.query || '' : '' };
+  state._filmList = { oid, rid, wid, inMeasurement: !!inMeasurement, query: state._filmList?.wid === wid ? state._filmList.query || '' : '', brand: state._filmList?.wid === wid ? state._filmList.brand || '' : '' };
   renderWindowFilmListModal();
 }
 function renderWindowFilmListModal() {
@@ -5027,10 +5027,15 @@ function renderWindowFilmListModal() {
   const query = String(ctx.query || '').trim().toLowerCase();
   const own = windowScopeCategory(o, win);
   const groups = catalogByCategory();
+  // Owner, 2026-11-13: the list opens on one manufacturer (Rolan PRO by default);
+  // a search looks through every manufacturer.
+  const allFilms = [...new Set(Object.values(groups).flat())];
+  const brand = typeof filmBrandActive === 'function' ? filmBrandActive(allFilms, ctx.brand, windowCatalog(win)) : '__all';
+  const inBrand = film => !!query || brand === '__all' || filmBrandKey(film) === brand;
   const order = [own, ...filmCategoryKeys().filter(key => key !== own), ...Object.keys(groups).filter(key => !filmCategoryKeys().includes(key))];
   const seen = new Set();
   const sections = order.filter(key => groups[key]?.length).map(key => {
-    const films = groups[key].filter(film => !seen.has(film.id + key) && (!query || `${film.brand} ${film.model} ${catalogFilmCategory(film) || ''}`.toLowerCase().includes(query)));
+    const films = groups[key].filter(film => inBrand(film) && !seen.has(film.id + key) && (!query || `${film.brand} ${film.model} ${catalogFilmCategory(film) || ''}`.toLowerCase().includes(query)));
     films.forEach(film => seen.add(film.id + key));
     if (!films.length) return '';
     return `<div style="margin-top:12px"><div class="text-xs font-bold text-slate-500">${filmWarehouseCategoryIcon(key)} ${academyEsc(catLabel(key))}${key === own ? ' · направление этого окна' : ''}</div>
@@ -5040,10 +5045,16 @@ function renderWindowFilmListModal() {
     <h3 class="font-bold text-lg">📚 Плёнка из общего списка</h3>
     <div class="text-sm text-gray-600">Окно: ${academyEsc(win.name || 'Окно')}. Все плёнки склада по категориям.</div>
     <input id="film-list-query" class="mt-3" value="${academyEsc(ctx.query || '')}" placeholder="🔎 Бренд, модель, серия" oninput="state._filmList.query=this.value;renderWindowFilmListModal();setTimeout(()=>{const el=document.getElementById('film-list-query');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}},0)">
+    ${!query && typeof filmBrandChipsHtml === 'function' ? `<div class="mt-3">${filmBrandChipsHtml(allFilms, brand, 'windowFilmListPickBrand')}</div>` : ''}
     ${sections || '<div class="text-sm mt-4">Ничего не найдено.</div>'}
     <button type="button" class="btn-ghost mt-4" style="min-height:48px;width:100%" onclick="closeWindowFilmListModal()">Назад к замеру</button>
   </div></div>`;
   render();
+}
+function windowFilmListPickBrand(key) {
+  if (!state._filmList) return;
+  state._filmList.brand = String(key || '');
+  renderWindowFilmListModal();
 }
 function closeWindowFilmListModal() {
   const ctx = state._filmList;
@@ -5124,18 +5135,57 @@ function toggleFilmExtraCategory(id, category) {
   save();
   render();
 }
+/** Owner only: a film goes to the archive (hidden from every list) or comes back; nothing is deleted. */
+function setFilmArchived(id, archived) {
+  const item = getCatalogItem(id);
+  if (!item || currentUser()?.role !== 'owner') return;
+  if (archived && !confirm(`Убрать «${catalogShortLabel(item)}» в архив? Плёнка исчезнет из списков выбора, вернуть можно здесь же.`)) return;
+  item.archived = !!archived;
+  if (archived) { item.archiveReason = 'Убрана в архив владельцем'; item.archivedAt = new Date().toISOString(); }
+  else { delete item.archiveReason; delete item.archivedAt; }
+  save();
+  render();
+}
+/** Brings every archived film of one manufacturer back at once. */
+function restoreFilmBrand(key) {
+  if (currentUser()?.role !== 'owner') return;
+  const items = (db.settings.catalog || []).filter(item => item?.archived && filmBrandKey(item) === key);
+  if (!items.length || !confirm(`Вернуть в работу ${items.length} плёнок «${filmBrandLabel(items[0])}»?`)) return;
+  items.forEach(item => { item.archived = false; delete item.archiveReason; delete item.archivedAt; });
+  save();
+  render();
+}
 function renderAllFilmsList() {
   const query = String(state.inventoryFilmQuery || '').trim().toLowerCase();
-  const items = (db.settings.catalog || []).filter(item => item && !item.archived && (!query || `${item.brand} ${item.model} ${catalogFilmCategory(item) || ''}`.toLowerCase().includes(query)))
-    .sort((a, b) => filmCategoryKeys().indexOf(canonicalCatalogCategory(a.category)) - filmCategoryKeys().indexOf(canonicalCatalogCategory(b.category)) || String(catalogShortLabel(a)).localeCompare(String(catalogShortLabel(b))));
+  const owner = currentUser()?.role === 'owner';
+  const matches = item => !query || `${item.brand} ${item.model} ${catalogFilmCategory(item) || ''}`.toLowerCase().includes(query);
+  const byShelf = (a, b) => filmCategoryKeys().indexOf(canonicalCatalogCategory(a.category)) - filmCategoryKeys().indexOf(canonicalCatalogCategory(b.category)) || String(a.filmCategory || '').localeCompare(String(b.filmCategory || ''), 'ru') || String(catalogShortLabel(a)).localeCompare(String(catalogShortLabel(b)), 'ru', { numeric: true });
+  const live = (db.settings.catalog || []).filter(item => item && !item.archived);
+  const archive = (db.settings.catalog || []).filter(item => item && item.archived);
+  const showArchive = owner && state.inventoryFilmArchive === true;
+  const hasBrands = typeof filmBrandActive === 'function';
+  const brand = hasBrands && !showArchive ? filmBrandActive(live, state.inventoryFilmBrand) : '__all';
+  const items = (showArchive ? archive : live).filter(item => matches(item) && (query || brand === '__all' || filmBrandKey(item) === brand)).sort(byShelf);
+  const archiveBrands = showArchive && hasBrands ? filmBrandOptions(archive) : [];
+  const kept = owner && Array.isArray(db._filmBrandCleanup20261113?.kept) ? db._filmBrandCleanup20261113.kept.map(entry => ({ ...entry, item: getCatalogItem(entry.id) })).filter(entry => entry.item && !entry.item.archived && filmBrandKey(entry.item).startsWith('other:')) : [];
   return `<div class="card mb-4">
-    <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmCategory=null;state.inventoryFilmQuery='';render();">← Категории плёнки</button>
-    <h3 class="font-black text-xl">📚 Все плёнки</h3>
-    <p class="text-sm text-gray-500">Основная категория — где плёнка живёт. «+ Категория» — где её ещё можно выбрать (матовая: декоративная и приватная). ${filmCategoryCanEdit() ? '' : 'Менять категории может менеджер или владелец.'}</p>
+    <button class="btn-ghost text-sm mb-3" onclick="state.inventoryFilmCategory=null;state.inventoryFilmQuery='';state.inventoryFilmArchive=false;render();">← Категории плёнки</button>
+    <div class="flex items-center justify-between gap-3 flex-wrap"><h3 class="font-black text-xl">${showArchive ? '🗄 Архив плёнок' : '📚 Все плёнки'}</h3>${owner && (archive.length || showArchive) ? `<button type="button" class="btn-ghost text-sm" data-film-archive-toggle style="min-height:40px" onclick="state.inventoryFilmArchive=${showArchive ? 'false' : 'true'};render();">${showArchive ? '← В работе' : `🗄 Архив · ${archive.length}`}</button>` : ''}</div>
+    <p class="text-sm text-gray-500">${showArchive
+      ? 'Скрытые плёнки. Они не удалены: «Вернуть» — и плёнка снова в списках выбора.'
+      : `Основная категория — где плёнка живёт. «+ Категория» — где её ещё можно выбрать (матовая: декоративная и приватная). ${filmCategoryCanEdit() ? '' : 'Менять категории может менеджер или владелец.'}`}</p>
     <div class="mt-3"><input value="${academyEsc(state.inventoryFilmQuery || '')}" placeholder="🔎 Бренд, модель, серия" oninput="state.inventoryFilmQuery=this.value;render();"></div>
+    ${!showArchive && !query && hasBrands ? `<div class="mt-3">${filmBrandChipsHtml(live, brand, 'setInventoryFilmBrand')}</div>` : ''}
+    ${archiveBrands.length ? `<div class="mt-3" style="display:flex;gap:6px;flex-wrap:wrap">${archiveBrands.map(option => `<button type="button" class="btn-ghost text-sm" data-film-brand-restore="${academyEsc(option.key)}" style="min-height:40px" onclick="restoreFilmBrand('${jsQuote(option.key)}')">↩ Вернуть ${academyEsc(option.label)} · ${option.count}</button>`).join('')}</div>` : ''}
+    ${!showArchive && kept.length ? `<div class="text-sm mt-3" data-film-kept style="background:#fffbeb;border:1px solid #fde68a;padding:10px">Не убраны в архив, потому что используются: ${kept.map(entry => `<b>${academyEsc(catalogShortLabel(entry.item))}</b> — ${academyEsc(entry.why)}`).join('; ')}. Убрать можно кнопкой «В архив» в строке плёнки.</div>` : ''}
   </div>
   <div class="card">${items.length ? items.map(item => `<div class="border-t" data-all-films-row style="padding:10px 0;display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap">
-      <button type="button" class="text-left" style="flex:1 1 220px" onclick="state.inventoryFilmCategory='${canonicalCatalogCategory(item.category)}';openFilmWarehouseModel('${jsQuote(item.id)}')"><b>${academyEsc(catalogShortLabel(item))}</b>${catalogFilmCategory(item) ? `<div class="text-xs text-gray-500">${academyEsc(catalogFilmCategory(item))}</div>` : ''}</button>
-      ${filmCategoryEditorHtml(item)}
-    </div>`).join('') : '<div class="empty-state"><div class="icon">🔎</div><div>Плёнки не найдены.</div></div>'}</div>`;
+      <button type="button" class="text-left" style="flex:1 1 220px" onclick="state.inventoryFilmCategory='${canonicalCatalogCategory(item.category)}';openFilmWarehouseModel('${jsQuote(item.id)}')"><b>${academyEsc(catalogShortLabel(item))}</b><div class="text-xs text-gray-500">${academyEsc([catLabel(canonicalCatalogCategory(item.category)), catalogFilmCategory(item)].filter(Boolean).join(' · '))}</div></button>
+      ${showArchive ? '' : filmCategoryEditorHtml(item)}
+      ${owner ? `<button type="button" class="btn-ghost text-sm" data-film-archive="${academyEsc(item.id)}" style="min-height:40px" onclick="event.stopPropagation();setFilmArchived('${jsQuote(item.id)}',${showArchive ? 'false' : 'true'})">${showArchive ? '↩ Вернуть' : 'В архив'}</button>` : ''}
+    </div>`).join('') : `<div class="empty-state"><div class="icon">🔎</div><div>${showArchive ? 'В архиве пусто.' : 'Плёнки не найдены.'}</div></div>`}</div>`;
+}
+function setInventoryFilmBrand(key) {
+  state.inventoryFilmBrand = String(key || '');
+  render();
 }
