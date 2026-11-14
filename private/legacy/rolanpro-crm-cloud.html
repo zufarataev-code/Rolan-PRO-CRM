@@ -8910,11 +8910,11 @@ const CORE_FILM_BRANDS = [
 /**
  * One manufacturer key per film: «Rolan PRO MS» and «Magnitronic» are Rolan PRO,
  * «Johnson Window Films» is Johnson. A film without a brand (or the old «Custom»
- * placeholder) is the company's own film, so it is Rolan PRO too.
+ * placeholder, or a «Service» row such as silicone) is the company's own, so it is Rolan PRO too.
  */
 function filmBrandKey(film) {
   const brand = String(film?.brand || '').trim();
-  if (!brand || /^custom$/i.test(brand)) return 'rolanpro';
+  if (!brand || /^(custom|service)$/i.test(brand)) return 'rolanpro';
   const core = CORE_FILM_BRANDS.find(item => item.test.test(brand));
   return core ? core.key : `other:${brand.toLowerCase()}`;
 }
