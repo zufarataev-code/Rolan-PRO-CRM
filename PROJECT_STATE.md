@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Deep-link карточки больше не остаётся за другим разделом (Codex, PR pending)
+
+- Owner showed a production screen whose address was `#/order/om97ff0k1` while the visible module was «Выполненные проекты». Root cause: generic `selectAppView()` navigation changed only `state.view` and kept the previous deep-link hash. Returning to the same Project URL then emitted no `hashchange`, so the browser stayed on the wrong module even though the address claimed to be the Project card.
+- Branch `codex/fix-stale-project-route-20261115`, existing legacy router only. Every generic top-level section now removes an incompatible deep-link with `history.replaceState`, preserving the canonical path and query. Canonical hashed sections (`#/service-pricing`, `#/projects`, `#/installer-operations`) keep their existing explicit routes.
+- Added a regression that starts on `#/order/order_1`, opens «Выполненные проекты» and verifies both the visible view and URL become route-free. Opening the Project link afterwards therefore produces a real route transition.
+- Verification: focused route/project/script suite **29/29**; full suite **1188/1188**; `pnpm typecheck`, production build (139 static pages) and `git diff --check` pass. Production is unchanged until PR review, merge and the owner-authorized main-only release.
+
 ## 2026-11-15 — Карточка проекта показывает весь расчёт услуги (Codex, PR pending)
 
 - Owner: после PR #524 выбор быстрого/подробного расчёта жил только внутри окна направления, поэтому основная карточка проекта выглядела по-старому и не объясняла, из чего сложился проект.
