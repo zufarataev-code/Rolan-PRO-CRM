@@ -2,12 +2,18 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-15 — Deep-link карточки больше не остаётся за другим разделом (Codex, PR pending)
+## 2026-11-15 — Публикация не должна ложно падать во время прогрева CRM (Codex, PR pending)
+
+- Release `2946dfda8484d9724df1b32140a0975380d1da8d` с исправлением deep-link действительно стал активным на production, но workflow ещё шесть минут проверял корневой адрес во время холодного запуска Next.js и завершился красным. Через минуту тот же production отвечал, а браузерная проверка уже открывала правильную карточку Project. Красный статус описывал прогрев сайта, а не отсутствие публикации.
+- Branch `codex/fix-production-health-check-20261115`, deployment workflow only. После подтверждения active-release проверка обращается напрямую к публичной `/login` через лёгкий HEAD-запрос и допускает до 20 повторов с тем же ограниченным интервалом. Несовпадение release SHA по-прежнему остаётся блокирующей ошибкой.
+- Проверка: production release `2946dfd` прочитан браузером; сценарий `Project → Выполненные проекты → тот же Project URL` прошёл, hash очищается при выходе и Project `Josh` снова открывается. Targeted deploy-health suite **3/3**, full suite **1188/1188**, workflow YAML, production `/login` probe и `git diff --check` проходят. Production workflow изменится только после review и main-only merge.
+
+## 2026-11-15 — Deep-link карточки больше не остаётся за другим разделом (Codex, PR #527, published)
 
 - Owner showed a production screen whose address was `#/order/om97ff0k1` while the visible module was «Выполненные проекты». Root cause: generic `selectAppView()` navigation changed only `state.view` and kept the previous deep-link hash. Returning to the same Project URL then emitted no `hashchange`, so the browser stayed on the wrong module even though the address claimed to be the Project card.
 - Branch `codex/fix-stale-project-route-20261115`, existing legacy router only. Every generic top-level section now removes an incompatible deep-link with `history.replaceState`, preserving the canonical path and query. Canonical hashed sections (`#/service-pricing`, `#/projects`, `#/installer-operations`) keep their existing explicit routes.
 - Added a regression that starts on `#/order/order_1`, opens «Выполненные проекты» and verifies both the visible view and URL become route-free. Opening the Project link afterwards therefore produces a real route transition.
-- Verification: focused route/project/script suite **29/29**; full suite **1188/1188**; `pnpm typecheck`, production build (139 static pages) and `git diff --check` pass. Production is unchanged until PR review, merge and the owner-authorized main-only release.
+- Verification: focused route/project/script suite **29/29**; full suite **1188/1188**; `pnpm typecheck`, production build (139 static pages) and `git diff --check` pass. PR #527 merged as `2946dfda8484d9724df1b32140a0975380d1da8d`; active-release and production browser verification passed on 2026-11-15.
 
 ## 2026-11-15 — Карточка проекта показывает весь расчёт услуги (Codex, PR pending)
 
