@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — WIP: Project card keeps its place and retries an interrupted save (Codex)
+
+- Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
+- Confirmed root causes in the shared legacy shell:
+  - desktop/tablet scroll lives on `.app-content`, while the central render-continuity layer watched `.app-main`, which never scrolls; therefore a full `render()` rebuilt the page and restored the wrong element;
+  - a transient server restart left the workspace only in the browser because `cloudPersist()` showed the offline warning but did not schedule a retry.
+- Branch `codex/project-scroll-sync-reliability-20261115`: make the real application viewport the canonical keyed scroller, cover it with regression tests, and add bounded automatic save retries that keep live refresh/release reloads paused until the server confirms the pending workspace.
+- Safety: this branch changes no production Project. Publication still requires owner confirmation after review and verification.
+
 ## 2026-11-15 — Project-level mute for automatic client notifications (Codex, PR #535)
 
 - Owner: while Rolan PRO is operating two CRMs, a newly created Project must be able to stay silent so the client does not receive duplicate automatic SMS/email notifications.
