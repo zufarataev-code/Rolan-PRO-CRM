@@ -576,6 +576,22 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   </div>`;
 }
 
+function projectCardLineCalculation(o, line) {
+  const offering = serviceOffering(line.offeringId);
+  if (offering && serviceOfferingNeedsSizes(offering)) {
+    const mode = typeof projectServiceMeasurementMode === 'function'
+      ? projectServiceMeasurementMode(o, offering)
+      : line.kind === 'quick' ? 'quick' : line.kind === 'windows' ? 'detailed' : '';
+    if (mode === 'quick') return { mode, label: 'Быстро · общая площадь' };
+    if (mode === 'detailed') return { mode, label: 'Подробно · комнаты и окна' };
+  }
+  if (line.kind === 'quick') return { mode: 'quick', label: 'Быстро · общая площадь' };
+  if (line.kind === 'windows') return { mode: 'detailed', label: 'Подробно · комнаты и окна' };
+  if (line.kind === 'included') return { mode: 'included', label: 'Входит в пакет' };
+  if (line.kind === 'quantity') return { mode: 'quantity', label: `По количеству · ${line.unitShort || 'ед.'}` };
+  return { mode: 'fixed', label: line.unitPriced ? `По объёму · ${line.unitShort || 'ед.'}` : 'Фиксированная сумма' };
+}
+
 function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
   const lines = projectLines(o);
   const pending = projectPendingSizedServices(o);
@@ -595,30 +611,43 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
     const deletable = edit && ['quantity', 'work'].includes(line.kind);
     const offering = serviceOffering(line.offeringId);
+    const sizedOffering = offering && serviceOfferingNeedsSizes(offering) ? offering : null;
+    const calculation = projectCardLineCalculation(o, line);
+    const materials = projectLineMaterialNames(line);
     const range = projectServicePriceRange(offering);
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
     const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' || line.unitPriced ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
     const priceUnit = line.kind === 'work' && !line.unitPriced ? 'сумма' : `/ ${line.kind === 'windows' ? 'sq ft' : line.unitShort}${line.kind === 'windows' && coefficient !== 1 ? ` × ${coefficient} сложность` : ''}`;
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
+    const priceField = `<label>Цена${priceEditable ? `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(priceUnit)}</span>${range ? `<span class="block text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</span>` : ''}` : `<div class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(unitPrice)}</div>`}</label>`;
     return `<div data-project-line="${academyEsc(line.key)}">
       <div class="project-service-row ${selected ? 'selected' : ''}">
-        <div><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><div class="project-service-meta">${academyEsc(projectLineNote(line))}</div></div>
-        <div><span class="project-service-label">Объём</span><span class="project-service-value">${academyEsc(projectLineQtyText(line))}</span></div>
-        ${money ? `<div><span class="project-service-label">Сумма</span><span class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>` : '<div></div>'}
-        <div><span class="project-service-label">${production ? 'Монтаж' : 'Статус'}</span><span class="project-service-value">${production ? academyEsc(crew.date) : academyEsc(statusLabel)}</span></div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">›</button>
+        <div class="project-service-summary">
+          <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
+          <div class="project-service-meta">${academyEsc(projectLineNote(line))}</div>
+          <div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
+          <div class="project-service-facts">
+            <span class="project-service-fact mode"><small>Расчёт</small><b>${academyEsc(calculation.label)}</b></span>
+            <span class="project-service-fact"><small>Объём · ставка</small><b>${academyEsc(projectLineQtyText(line))}${projectLineRateText(o, line)}</b></span>
+            ${money ? `<span class="project-service-fact"><small>Цена клиенту</small><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></span>` : ''}
+            <span class="project-service-fact"><small>Исполнитель</small><b>${academyEsc(crew.people)}</b></span>
+            <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
+          </div>
+        </div>
+        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">${edit || plan ? 'Настроить' : 'Подробнее'} ›</button>
       </div>
       ${selected ? projectStagesHtml(o,line.key) : ''}
       ${selected && (edit || plan) ? `<div class="project-service-edit">
-        ${line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>'}
-        ${edit ? `<label>Цена${priceEditable ? `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(priceUnit)}</span>${range ? `<span class="block text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</span>` : ''}` : `<div class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(unitPrice)}</div>`}</label>` : ''}
+        ${sizedOffering && typeof projectServiceMeasurementModeHtml === 'function' ? `<div class="project-card-service-measurement">${projectServiceMeasurementModeHtml(o, sizedOffering, projectLineDirectionInfo(line).key, edit)}</div>` : ''}
+        ${!sizedOffering ? (line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
+        ${edit && (!sizedOffering || calculation.mode === 'detailed') ? priceField : ''}
         ${plan ? `<label>Исполнитель${projectCardCrewPicker(o, line)}</label><label>Дата<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" value="${date}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)"></label>` : `<label>Состояние<div class="project-service-value">${academyEsc(statusLabel)}</div></label>`}
         <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button>${deletable ? `<button class="btn-ghost text-red-600" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">Удалить</button>` : ''}</div></label>
         <details style="grid-column:1/-1" ${projectLineNoteValue(o,line.key) ? 'open' : ''}><summary class="text-xs font-semibold text-slate-500 cursor-pointer">Комментарий по услуге${projectLineNoteValue(o,line.key) ? '' : ' +'}</summary><textarea rows="2" placeholder="Что важно учесть при расчёте, замере или монтаже" onchange="projectCardSetLineNote('${o.id}','${jsQuote(line.key)}',this.value)">${academyEsc(projectLineNoteValue(o,line.key))}</textarea></details>
       </div>` : ''}
     </div>`;
   };
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне — $0' : 'для расчёта нужен замер'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); const directionKey = projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) }).key; return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><div class="project-service-pending-main"><div><b>${academyEsc(offering.name)}</b><span>Материал: ${film ? academyEsc(catalogLabel(film)) : 'не выбран'} · выберите способ расчёта</span></div>${o.offeringId !== offering.id && edit ? `<button class="btn-ghost text-xs text-red-600" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>${edit ? `<div class="project-service-pending-actions"><button class="btn-primary text-xs" onclick="projectCardEdit(()=>projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick'))">⚡ Быстро · общая площадь</button><button class="btn-ghost text-xs" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button></div>` : ''}</div>`; };
   const directionCards = directions.map(direction => {
     const directionLines = direction.lines;
     const excluded = projectDirectionExcluded(o,direction.key);
@@ -634,8 +663,6 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const tone = typeof rpDir === 'function' ? rpDir(direction.key) : null;
     const count = directionLines.length + direction.pending.length;
     const open = `openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')`;
-    const compactRow = line => `<button type="button" class="project-direction-line" onclick="${open}"><span>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</span><span>${academyEsc(projectLineQtyText(line))}${money ? `${projectLineRateText(o, line)} · ${line.kind === 'included' ? 'в пакете' : `<b>${fmtMoney(line.price)}</b>`}` : ''}</span></button>`;
-    const compactPending = offering => `<button type="button" class="project-direction-line pending" onclick="${open}"><span>${academyEsc(offering.name)}</span><span>нужен замер</span></button>`;
     return `<section class="project-direction-card ${excluded?'excluded':''}" data-project-direction="${academyEsc(direction.key)}" style="--direction-color:${academyEsc(tone?.color || '#2563eb')}">
       <button type="button" class="project-direction-tile" onclick="${open}" aria-label="Открыть направление ${academyEsc(direction.title)}">
         <span class="project-direction-tile-icon">${direction.icon}</span>
@@ -643,7 +670,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
         ${money ? `<span class="project-direction-tile-sum">${fmtMoney(amount('price'))}</span>` : ''}
         <span class="project-direction-tile-arrow">›</span>
       </button>
-      <div class="project-direction-services">${production ? directionLines.map(row).join('') + direction.pending.map(pendingRow).join('') : directionLines.map(compactRow).join('') + direction.pending.map(compactPending).join('')}${!directionLines.length && !direction.pending.length ? `<button type="button" class="project-direction-line pending" onclick="${open}"><span>Услуг пока нет</span><span>добавить →</span></button>` : ''}</div>
+      <div class="project-direction-services">${directionLines.map(row).join('') + direction.pending.map(pendingRow).join('')}${!directionLines.length && !direction.pending.length ? `<button type="button" class="project-direction-line pending" onclick="${open}"><span>Услуг пока нет</span><span>добавить →</span></button>` : ''}</div>
     </section>`;
   }).join('');
   return `<section class="project-service-ledger" data-project-card-services>

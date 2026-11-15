@@ -43,6 +43,7 @@ function load(role = 'owner') {
     getUser: (id: string) => db.users.find((user: Row) => user.id === id),
     usersByRole: (r: string) => db.users.filter((user: Row) => user.role === r),
     getCatalogItem: () => undefined,
+    catalogLabel: (item: Row) => item?.fullName || item?.name || item?.model || '—',
     windowCatalog: () => undefined,
     windowActualAreaSqft: (win: Row) => Number(win.sqft) || 0,
     warehouseCatalogCostPerSqft: () => 0,
