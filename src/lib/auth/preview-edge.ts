@@ -9,7 +9,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Запросы, разрешённые во время просмотра: выход из просмотра, выход из CRM
  * и новый вход (он сам сбрасывает просмотр).
  */
-const PREVIEW_WRITE_ALLOWLIST = ["/api/v1/team/preview", "/api/v1/auth/logout", "/api/v1/auth/login"];
+const PREVIEW_WRITE_ALLOWLIST = [
+  "/api/v1/team/preview",
+  "/api/v1/auth/logout",
+  "/api/v1/auth/login",
+  // A Face ID login is a new login too: it also resets the preview.
+  "/api/v1/auth/passkey-login/options",
+  "/api/v1/auth/passkey-login/verify",
+];
 
 /**
  * Some GET routes have side effects (OAuth callbacks that store credentials,

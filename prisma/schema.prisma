@@ -46,8 +46,30 @@ model User {
   updated_legacy_workspaces LegacyWorkspace[] @relation("legacy_workspace_updated_by")
   gmail_connections       GmailConnection[] @relation("gmail_connection_connected_by")
   twilio_messages         TwilioMessage[]  @relation("twilio_message_actor")
+  passkey_credentials     PasskeyCredential[] @relation("passkey_user")
 
   @@map("users")
+}
+
+/// Face ID / Touch ID sign-in keys (WebAuthn). A key outlives password
+/// changes on purpose: changing the password on one device must not lock
+/// the others out. Keys are removed by the employee, by the owner, or with
+/// the user row.
+model PasskeyCredential {
+  passkey_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @db.Uuid
+  credential_id String    @unique @db.VarChar(512)
+  public_key    Bytes
+  counter       BigInt    @default(0)
+  transports    String[]  @default([])
+  rp_id         String    @db.VarChar(191)
+  device_name   String    @db.VarChar(120)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  last_used_at  DateTime? @db.Timestamptz(6)
+  user          User      @relation("passkey_user", fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("passkey_credentials")
 }
 
 model Role {

@@ -906,3 +906,13 @@ Owner requires Claude and Codex to work as one team: same repository and project
 - The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
 - The owner sees active, overlapping, stale and owner-blocked work in `/legacy-crm/control-center` → «Агенты».
 
+## 2026-11-15 — Face ID / Touch ID is an additional sign-in that survives a password change (Owner)
+
+Owner changed the password on the computer and could not get back in on the iPad; asked for sign-in by Face ID.
+
+- Sign-in by Face ID / Touch ID (WebAuthn passkey) is added next to the password; the password stays and remains the way to enable Face ID on a device.
+- A key is **not** revoked when the password is changed or reset. A password change still ends every other session, as before; the device then signs back in with Face ID. Keys end only when the employee switches a device off (`/passkeys`), the owner switches Face ID off for the employee in «Команда», the employee is deactivated, or the user row is deleted.
+- Keys live in `passkey_credentials`. The relying party is the request `Origin`, accepted only if it equals `APP_URL` or an entry of `PASSKEY_ORIGINS`; the `Host` header is never trusted. A key is bound to the address it was enabled on: after the planned move to `crm.rolanpro.com` every device enables Face ID again.
+- The challenge is a signed, 5-minute, single-use httpOnly cookie bound to purpose, address and (for enabling) the signed-in user; no challenge table. User verification is required; attestation is not requested.
+- Only `/api/v1/auth/passkey-login/options` and `/verify` are public. Enabling and managing keys always uses the real signed-in user, never a «view as employee» preview.
+
