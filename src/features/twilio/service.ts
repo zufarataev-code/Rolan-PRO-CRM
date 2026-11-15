@@ -160,7 +160,9 @@ export async function sendSms(input: {
 
 export async function sendWhatsApp(input: {
   to: string;
-  body: string;
+  body?: string;
+  contentSid?: string;
+  contentVariables?: Record<string, string>;
   orderId?: string | null;
   clientId?: string | null;
   actorUserId?: string | null;
@@ -176,7 +178,9 @@ export async function sendWhatsApp(input: {
   const form = new URLSearchParams({
     To: twilioWhatsAppAddress(to),
     From: twilioWhatsAppAddress(config.whatsappFrom),
-    Body: body,
+    ContentSid: input.contentSid || undefined,
+    ContentVariables: input.contentSid ? JSON.stringify(input.contentVariables) : undefined,
+    Body: input.contentSid ? undefined : body,
   });
   if (callbackUrl) form.set("StatusCallback", callbackUrl);
   const message = await twilioRequest(
@@ -199,10 +203,10 @@ export async function sendWhatsApp(input: {
       legacy_order_id: input.orderId ?? null,
       legacy_client_id: input.clientId ?? null,
       actor_user_id: input.actorUserId ?? null,
-      raw_payload: { channel: "whatsapp" },
+      raw_payload: { channel: "whatsapp", contentSid: input.contentSid },
       sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
     },
-    update: { status, raw_payload: { channel: "whatsapp" } },
+    update: { status, raw_payload: { channel: "whatsapp", contentSid: input.contentSid } },
   });
   return { sid, status, to, channel: "whatsapp" };
 }
@@ -296,6 +300,18 @@ async function resolveLegacyReferences(phone: string) {
   });
 }
 
+export function extractTwilioMedia(params: Record<string, string>) {
+  const numMedia = Math.min(10, Number(params.NumMedia ?? "0"));
+  const media = [];
+  for (let i = 0; i < numMedia; i++) {
+    media.push({
+      url: params[`MediaUrl${i}`],
+      contentType: params[`MediaContentType${i}`]
+    });
+  }
+  return media;
+}
+
 export async function recordIncomingSms(params: Record<string, string>) {
   const channel = detectTwilioChannel(params.From || params.To);
   const from = normalizePhone(params.From);
@@ -314,7 +330,7 @@ export async function recordIncomingSms(params: Record<string, string>) {
       body: String(params.Body ?? "").slice(0, 1600),
       legacy_client_id: refs.clientId,
       legacy_order_id: refs.orderId,
-      raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) },
+      raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0), media: extractTwilioMedia(params) },
       sent_at: new Date(),
     },
     update: { status: "received", raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) } },

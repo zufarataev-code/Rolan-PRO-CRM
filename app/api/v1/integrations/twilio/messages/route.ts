@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireRequestSession(request);
   if (!auth.ok) return apiError(401, "unauthorized", "Authentication is required.");
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body.to !== "string" || typeof body.body !== "string") {
+  if (!body || typeof body.to !== "string" || (body.channel !== "whatsapp" && typeof body.body !== "string") || (body.channel === "whatsapp" && typeof body.contentSid !== "string" && typeof body.body !== "string")) {
     return apiError(400, "invalid_payload", "Phone and message text are required.");
   }
   try {
@@ -25,6 +25,8 @@ export async function POST(request: NextRequest) {
       body: body.body,
       orderId: typeof body.orderId === "string" ? body.orderId : null,
       clientId: typeof body.clientId === "string" ? body.clientId : null,
+      contentSid: typeof body.contentSid === "string" ? body.contentSid : undefined,
+      contentVariables: typeof body.contentVariables === "object" ? body.contentVariables : undefined,
       actorUserId: auth.session.user.user_id,
     });
     return apiSuccess(result);
