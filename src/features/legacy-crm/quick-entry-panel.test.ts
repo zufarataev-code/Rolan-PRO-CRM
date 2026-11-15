@@ -369,6 +369,7 @@ test('historical entry selects an existing CRM contact and requires an explicit 
   assert.match(renderer, /Начните вводить имя, телефон или компанию/);
   assert.match(renderer, /Новый клиент · CRM проверит телефон перед сохранением/);
   assert.match(html, /c\.companyName, c\.contactTitle, c\.phone/, 'company contacts are searchable too');
+  assert.match(html, /@supports not \(container-type: inline-size\)[\s\S]*@media \(max-width: 480px\)[\s\S]*\.qe-client-picker \{ grid-column:1; \}/, 'old mobile browsers do not create an implicit second client column');
 });
 
 test('the one-screen form takes direct project expenses — rent, delivery, gas, other — into the project and its margin', () => {
