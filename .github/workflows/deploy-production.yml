@@ -241,16 +241,21 @@ jobs:
               # и может не уложиться в один короткий таймаут. Раньше единственный
               # пятнадцатисекундный curl ронял весь деплой уже после активации
               # релиза, и индикатор врал: код на сервере, а сборка помечена упавшей.
-              for health in $(seq 1 12); do
-                if curl --fail --silent --show-error --max-time 30 \
-                  https://rolanpro-crm.143-110-136-211.sslip.io/ >/dev/null 2>&1; then
+              # The production host can spend several minutes warming the new
+              # Next.js release after the active marker has moved. Probe the
+              # public login page directly and keep the workflow alive long
+              # enough for that cold start instead of reporting a false deploy
+              # failure while the requested SHA is already active.
+              for health in $(seq 1 20); do
+                if curl --fail --silent --show-error --head --max-time 20 \
+                  https://rolanpro-crm.143-110-136-211.sslip.io/login >/dev/null 2>&1; then
                   echo "Production is serving $EXPECTED_SHA"
                   exit 0
                 fi
-                echo "Health check $health/12 did not answer yet; retrying."
+                echo "Health check $health/20 did not answer yet; retrying."
                 sleep 15
               done
-              echo "Release $EXPECTED_SHA is active on the server, but the site did not answer within 6 minutes after activation. The code is deployed; investigate reachability, not the release." >&2
+              echo "Release $EXPECTED_SHA is active on the server, but the public login page did not answer within the extended warm-up window. The code is deployed; investigate reachability, not the release." >&2
               exit 1
             fi
             sleep 10
