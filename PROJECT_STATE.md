@@ -2,6 +2,17 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Project-level mute for automatic client notifications (Codex, PR #535)
+
+- Owner: while Rolan PRO is operating two CRMs, a newly created Project must be able to stay silent so the client does not receive duplicate automatic SMS/email notifications.
+- Branch `codex/project-client-notification-mute-20261115`, legacy CRM only:
+  - the **«Не уведомлять клиента автоматически»** checkbox is available when a Project is created and remains visible/editable in its card for the owner and assigned manager;
+  - the Project flag suppresses automatic customer status, schedule, completion and follow-up messages through one common guard; staff notifications and explicit manual sends remain available;
+  - every change is written to the Project timeline with the employee and time; after notifications are re-enabled, reminders missed during the silent period are not replayed retroactively;
+  - the missing flag keeps the existing behavior (automatic notifications enabled), so current Projects are unchanged.
+- Verification: focused client-notification and Project flow suite **43/43**; full unit suite **1196/1196**; `tsc --noEmit`, legacy inline script syntax, `git diff --check` and production build all pass. GitHub Test/typecheck/build, bridge and conflict radar are green; the clean-database end-to-end gate is still running.
+- Safety: no production message or customer record was touched. PR is not merged or published until the owner explicitly authorizes publication.
+
 ## 2026-11-15 — Выполненный проект: выбор существующего клиента без дублей (Codex, PR #533)
 
 - Owner: при вводе имени в «Внести выполненный проект» CRM не искала существующий контакт и позволяла создать его ещё раз.

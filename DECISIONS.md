@@ -2,6 +2,13 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-15 — Automatic client notifications can be muted per Project
+
+- While Rolan PRO operates two CRMs, one Project may explicitly set `clientNotificationsMuted=true` to prevent duplicate automatic customer communication.
+- The flag belongs to the Project, not the Client. The same Client may have an ordinary Project with automation enabled and a transferred Project kept silent.
+- The mute covers background status notices, scheduled consultation/measurement/installation notices, completion notices and follow-up rules across SMS/email. It does not suppress staff notifications or an explicit manual send by an authorized manager.
+- Missing or `false` means the existing behavior: automatic notifications remain enabled. Every change is written to the Project timeline; no existing Project or Client record is rewritten.
+
 ## 2026-11-14 — Historical completed projects use service facts and one financial total
 
 - A completed historical Project is one business container with many service rows. Each service row owns its offering, warehouse material/supplies, quantity, start/end dates and crew; Project start/end are the earliest service start and latest service end.

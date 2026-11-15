@@ -7931,6 +7931,8 @@ const I18N = {
     client_request_accepted_notice: 'Клиент уведомлён о решении',
     client_request_declined_notice: 'Клиент уведомлён об отказе',
     client_notice: 'Уведомление клиенту',
+    client_notifications_muted: 'Автоуведомления клиенту выключены',
+    client_notifications_enabled: 'Автоуведомления клиенту включены',
     enRouteJob: 'Выехали к клиенту',
     reviewReceived: 'Отзыв получен',
     orderCreated: 'Заказ создан',
@@ -8358,6 +8360,8 @@ const I18N = {
     client_request_accepted_notice: 'Client notified about decision',
     client_request_declined_notice: 'Client notified about decline',
     client_notice: 'Client notice',
+    client_notifications_muted: 'Automatic client notices disabled',
+    client_notifications_enabled: 'Automatic client notices enabled',
     enRouteJob: 'On my way',
     reviewReceived: 'Review received',
     orderCreated: 'Order created',
@@ -8752,6 +8756,10 @@ async function runFollowUpScheduler() {
       // Historical imports describe work that already happened. They must
       // never start customer reminders when an old trigger date is entered.
       if (o.quickEntry === true || o.quickEntryDraft === true || o.quickProjectImportedCompleted === true) continue;
+      // A project may be duplicated in another CRM during the transition.
+      // Its customer reminders are muted per project; staff alerts and manual
+      // messages stay available.
+      if (!projectClientAutoNotificationsAllowed(o)) continue;
       // Правило может действовать только для заказов в определённом статусе
       // (разогрев лида останавливается, как только заказ двинулся по воронке)
       if (rule.onlyStatus && o.status !== rule.onlyStatus) continue;
@@ -8759,6 +8767,11 @@ async function runFollowUpScheduler() {
       if (!triggerDate) continue;
       const daysSince = (now - new Date(triggerDate).getTime()) / dayMs;
       if (daysSince < rule.daysAfter) continue;
+      // Re-enabling notifications starts a fresh automation window. A reminder
+      // that became due while this project was muted is not sent retroactively.
+      const resumedAt = Date.parse(o.clientNotificationsEnabledAt || '');
+      const dueAt = new Date(triggerDate).getTime() + rule.daysAfter * dayMs;
+      if (Number.isFinite(resumedAt) && dueAt < resumedAt) continue;
       // SAFETY: don't fire follow-up if more than 30 days past the trigger window
       // e.g., for "24h after installation" rule, skip if installation was > 30 days ago
       if (daysSince > rule.daysAfter + 30) continue;
@@ -15622,9 +15635,57 @@ async function sendWhatsAppViaBackend(phone, body, o, c, subject) {
 function clientEmailAllowed(c) {
   return !!c?.email && c?.emailOptOut !== true;
 }
+function projectClientAutoNotificationsMuted(o) {
+  return o?.clientNotificationsMuted === true;
+}
+function projectClientAutoNotificationsAllowed(o) {
+  if (!o || projectClientAutoNotificationsMuted(o)) return false;
+  return !(typeof crmImportMode === 'function' && crmImportMode());
+}
+function renderProjectClientNotificationControl(o, canManage = orderUserCanManage(currentUser())) {
+  if (!o) return '';
+  const muted = projectClientAutoNotificationsMuted(o);
+  return `
+    <div class="mt-3 rounded-xl border p-3 ${muted ? 'border-amber-200 bg-amber-50' : 'border-emerald-100 bg-emerald-50'}" data-project-client-notification-control>
+      <label class="flex items-start gap-3 ${canManage ? 'cursor-pointer' : ''}">
+        <input type="checkbox" style="width:20px;height:20px;flex:0 0 auto;margin-top:1px" ${muted ? 'checked' : ''} ${canManage ? `onchange="setProjectClientNotificationsMuted('${academyEsc(o.id)}',this.checked)"` : 'disabled'} aria-label="Не уведомлять клиента автоматически">
+        <span class="min-w-0">
+          <strong class="block text-sm ${muted ? 'text-amber-900' : 'text-emerald-900'}">${muted ? 'Автоматические уведомления клиенту выключены' : 'Автоматические уведомления клиенту включены'}</strong>
+          <span class="block text-xs mt-1 ${muted ? 'text-amber-800' : 'text-emerald-800'}">${muted ? 'CRM не отправит клиенту статусы, события, завершение и follow-up по этому проекту. Ручная отправка доступна.' : 'CRM отправляет клиенту настроенные статусы и события. Для переноса из второй CRM включите «Не уведомлять».'}</span>
+        </span>
+      </label>
+    </div>`;
+}
+function setProjectClientNotificationsMuted(orderId, muted) {
+  const o = getOrder(orderId);
+  const user = currentUser();
+  if (!o || !user || !orderUserCanManage(user) || !orderUserCanAccess(o, user)) return false;
+  const next = muted === true;
+  if (projectClientAutoNotificationsMuted(o) === next) return true;
+  const at = new Date().toISOString();
+  o.clientNotificationsMuted = next;
+  o.clientNotificationsPreferenceUpdatedAt = at;
+  o.clientNotificationsPreferenceUpdatedBy = user.id;
+  if (!next) o.clientNotificationsEnabledAt = at;
+  o.timeline = o.timeline || [];
+  o.timeline.push({
+    at,
+    key: next ? 'client_notifications_muted' : 'client_notifications_enabled',
+    by: user.id,
+    note: next
+      ? 'Автоматические уведомления клиенту отключены только для этого проекта; ручная отправка остаётся доступной'
+      : 'Автоматические уведомления клиенту снова включены для этого проекта',
+  });
+  save();
+  render();
+  return true;
+}
 async function dispatchClientCommunication(o, subject, body, timelineKey, opts = {}) {
   const c = getClient(o?.clientId);
   if (!o || !c) return [];
+  // Explicit manager sends are still allowed. Only background automation is
+  // muted, so staff can contact the customer deliberately when needed.
+  if (opts.manual !== true && !projectClientAutoNotificationsAllowed(o)) return [];
   const cfg = communicationSettings();
   const notes = [];
   const smsBody = String(opts.smsBody || body || '').trim();
@@ -18930,6 +18991,7 @@ function acceptMeasurementTask(orderId, openStudio = false) {
 // ---------- AUTO-NOTIFY CLIENT ON STATUS CHANGE ----------
 async function autoNotifyClient(o, statusKey) {
   if (typeof crmImportMode === 'function' && crmImportMode()) return;
+  if (!projectClientAutoNotificationsAllowed(o)) return;
   const c = getClient(o.clientId);
   if (!c) { console.log('[AutoNotify]', o.number, statusKey, '→ skip: no client'); return; }
   if (communicationSettings().autoOnStatus === false) return;
@@ -19299,6 +19361,7 @@ function clientNoticePortalText(o) {
 async function sendClientOperationalMessage(o, subject, body, timelineKey, opts = {}) {
   const c = getClient(o.clientId);
   if (!c) return;
+  if (!projectClientAutoNotificationsAllowed(o)) return;
   if (communicationSettings().autoOnSchedule === false && /client_notice/i.test(timelineKey || '')) {
     o.timeline = o.timeline || [];
     o.timeline.push({
@@ -19529,6 +19592,7 @@ function renderOrderCommandCenter(o, c) {
     ${renderOrderActionCard({ icon: '📧', title: 'Email клиенту', sub: c.email ? c.email : 'У клиента нет email', onclick: `openEmailComposer('${o.id}')`, disabled: !c.email })}
     ${renderOrderActionCard({ icon: '📱', title: 'SMS клиенту', sub: c.phone ? c.phone : 'У клиента нет телефона', onclick: `openSmsComposer('${o.id}')`, disabled: !c.phone })}
     ${renderOrderActionCard({ icon: '💬', title: 'WhatsApp', sub: 'Быстрая переписка по заказу', href: whatsappLink(c.phone, `Здравствуйте, ${c.name}! Заказ ${o.number}: ${portalUrl || ''}`), disabled: !c.phone })}
+    ${renderProjectClientNotificationControl(o, true)}
   `;
   const docsBody = `
     ${renderOrderActionCard({ icon: '➕', title: 'Замеры по объекту', sub: 'Комнаты, окна, размеры, пленка из каталога и проверка склада', onclick: `openManagerMeasureModal('${o.id}')`, variant: 'primary' })}
@@ -30883,6 +30947,7 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         <div class="client-passport-detail"><span>Адрес объекта</span><strong>${projectAddress ? addressAnchor(projectAddress) : 'не заполнен'}</strong></div>
       </div>
       ${renderClientChannelDock(o, c, canManage)}
+      ${renderProjectClientNotificationControl(o, canManage)}
     </div>`;
 
   const siteBody = `
@@ -34519,6 +34584,13 @@ function openOrderModal() {
                 <label class="text-xs">Заметка менеджера</label>
                 <textarea id="no-notes" rows="2"></textarea>
               </div>
+              <label class="flex items-start gap-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 cursor-pointer">
+                <input id="no-client-notifications-muted" type="checkbox" style="width:20px;height:20px;flex:0 0 auto;margin-top:1px">
+                <span>
+                  <strong class="block text-sm text-amber-900">Не уведомлять клиента автоматически</strong>
+                  <span class="block text-xs text-amber-800 mt-1">Для проекта, который уже ведётся во второй CRM. Статусы, назначенные события и follow-up не дублируются; ручная отправка менеджером остаётся доступной.</span>
+                </span>
+              </label>
               <details class="erp-intake-disclosure mt-3">
                 <summary>Редкие признаки и теги</summary>
                 <div class="mt-3">
@@ -35190,6 +35262,7 @@ function createOrder(nextStep = 'project') {
   const complexity = document.getElementById('no-complexity')?.value || 'standard';
   const siteType = normalizeOrderSiteType(document.getElementById('no-site-type')?.value || state._newOrderSiteType);
   const pickedTags = Array.from(document.getElementById('no-tags')?.selectedOptions || []).map(o => o.value);
+  const clientNotificationsMuted = Boolean(document.getElementById('no-client-notifications-muted')?.checked);
 
   const offering = selectedOfferings[0] || null;
   if (!service || !ORDER_PRIMARY_SERVICES.some(s => s.id === serviceId) || (!directionOnlyId && (!offering || !serviceOfferingInDirection(offering, serviceOfferingDirection(service.id))))) {
@@ -35245,6 +35318,9 @@ function createOrder(nextStep = 'project') {
     paymentTerms: 'deposit_before_work', paymentTermsConfirmedAt: null, paymentTermsConfirmedBy: null,
     measurements: { rooms: [] },
     siteType,
+    clientNotificationsMuted,
+    clientNotificationsPreferenceUpdatedAt: clientNotificationsMuted ? new Date().toISOString() : null,
+    clientNotificationsPreferenceUpdatedBy: clientNotificationsMuted ? state.currentUserId : null,
     // Services without sizes are a quantity in the project from the start.
     extraServices: selectedOfferings.filter(item => !serviceOfferingNeedsSizes(item)).map(item => projectOfferingLine(item, 1, newOrderOfferingServiceType(item))),
     extraExpenses: [],
@@ -35253,7 +35329,12 @@ function createOrder(nextStep = 'project') {
       key: 'orderCreated',
       by: state.currentUserId,
       note: `Входящий запрос: ${service.title} · ${executionVariant.title}${directionOnlyId ? ' · линейку и плёнку выберет замерщик' : ''}`,
-    }],
+    }, ...(clientNotificationsMuted ? [{
+      at: new Date().toISOString(),
+      key: 'client_notifications_muted',
+      by: state.currentUserId,
+      note: 'Автоматические уведомления клиенту отключены при создании проекта; ручная отправка остаётся доступной',
+    }] : [])],
     notes: document.getElementById('no-notes').value,
     offeringIds: selectedOfferings.map(item => item.id),
     offeringCatalogIds,
