@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PASSKEY_CHALLENGE_TTL_SECONDS,
   allowedPasskeyOrigins,
+  challengeUseKey,
   cleanPasskeyDeviceName,
   createChallengeToken,
   describePasskeyDevice,
@@ -71,6 +72,12 @@ test("challenge token expires and rejects tampering or another secret", () => {
   assert.equal(readChallengeToken(SECRET, `${body}.${signature}.extra`, expected, NOW + 1), null);
   assert.equal(readChallengeToken(SECRET, "", expected, NOW + 1), null);
   assert.equal(readChallengeToken(SECRET, undefined, expected, NOW + 1), null);
+});
+
+test("a used challenge is recorded under a stable, fixed-length key", () => {
+  assert.equal(challengeUseKey("abc"), challengeUseKey("abc"));
+  assert.notEqual(challengeUseKey("abc"), challengeUseKey("abd"));
+  assert.match(challengeUseKey("abc"), /^[0-9a-f]{64}$/);
 });
 
 test("device label is readable and bounded", () => {

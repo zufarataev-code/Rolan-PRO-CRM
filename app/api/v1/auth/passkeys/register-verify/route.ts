@@ -5,6 +5,7 @@ import { cleanPasskeyDeviceName, describePasskeyDevice } from "@/features/auth/p
 import {
   PasskeyError,
   clearPasskeyChallenge,
+  consumePasskeyChallenge,
   finishPasskeyRegistration,
   passkeyRelyingParty,
   readPasskeyChallenge,
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       rpId: relyingParty.rpId,
       userId: session.user.user_id,
     });
+    await consumePasskeyChallenge(expectedChallenge);
     const passkey = await finishPasskeyRegistration({
       userId: session.user.user_id,
       relyingParty,

@@ -190,6 +190,72 @@ test("changing the password elsewhere ends the old session, and Face ID still si
   assert.equal((await tabletAgain.call("GET", "/api/v1/auth/me")).status, 200);
 });
 
+test("a challenge is spent on first use even if the browser keeps its cookie", async () => {
+  // Sign-in: a captured assertion is sent again together with the original
+  // challenge cookie. Without server-side tracking this would mint a session.
+  const first = new Browser();
+  const begin = await first.call("POST", "/api/v1/auth/passkey-login/options");
+  const options = data<{ options: Options }>(begin.json).options;
+  const assertion = ipad.authenticate(options, { signCount: 0 });
+  const kept = new Map(first.cookies);
+
+  // Counter 0 is what synced passkeys report: the counter check never fires.
+  await prisma.passkeyCredential.updateMany({ where: { credential_id: ipad.id }, data: { counter: 0 } });
+  const ok = await first.call("POST", "/api/v1/auth/passkey-login/verify", { response: assertion });
+  assert.equal(ok.status, 200, JSON.stringify(ok.json));
+
+  const replay = new Browser();
+  replay.cookies = new Map(kept);
+  const again = await replay.call("POST", "/api/v1/auth/passkey-login/verify", { response: assertion });
+  assert.equal(again.status, 400, "the same challenge cannot be verified twice");
+  assert.equal(replay.cookies.has(process.env.SESSION_COOKIE_NAME ?? "rolanpro_session"), false);
+
+  // Two copies of the same request at the same moment: exactly one wins.
+  const racer = new Browser();
+  const raceOptions = data<{ options: Options }>((await racer.call("POST", "/api/v1/auth/passkey-login/options")).json).options;
+  const raceAssertion = ipad.authenticate(raceOptions, { signCount: 0 });
+  const racers = [new Browser(), new Browser(), new Browser()];
+  racers.forEach((browser) => (browser.cookies = new Map(racer.cookies)));
+  const results = await Promise.all(
+    racers.map((browser) => browser.call("POST", "/api/v1/auth/passkey-login/verify", { response: raceAssertion })),
+  );
+  assert.deepEqual(results.map((result) => result.status).sort(), [200, 400, 400]);
+  await prisma.passkeyCredential.updateMany({ where: { credential_id: ipad.id }, data: { counter: ipad.signCount } });
+
+  // Enabling: the same attestation with the kept cookie is refused as well.
+  const session = new Browser();
+  await session.login(employeeEmail, employeeNewPassword);
+  const registerOptions = data<{ options: Options }>(
+    (await session.call("POST", "/api/v1/auth/passkeys/register-options")).json,
+  ).options;
+  const spare = new SoftAuthenticator(ORIGIN, RP_ID);
+  const attestation = spare.register(registerOptions);
+  const keptRegister = new Map(session.cookies);
+  assert.equal((await session.call("POST", "/api/v1/auth/passkeys/register-verify", { response: attestation })).status, 200);
+  session.cookies = new Map(keptRegister);
+  const registerAgain = await session.call("POST", "/api/v1/auth/passkeys/register-verify", { response: attestation });
+  assert.equal(registerAgain.status, 400);
+  const spareRow = await prisma.passkeyCredential.findUniqueOrThrow({ where: { credential_id: spare.id } });
+  assert.equal((await session.call("DELETE", `/api/v1/auth/passkeys/${spareRow.passkey_id}`)).status, 200);
+});
+
+test("two copies of one key signing at the same moment do not both get in", async () => {
+  // A cloned key: two fresh challenges, the same next counter value.
+  const next = ipad.signCount + 1;
+  const attempts = await Promise.all(
+    [0, 1].map(async () => {
+      const browser = new Browser();
+      const options = data<{ options: Options }>((await browser.call("POST", "/api/v1/auth/passkey-login/options")).json).options;
+      return { browser, response: ipad.authenticate(options, { signCount: next }) };
+    }),
+  );
+  const results = await Promise.all(
+    attempts.map(({ browser, response }) => browser.call("POST", "/api/v1/auth/passkey-login/verify", { response })),
+  );
+  assert.deepEqual(results.map((result) => result.status).sort(), [200, 401]);
+  ipad.signCount = next;
+});
+
 test("Face ID sign-in is refused for a replayed counter, another address or an unknown key", async () => {
   const replayed = await faceIdLogin(ipad, { signCount: 1 });
   assert.equal(replayed.result.status, 401);

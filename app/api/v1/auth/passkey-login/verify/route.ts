@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import {
   PasskeyError,
   clearPasskeyChallenge,
+  consumePasskeyChallenge,
   finishPasskeyLogin,
   passkeyRelyingParty,
   readPasskeyChallenge,
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
 
     const relyingParty = passkeyRelyingParty(request);
     const expectedChallenge = readPasskeyChallenge(request, { purpose: "login", rpId: relyingParty.rpId });
+    await consumePasskeyChallenge(expectedChallenge);
     const { user, roles } = await finishPasskeyLogin({ relyingParty, expectedChallenge, response: body.response });
 
     const response = apiSuccess({

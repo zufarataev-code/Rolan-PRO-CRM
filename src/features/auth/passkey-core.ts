@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Pure helpers for Face ID / Touch ID sign-in (WebAuthn). No database and no
@@ -138,6 +138,11 @@ export function readChallengeToken(
   }
 
   return payload.c;
+}
+
+/** Storage key under which a presented challenge is recorded as used. */
+export function challengeUseKey(challenge: string) {
+  return createHash("sha256").update(`passkey-challenge-use:${challenge}`).digest("hex");
 }
 
 /** A short human label for the device list, derived from the user agent. */

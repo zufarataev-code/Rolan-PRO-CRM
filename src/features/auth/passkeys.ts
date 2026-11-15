@@ -17,6 +17,7 @@ import {
   PASSKEY_CHALLENGE_TTL_SECONDS,
   PASSKEY_RP_NAME,
   allowedPasskeyOrigins,
+  challengeUseKey,
   createChallengeToken,
   readChallengeToken,
   resolveRelyingParty,
@@ -82,7 +83,7 @@ export function setPasskeyChallenge(
   });
 }
 
-/** A challenge is single-use: every verify response clears it, pass or fail. */
+/** Every verify response also drops the cookie; single use is enforced by consumePasskeyChallenge. */
 export function clearPasskeyChallenge(response: NextResponse) {
   const env = getEnv();
   response.cookies.set({
@@ -111,6 +112,29 @@ export function readPasskeyChallenge(
   }
 
   return challenge;
+}
+
+/**
+ * Marks the challenge as used before anything is verified with it. The cookie
+ * alone cannot do this: a caller may keep the cookie and send it again. The
+ * insert is atomic, so of any number of requests carrying the same challenge
+ * exactly one proceeds — pass or fail, the challenge is spent.
+ */
+export async function consumePasskeyChallenge(challenge: string) {
+  const now = new Date();
+  try {
+    await prisma.passkeyChallengeUse.create({
+      data: {
+        challenge_hash: challengeUseKey(challenge),
+        expires_at: new Date(now.getTime() + PASSKEY_CHALLENGE_TTL_SECONDS * 1000),
+      },
+    });
+  } catch {
+    throw new PasskeyError(400, "passkey_challenge_expired", "Время на подтверждение вышло. Попробуйте ещё раз.");
+  }
+
+  // Housekeeping only: a used record matters until its challenge expires.
+  await prisma.passkeyChallengeUse.deleteMany({ where: { expires_at: { lt: now } } }).catch(() => undefined);
 }
 
 export async function listPasskeys(userId: string) {
@@ -289,14 +313,18 @@ export async function finishPasskeyLogin(input: {
     throw new PasskeyError(403, "access_not_granted", "У этого сотрудника нет активной роли. Обратитесь к владельцу.");
   }
 
+  // Compare-and-swap on the counter that was verified against. If another
+  // request moved it meanwhile (two copies of one key signing at once), this
+  // one must not get a session: the clone check would otherwise be a race.
   const now = new Date();
-  await prisma.$transaction([
-    prisma.passkeyCredential.update({
-      where: { passkey_id: stored.passkey_id },
-      data: { counter: BigInt(verification.authenticationInfo.newCounter), last_used_at: now },
-    }),
-    prisma.user.update({ where: { user_id: stored.user_id }, data: { last_login_at: now } }),
-  ]);
+  const advanced = await prisma.passkeyCredential.updateMany({
+    where: { passkey_id: stored.passkey_id, counter: stored.counter },
+    data: { counter: BigInt(verification.authenticationInfo.newCounter), last_used_at: now },
+  });
+  if (advanced.count !== 1) {
+    throw new PasskeyError(401, "passkey_login_failed", LOGIN_FAILED);
+  }
+  await prisma.user.update({ where: { user_id: stored.user_id }, data: { last_login_at: now } });
 
   return { user: stored.user, roles };
 }

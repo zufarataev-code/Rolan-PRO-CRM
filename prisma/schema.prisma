@@ -72,6 +72,17 @@ model PasskeyCredential {
   @@map("passkey_credentials")
 }
 
+/// A WebAuthn challenge that has already been presented for verification.
+/// The primary key makes consuming a challenge atomic: the second request
+/// with the same challenge cannot insert and is refused.
+model PasskeyChallengeUse {
+  challenge_hash String   @id @db.Char(64)
+  expires_at     DateTime @db.Timestamptz(6)
+
+  @@index([expires_at])
+  @@map("passkey_challenge_uses")
+}
+
 model Role {
   role_id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code             String       @unique @db.VarChar(50)

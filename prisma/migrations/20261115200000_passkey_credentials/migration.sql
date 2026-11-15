@@ -20,3 +20,14 @@ CREATE UNIQUE INDEX "passkey_credentials_credential_id_key" ON "passkey_credenti
 CREATE INDEX "passkey_credentials_user_id_idx" ON "passkey_credentials"("user_id");
 
 ALTER TABLE "passkey_credentials" ADD CONSTRAINT "passkey_credentials_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Challenges already presented for verification; the primary key makes a
+-- challenge single-use even when two requests arrive at the same time.
+CREATE TABLE "passkey_challenge_uses" (
+    "challenge_hash" CHAR(64) NOT NULL,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "passkey_challenge_uses_pkey" PRIMARY KEY ("challenge_hash")
+);
+
+CREATE INDEX "passkey_challenge_uses_expires_at_idx" ON "passkey_challenge_uses"("expires_at");
