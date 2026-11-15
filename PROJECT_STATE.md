@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Карточка проекта показывает весь расчёт услуги (Codex, PR pending)
+
+- Owner: после PR #524 выбор быстрого/подробного расчёта жил только внутри окна направления, поэтому основная карточка проекта выглядела по-старому и не объясняла, из чего сложился проект.
+- Branch `codex/project-card-service-workbench-20261115`, existing project card only; no second calculator, service directory, payroll or proposal source.
+- Every service row now visibly shows status, material, calculation mode, volume and unit rate, client amount, assignee and installation date. The full rows stay on the main card before and after proposal acceptance instead of collapsing to a name-and-total shortcut.
+- A pending sized service offers **«⚡ Быстро · общая площадь»** and **«▦ Подробно · комнаты и окна»** directly on the main card. For an existing sized line, «Настроить» opens that service's calculation editor inline in the same card. Quick mode keeps film + total sqft + price/sqft + total; detailed mode keeps the existing room/window measurement.
+- Mobile layout at <=680 px uses two-column fact cards, stacks the calculation choice buttons and keeps the service action visible without hiding material, calculation, crew or date.
+- Verification: full unit suite **1187/1187**, `tsc --noEmit` clean and production build clean after regenerating the local Prisma client; `node --check` and `git diff --check` clean. The existing production project was inspected read-only; the new UI is not in production until this PR is merged and the normal main-only release completes.
+
 ## 2026-11-15 — Project Calculator P0: быстрый и подробный расчёт по каждой услуге (Codex, PR #524)
 
 - Owner: один Project может включать несколько плёночных услуг; для каждой услуги менеджер отдельно выбирает быстрый расчёт по общей площади или подробный замер по комнатам и окнам. Все услуги должны одновременно входить в расчёт проекта, материалы, зарплату и одно КП.

@@ -9,10 +9,11 @@ const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-test('the card shows one tile per direction; before production its lines open the window', () => {
+test('the card shows one tile per direction and every service stays visible on the card', () => {
   const card = fn(stages, 'renderProjectCardServices');
   assert.match(card, /class="project-direction-tile" onclick="\$\{open\}"/);
-  assert.match(card, /\$\{production \? directionLines\.map\(row\)\.join\(''\) \+ direction\.pending\.map\(pendingRow\)\.join\(''\) : directionLines\.map\(compactRow\)/);
+  assert.match(card, /directionLines\.map\(row\)\.join\(''\) \+ direction\.pending\.map\(pendingRow\)\.join\(''\)/);
+  assert.doesNotMatch(card, /directionLines\.map\(compactRow\)/, 'основная карточка больше не прячет расчёт, материал и монтаж в окне направления');
   assert.doesNotMatch(card, /projectDirectionOfferingPickerHtml\(o,direction\.key\)/, 'no second add button on the card');
   assert.doesNotMatch(card, /> В расчёте<\/label>/, 'the include switch lives in the window');
   // Owner, 2026-10-26: the card opens on the four direction tiles of the cashier;

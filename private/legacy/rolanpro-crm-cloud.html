@@ -1629,20 +1629,36 @@
   .project-direction-actions { display:grid;gap:.3rem;justify-items:end; }
   .project-direction-actions label { color:#526176;font-size:.62rem;font-weight:850;white-space:nowrap; }
   .project-direction-services { display:grid; }
-  .project-service-row { display:grid;grid-template-columns:minmax(190px,1.7fr) minmax(92px,.65fr) minmax(100px,.7fr) minmax(120px,.85fr) 36px;gap:.7rem;align-items:center;padding:.85rem 1rem;border:0;border-bottom:1px solid #edf1f5;background:#fff;text-align:left;color:#10213b;width:100%; }
+  .project-service-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.8rem;align-items:center;padding:.85rem 1rem;border:0;border-bottom:1px solid #edf1f5;background:#fff;text-align:left;color:#10213b;width:100%; }
   .project-service-row:hover { background:#f8fbfd; }
   .project-service-row.selected { background:#eef9fc;box-shadow:inset 4px 0 #159bc4; }
   .project-service-row:last-child { border-bottom:0; }
+  .project-service-summary { min-width:0; }
+  .project-service-heading { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
   .project-service-name { font-size:.82rem;font-weight:950; }
   .project-service-meta { margin-top:.18rem;color:#718096;font-size:.66rem;line-height:1.35; }
+  .project-service-material { margin-top:.28rem;color:#526176;font-size:.66rem;overflow-wrap:anywhere; }
+  .project-service-material b { color:#10213b; }
+  .project-service-status { display:inline-flex;align-items:center;min-height:22px;padding:2px 7px;border-radius:999px;background:#eef2f7;color:#526176;font-size:.58rem;font-weight:900; }
+  .project-service-facts { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.35rem;margin-top:.55rem; }
+  .project-service-fact { min-width:0;padding:.42rem .48rem;border:1px solid #e7edf3;border-radius:4px;background:#fbfdff; }
+  .project-service-fact small { display:block;color:#8492a6;font-size:.52rem;font-weight:900;letter-spacing:.04em;text-transform:uppercase; }
+  .project-service-fact b { display:block;margin-top:.1rem;color:#10213b;font-size:.67rem;line-height:1.25;overflow-wrap:anywhere; }
+  .project-service-fact.mode b { color:#0f7fa6; }
   .project-service-label { display:block;color:#8492a6;font-size:.59rem;font-weight:850;text-transform:uppercase; }
   .project-service-value { display:block;margin-top:.16rem;font-size:.76rem;font-weight:900;overflow-wrap:anywhere; }
-  .project-service-arrow { display:grid;place-items:center;width:30px;height:30px;border:1px solid #cfd9e5;border-radius:4px;background:#fff;color:#167ca6;font-size:1.05rem; }
+  .project-service-arrow { display:inline-flex;align-items:center;justify-content:center;gap:.3rem;min-width:86px;min-height:34px;padding:0 .65rem;border:1px solid #cfd9e5;border-radius:4px;background:#fff;color:#167ca6;font-size:.66rem;font-weight:900; }
+  .project-card-service-measurement { grid-column:1/-1; }
+  .project-card-service-measurement .rp-service-mode { margin:0; }
   .project-service-edit { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;padding:.75rem 1rem;background:#fbfdff;border-bottom:1px solid #edf1f5; }
   .project-service-edit label { color:#65758a;font-size:.62rem;font-weight:850; }
   .project-service-edit input,.project-service-edit select { margin-top:.25rem;min-height:38px;font-size:.72rem; }
   .project-service-edit textarea { width:100%;margin-top:.25rem;min-height:64px;resize:vertical;font-size:.72rem; }
   .project-service-pending { padding:.8rem 1rem;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:.73rem; }
+  .project-service-pending-main { display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem; }
+  .project-service-pending-main span { display:block;margin-top:.14rem;color:#a16207;font-size:.64rem; }
+  .project-service-pending-actions { display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.55rem; }
+  .project-service-pending-actions button { min-height:34px; }
   .project-service-footer { display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.75rem 1rem;background:#f8fafc;border-top:1px solid #e7edf3;font-size:.72rem; }
   .project-recommendations { padding:.9rem 1rem;border-top:1px solid #bae6fd;background:#f0f9ff; }
   .project-recommendation-list { display:grid;gap:.45rem;margin-top:.6rem; }
@@ -1795,6 +1811,9 @@
     .project-command-side > :first-child { grid-column:auto; }
     .project-service-row { grid-template-columns:minmax(0,1fr) auto;padding:.8rem; }
     .project-service-row > div:not(:first-child):not(:last-child) { display:none; }
+    .project-service-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .project-service-fact:last-child:nth-child(odd) { grid-column:1/-1; }
+    .project-service-arrow { min-width:72px;padding:0 .45rem; }
     .project-service-edit { grid-template-columns:1fr 1fr;padding:.7rem .8rem; }
     .project-service-ledger-head { padding:.8rem; }
     .project-cashier-map { padding:.75rem .8rem .8rem; }
@@ -1813,6 +1832,8 @@
     .project-expense-row { grid-template-columns:1fr 1fr; }
     .project-expense-row label:nth-child(2),.project-expense-row label:nth-child(5) { grid-column:1/-1; }
     .project-recommendation { align-items:flex-start;flex-direction:column; }
+    .project-service-pending-main { display:block; }
+    .project-service-pending-actions { display:grid;grid-template-columns:1fr; }
     .project-command-mobile-action { position:sticky;bottom:calc(68px + env(safe-area-inset-bottom,0px));z-index:20;display:block;padding:.55rem;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #dbe4ef;border-radius:6px;box-shadow:0 14px 32px rgba(15,35,61,.18); }
     .project-command-mobile-action .order-action-card { width:100%; }
     .project-command-hero-actions { display:none; }
@@ -28933,6 +28954,14 @@ function projectCardServiceIcon(line) {
   return `<span style="color:${t.color};display:inline-flex;vertical-align:middle">${rpIcon(t, 14)}</span>`;
 }
 
+function projectCardLineCalculation(o, line) {
+  if (line.kind === 'quick') return { mode: 'quick', label: 'Быстро · общая площадь' };
+  if (line.kind === 'windows') return { mode: 'detailed', label: 'Подробно · комнаты и окна' };
+  if (line.kind === 'included') return { mode: 'included', label: 'Входит в пакет' };
+  if (line.kind === 'quantity') return { mode: 'quantity', label: `По количеству · ${line.unitShort || 'ед.'}` };
+  return { mode: 'fixed', label: line.unitPriced ? `По объёму · ${line.unitShort || 'ед.'}` : 'Фиксированная сумма' };
+}
+
 /** The project ledger: every service remains independent inside one project. */
 function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
   const lines = projectLines(o);
@@ -28952,6 +28981,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
     const deletable = edit && ['quantity', 'work'].includes(line.kind);
     const offering = serviceOffering(line.offeringId);
+    const calculation = projectCardLineCalculation(o, line);
+    const materials = projectLineMaterialNames(line);
     const range = projectServicePriceRange(offering);
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
     const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
@@ -28959,11 +28990,19 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     return `<div data-project-line="${academyEsc(line.key)}">
       <div class="project-service-row ${selected ? 'selected' : ''}">
-        <div><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><div class="project-service-meta">${academyEsc(projectLineNote(line))}</div></div>
-        <div><span class="project-service-label">Объём</span><span class="project-service-value">${academyEsc(projectLineQtyText(line))}</span></div>
-        ${money ? `<div><span class="project-service-label">Сумма</span><span class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>` : '<div></div>'}
-        <div><span class="project-service-label">${production ? 'Монтаж' : 'Статус'}</span><span class="project-service-value">${production ? academyEsc(crew.date) : academyEsc(statusLabel)}</span></div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">›</button>
+        <div class="project-service-summary">
+          <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
+          <div class="project-service-meta">${academyEsc(projectLineNote(line))}</div>
+          <div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
+          <div class="project-service-facts">
+            <span class="project-service-fact mode"><small>Расчёт</small><b>${academyEsc(calculation.label)}</b></span>
+            <span class="project-service-fact"><small>Объём</small><b>${academyEsc(projectLineQtyText(line))}</b></span>
+            ${money ? `<span class="project-service-fact"><small>Цена клиенту</small><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></span>` : ''}
+            <span class="project-service-fact"><small>Исполнитель</small><b>${academyEsc(crew.people)}</b></span>
+            <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
+          </div>
+        </div>
+        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">${edit || plan ? 'Настроить' : 'Подробнее'} ›</button>
       </div>
       ${selected && (edit || plan) ? `<div class="project-service-edit">
         ${line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>'}

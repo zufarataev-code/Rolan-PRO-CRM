@@ -174,6 +174,12 @@ test('one project combines a quick Solar service with a detailed Smart service',
 test('project card exposes quick and detailed calculation per film service', () => {
   const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
   assert.match(stages, /function projectServiceMeasurementModeHtml\(o, offering, directionKey, edit\)/);
+  assert.match(stages, /class="project-service-fact mode"><small>Расчёт<\/small>/, 'способ расчёта виден в основной карточке');
+  assert.match(stages, /Материал: <b>/, 'материал виден без открытия модального окна');
+  assert.match(stages, /<small>Исполнитель<\/small>/);
+  assert.match(stages, /<small>Дата<\/small>/);
+  assert.match(stages, /project-card-service-measurement[^`]*projectServiceMeasurementModeHtml\(o, sizedOffering/, 'редактор расчёта открывается прямо в карточке');
+  assert.match(stages, /projectSetServiceMeasurementMode\('\$\{o\.id\}'.*'quick'/, 'для новой услуги быстрый расчёт доступен без лишнего окна');
   assert.match(stages, /Быстро · общая площадь/);
   assert.match(stages, /Подробно · комнаты и окна/);
   assert.match(stages, /Общая площадь, sq ft/);
