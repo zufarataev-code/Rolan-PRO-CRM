@@ -705,6 +705,8 @@ async function cloudPersist(options = {}) {
     cloudSaveQueued = true;
     return false;
   }
+  // A new edit or an explicit confirmation supersedes a waiting backoff.
+  cloudCancelRetry(false);
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
   let snapshot = JSON.parse(JSON.stringify(db));
@@ -758,7 +760,11 @@ async function cloudPersist(options = {}) {
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
         continue;
       }
-      if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
+      if (!response.ok) {
+        const error = new Error(result?.errors?.[0]?.message || 'save failed');
+        error.retryable = response.status === 429 || response.status >= 500;
+        throw error;
+      }
       for (const update of result.data.production_stage_updates || []) {
         const saved = snapshot.orders?.find(o=>o.id===update.id), local = db.orders?.find(o=>o.id===update.id);
         if (!saved) continue;
@@ -774,6 +780,7 @@ async function cloudPersist(options = {}) {
       if (projectClaimServiceFollowUps()) cloudSaveQueued = true;
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
+      cloudCancelRetry();
       cloudStatus('Сохранено', 'green');
       projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
@@ -783,7 +790,12 @@ async function cloudPersist(options = {}) {
     return false;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
-    cloudStatus('Нет связи — изменения сохранены локально', 'red');
+    if (error?.retryable !== false) {
+      cloudScheduleRetry();
+      cloudStatus('Связь прервалась — сохранено на устройстве, повторяем автоматически', 'red');
+    } else {
+      cloudStatus('Сервер отклонил сохранение — данные оставлены на устройстве', 'red');
+    }
     if (options.throwOnFailure) throw error;
     return false;
   } finally {

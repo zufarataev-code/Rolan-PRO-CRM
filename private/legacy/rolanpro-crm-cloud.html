@@ -8669,6 +8669,8 @@ let cloudReady = false;
 let cloudSaveTimer = null;
 let cloudSaveInFlight = false;
 let cloudSaveQueued = false;
+let cloudRetryTimer = null;
+let cloudRetryAttempt = 0;
 let cloudBaseSnapshot = null;
 let cloudAllowedLegacyIds = [];
 let cloudCurrentUser = null;
@@ -20423,7 +20425,7 @@ function renderAppShell() {
         </div>
       </header>
 
-      <div class="app-content">
+      <div class="app-content" data-scroll-key="app-content">
         ${typeof crmImportBannerHtml === 'function' ? crmImportBannerHtml() : ''}
         ${renderView()}
       </div>
@@ -44789,6 +44791,34 @@ function cloudScheduleSave() {
   cloudSaveTimer = setTimeout(() => { cloudSaveTimer = null; cloudPersist(); }, 700);
 }
 
+/**
+ * A brief deployment restart or a mobile connection hand-off must not leave a
+ * workspace only in the browser. The normal 700 ms debounce is for new edits;
+ * failed requests use their own bounded backoff and keep release reloads and
+ * remote pulls paused until the server confirms this workspace.
+ */
+function cloudCancelRetry(resetAttempt = true) {
+  clearTimeout(cloudRetryTimer);
+  cloudRetryTimer = null;
+  if (resetAttempt) cloudRetryAttempt = 0;
+}
+
+function cloudScheduleRetry() {
+  if (!cloudReady || cloudRetryTimer) return;
+  const delay = Math.min(30000, 1000 * (2 ** Math.min(cloudRetryAttempt, 5)));
+  cloudRetryAttempt += 1;
+  cloudRetryTimer = setTimeout(() => {
+    cloudRetryTimer = null;
+    cloudPersist();
+  }, delay);
+}
+
+function cloudRetryNow() {
+  if (!cloudRetryTimer && !cloudRetryAttempt) return;
+  cloudCancelRetry(false);
+  cloudPersist();
+}
+
 function cloneCloudWorkspaceValue(value) {
   return value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
@@ -44920,6 +44950,8 @@ async function cloudPersist(options = {}) {
     cloudSaveQueued = true;
     return false;
   }
+  // A new edit or an explicit confirmation supersedes a waiting backoff.
+  cloudCancelRetry(false);
   cloudSaveInFlight = true;
   cloudStatus('Сохраняем…');
   let snapshot = JSON.parse(JSON.stringify(db));
@@ -44973,9 +45005,14 @@ async function cloudPersist(options = {}) {
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
         continue;
       }
-      if (!response.ok) throw new Error(result?.errors?.[0]?.message || 'save failed');
+      if (!response.ok) {
+        const error = new Error(result?.errors?.[0]?.message || 'save failed');
+        error.retryable = response.status === 429 || response.status >= 500;
+        throw error;
+      }
       cloudRevision = result.data.revision;
       cloudBaseSnapshot = cloneCloudWorkspaceValue(snapshot);
+      cloudCancelRetry();
       cloudStatus('Сохранено', 'green');
       projectRunClaimedFollowUps(snapshot).catch(error => console.warn('Project follow-ups failed', error));
       return true;
@@ -44985,7 +45022,12 @@ async function cloudPersist(options = {}) {
     return false;
   } catch (error) {
     console.error('[Cloud CRM] save failed', error);
-    cloudStatus('Нет связи — изменения сохранены локально', 'red');
+    if (error?.retryable !== false) {
+      cloudScheduleRetry();
+      cloudStatus('Связь прервалась — сохранено на устройстве, повторяем автоматически', 'red');
+    } else {
+      cloudStatus('Сервер отклонил сохранение — данные оставлены на устройстве', 'red');
+    }
     if (options.throwOnFailure) throw error;
     return false;
   } finally {
@@ -45131,7 +45173,7 @@ setInterval(() => { if (ROLANPRO_CLOUD && cloudReady) refreshEmailChannelStatus(
 //    несохранённых правок, нет открытого окна, человек не печатает.
 const cloudLiveUpdate = { timer: null, inFlight: false, release: window.__ROLANPRO_RELEASE__ || '', newRelease: '', lastInputAt: 0, reloadTimer: null };
 function cloudHasPendingChanges() {
-  return !!cloudSaveTimer || cloudSaveInFlight || cloudSaveQueued;
+  return !!cloudSaveTimer || cloudSaveInFlight || cloudSaveQueued || !!cloudRetryTimer || cloudRetryAttempt > 0;
 }
 function cloudUserIsBusy() {
   const active = document.activeElement;
@@ -45187,9 +45229,9 @@ if (typeof document !== 'undefined') ['input', 'change', 'keydown'].forEach(type
 if (ROLANPRO_CLOUD) {
   document.addEventListener('input', () => { cloudLiveUpdate.lastInputAt = Date.now(); }, true);
   cloudLiveUpdate.timer = setInterval(cloudCheckForUpdates, 30000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cloudCheckForUpdates(); });
-  window.addEventListener('focus', () => cloudCheckForUpdates());
-  window.addEventListener('online', () => cloudCheckForUpdates());
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { cloudRetryNow(); cloudCheckForUpdates(); } });
+  window.addEventListener('focus', () => { cloudRetryNow(); cloudCheckForUpdates(); });
+  window.addEventListener('online', () => { cloudRetryNow(); cloudCheckForUpdates(); });
 }
 </script>
 

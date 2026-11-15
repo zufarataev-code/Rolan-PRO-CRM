@@ -54,3 +54,15 @@ test('the debounced save clears its timer handle, otherwise pending-changes stay
   assert.match(schedule, /cloudSaveTimer = setTimeout\(\(\) => \{ cloudSaveTimer = null; cloudPersist\(\); \}, 700\)/);
   assert.match(fn('cloudPersistConfirmed'), /clearTimeout\(cloudSaveTimer\);\n\s*cloudSaveTimer = null;/);
 });
+
+test('an interrupted workspace save retries with bounded backoff and blocks reloads until confirmed', () => {
+  assert.match(html, /let cloudRetryTimer = null;\nlet cloudRetryAttempt = 0;/);
+  const retry = fn('cloudScheduleRetry');
+  assert.match(retry, /Math\.min\(30000, 1000 \* \(2 \*\* Math\.min\(cloudRetryAttempt, 5\)\)\)/, 'retry delay is bounded at 30 seconds');
+  assert.match(retry, /cloudRetryTimer = setTimeout\([\s\S]*cloudPersist\(\)/, 'the same canonical save is retried');
+  const persist = html.slice(html.indexOf('async function cloudPersist('), html.indexOf('async function cloudPersistConfirmed('));
+  assert.match(persist, /cloudScheduleRetry\(\);[\s\S]*повторяем автоматически/, 'a transient failure is queued, not merely shown');
+  assert.match(persist, /cloudCancelRetry\(\);[\s\S]*cloudStatus\('Сохранено'/, 'confirmation clears the retry state');
+  assert.match(fn('cloudHasPendingChanges'), /cloudRetryTimer \|\| cloudRetryAttempt > 0/, 'live pulls and release reloads stay paused while a local save is pending');
+  assert.match(html, /window\.addEventListener\('online', \(\) => \{ cloudRetryNow\(\); cloudCheckForUpdates\(\); \}\)/, 'reconnecting retries immediately');
+});

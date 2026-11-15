@@ -162,6 +162,7 @@ test("Smart room sizing selects one capacity from total room load with reserve",
 });
 
 test("measurement actions preserve the active scroll position across a full modal render", () => {
+  assert.match(legacyCrm, /<div class="app-content" data-scroll-key="app-content">/, "the actual desktop and tablet viewport is restored, not the non-scrolling app shell");
   assert.match(legacyCrm, /let __pendingRenderPosition = null/);
   assert.match(legacyCrm, /function preservePositionForNextRender\(snapshot = captureRenderPosition\(\)\)/);
   assert.match(
