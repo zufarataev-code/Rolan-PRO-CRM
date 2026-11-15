@@ -63,7 +63,7 @@ test('rates come only from the directories: the panel reads orderPSS and calcUse
 
 test('the project header reads all facts before creating the draft', () => {
   const read = fn(stages, 'quickEntryReadForm');
-  for (const field of ['date', 'measurementDate', 'manager', 'client', 'phone', 'street', 'city', 'source', 'site', 'measurer', 'notes']) assert.ok(read.includes(`'${field}'`), field);
+  for (const field of ['date', 'measurementDate', 'manager', 'client', 'phone', 'street', 'city', 'source', 'site', 'measurer', 'notes', 'pricingMode', 'manualTotal', 'endDate']) assert.ok(read.includes(`'${field}'`), field);
 });
 
 test('owner can be the surveyor without duplicating the employee card', () => {
@@ -277,24 +277,70 @@ test('the historical-project actual survey date can be corrected independently',
 test('one-screen entry: many services in the form, committed through the historical model', () => {
   assert.match(fn(stages, 'quickEntryDefaultForm'), /lines: \[quickEntryNewLine\(keep\)\]/);
   assert.match(fn(stages, 'quickEntryNewLine'), /installers: \[\], hired: '', hiredName: '', supplies: \[\]/);
-  assert.match(fn(stages, 'quickEntryAddLine'), /lines\.push\(quickEntryNewLine\(\{ date: last\?\.date, dir: last\?\.dir \}\)\)/, '«+ услуга» keeps the last date and direction');
+  assert.match(fn(stages, 'quickEntryAddLine'), /lines\.push\(quickEntryNewLine\(\{ date: last\?\.date, endDate: last\?\.endDate, dir: last\?\.dir \}\)\)/, '«+ услуга» keeps the last date range and direction');
   assert.match(fn(stages, 'renderQuickEntry'), /onclick="quickEntryAddLine\(\)">\+ Добавить услугу/);
   const commit = fn(stages, 'quickEntryCommit');
-  for (const required of ['имя клиента', 'менеджер', 'дата работ', 'услуга`', 'плёнка`', 'объём (sq ft / шт)', 'сумма клиенту', 'хотя бы один исполнитель или наёмный']) assert.ok(commit.includes(required), required);
+  for (const required of ['имя клиента', 'менеджер', 'дата начала работ', 'дата окончания работ', 'окончание раньше начала', 'услуга`', 'плёнка`', 'объём (sq ft / шт)', 'сумма клиенту', 'хотя бы один исполнитель или наёмный']) assert.ok(commit.includes(required), required);
   assert.match(commit, /quickEntryNewOrder\(f, client, address, \{ managerId, date: firstDate, measurementDate \}\)/, 'same order skeleton as the draft path');
   assert.match(commit, /type: 'subcontractor'/, 'a hired specialist is a direct project expense tied to its line');
   assert.match(commit, /line\.hiredExpenseId = expense\.id/);
   assert.match(commit, /projectQuickSyncProjectInstallers\(o\)/, 'line installers become project installers, so payroll sees them');
   assert.match(commit, /const issues = projectQuickCompletionIssues\(o\);/, 'the editor\'s completion checks guard the one-screen path too');
   assert.match(commit, /closeQuickProjectAsCompletedWith\(o, \{ requestedPaid: paid, paidDate: lastDate, method/, 'closing is the editor\'s own code');
-  assert.match(commit, /if \(actor\?\.role !== 'owner'\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner');
+  assert.match(commit, /if \(actor\?\.role !== 'owner' \|\| !closeProject\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner and the owner may save without posting');
   const build = fn(stages, 'quickEntryBuildLine');
   assert.match(build, /if \(serviceOfferingNeedsSizes\(offering\)\)[\s\S]*quickProjectLine: true[\s\S]*\} else \{[\s\S]*projectOfferingLine\(offering, qty, src\.dir\)/, 'film services become quick lines, size-free ones directory lines');
-  assert.match(build, /startDate: date, endDate: date, installerIds: installers, supplyItems/);
+  assert.match(build, /startDate: date, endDate, installerIds: installers, supplyItems/);
   assert.match(fn(html, 'projectQuickCompletionIssues'), /expense\.type === 'subcontractor' && expense\.lineId === line\.id/, 'a hired specialist satisfies the installer rule');
   const calc = fn(stages, 'quickEntryLineCalc');
   assert.match(calc, /installerRateForQuickLine\(null, ref\)/, 'line preview uses the service rate');
+  assert.match(calc, /qty \* rate \* complexityFactor \/ n/, 'the preview applies the same complexity multiplier as payroll');
   assert.match(calc, /warehouseCatalogCostPerSqft\(catalogId, true\)/);
+});
+
+test('manual project total is allocated into the service rows instead of becoming a second total', () => {
+  const lines = [
+    { offering: 'film', qty: '100', price: '1000' },
+    { offering: 'silicone', qty: '50', price: '500' },
+  ];
+  const form: any = { pricingMode: 'auto', manualTotal: '' };
+  const offerings: Record<string, any> = {
+    film: { id: 'film', name: 'Film', pricePerSqft: 10 },
+    silicone: { id: 'silicone', name: 'Silicone', pricePerSqft: 10 },
+  };
+  const context: any = vm.createContext({
+    Math,
+    form,
+    quickEntryLines: () => lines,
+    serviceOffering: (id: string) => offerings[id],
+    projectServicePriceRange: () => ({ min: 1, max: 100 }),
+    currentUser: () => ({ role: 'owner' }),
+    alert: () => undefined,
+  });
+  vm.runInContext(`${fn(stages, 'quickEntryLineBasePrice')}; ${fn(stages, 'quickEntryDistributeTotal')}; result = quickEntryDistributeTotal(form, 2000);`, context);
+  assert.equal(context.result, true);
+  assert.equal(form.pricingMode, 'manual');
+  assert.equal(form.manualTotal, '2000');
+  assert.equal(lines.reduce((sum, line) => sum + Number(line.price), 0), 2000);
+  assert.deepEqual(lines.map(line => Math.round(Number(line.price) / Number(line.qty) * 100) / 100), [13.33, 13.33]);
+});
+
+test('the one-screen UI exposes automatic/manual totals and a real project date range', () => {
+  const renderer = fn(stages, 'renderQuickEntry');
+  assert.match(renderer, /Внести выполненный проект/);
+  assert.match(renderer, /1\. Проект и клиент/);
+  assert.match(renderer, /2\. Как вводим сумму клиенту/);
+  assert.match(renderer, /3\. Услуги проекта/);
+  assert.match(renderer, /4\. Прямые расходы проекта/);
+  assert.match(renderer, /Авто · сумма из услуг/);
+  assert.match(renderer, /Итог проекта вручную/);
+  assert.match(renderer, /quickEntryApplyManualTotal\(\)/);
+  assert.match(renderer, /Начало работ<input id="qe-l\$\{i\}-date"/);
+  assert.match(renderer, /Окончание<input id="qe-l\$\{i\}-endDate"/);
+  assert.match(renderer, /умножает оплату монтажа плёнки/);
+  assert.match(renderer, /Сохранить черновик/);
+  assert.match(renderer, /Закрыть выполненный проект/);
+  assert.match(renderer, /quickEntryCommit\(\{ closeProject: false \}\)/);
 });
 
 test('the one-screen form takes direct project expenses — rent, delivery, gas, other — into the project and its margin', () => {
@@ -303,7 +349,11 @@ test('the one-screen form takes direct project expenses — rent, delivery, gas,
   assert.match(fn(stages, 'quickEntryDefaultForm'), /expenses: \[\],/);
   assert.match(stages, /function quickEntryExpenseTypes\(\) \{ return \[\['rent', 'Аренда'\], \['delivery', 'Доставка'\], \['gas', 'Бензин'\], \['equipment', 'Оборудование'\], \['other', 'Другое'\]\]; \}/);
   assert.match(fn(stages, 'quickEntryReadForm'), /quickEntryExpenses\(\)\.forEach\(\(e, j\) => \{\n\s*\['type', 'label', 'amount'\]\.forEach\(k => \{ const val = v\(`qe-x\$\{j\}-\$\{k\}`\)/);
-  assert.match(fn(stages, 'renderQuickEntry'), /const previewMargin = total - material - labor - managerPay - projectExpenses;/);
+  const renderer = fn(stages, 'renderQuickEntry');
+  assert.match(renderer, /const previewOrder = quickEntryPreviewOrder\(f\);/);
+  assert.match(renderer, /const previewPss = orderPSS\(previewOrder\);/);
+  assert.match(renderer, /const previewProfitability = projectProfitability\(previewOrder\);/);
+  assert.match(renderer, /const previewMargin = previewProfitability\.grossProfit;/);
   assert.match(fn(stages, 'renderQuickEntry'), /<div class="qe-expenses">/);
   assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: quickEntryExpenseTypes\(\)\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now \}\)/);
   assert.match(fn(stages, 'renderQuickEntry'), /⭐ старшему \+/, 'the crew line says when the senior bonus is in the payout');

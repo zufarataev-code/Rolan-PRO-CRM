@@ -2,6 +2,13 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-14 — Historical completed projects use service facts and one financial total
+
+- A completed historical Project is one business container with many service rows. Each service row owns its offering, warehouse material/supplies, quantity, start/end dates and crew; Project start/end are the earliest service start and latest service end.
+- Customer revenue has one source. In automatic mode it is the sum of service rows. When the known final Project total is entered manually, the system distributes it into the rows and derives their unit / sq-ft prices; it never keeps a disconnected second total.
+- Installer payroll does not follow the customer price. It remains the service work rate × quantity × the Project complexity multiplier, divided by the assigned crew, plus the existing senior/minimum/travel rules. Warehouse material, direct expenses, payroll and profitability continue through canonical calculation functions after owner closure.
+- A manager may save an unfinished historical draft. Only the owner closes it into warehouse/payroll/analytics; until then it is excluded from those financial rollups.
+
 ## 2026-11-15 — Measurement mode belongs to a service, not to the project
 
 - One Project may mix calculation modes: each sized service chooses either **Quick** (film + total sqft + price/sqft) or **Detailed** (the existing Service → Room → Window measurement).
