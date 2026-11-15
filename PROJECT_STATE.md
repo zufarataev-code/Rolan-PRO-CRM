@@ -2,7 +2,7 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-15 — Project Calculator P0: быстрый и подробный расчёт по каждой услуге (Codex, PR pending)
+## 2026-11-15 — Project Calculator P0: быстрый и подробный расчёт по каждой услуге (Codex, PR #524)
 
 - Owner: один Project может включать несколько плёночных услуг; для каждой услуги менеджер отдельно выбирает быстрый расчёт по общей площади или подробный замер по комнатам и окнам. Все услуги должны одновременно входить в расчёт проекта, материалы, зарплату и одно КП.
 - Branch `codex/project-calculator-p0-20261115`, existing legacy CRM only; no parallel calculator, project, proposal, material or payroll store.
@@ -10,8 +10,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - The direction window now asks per sized service: «Быстро · общая площадь» or «Подробно · комнаты и окна». Quick mode edits film, total sqft, price/sqft and client total in the same service card. Detailed mode reuses the existing Room → Window measurement editor and its service/room/window film inheritance.
 - Project calculation shows combined detailed + quick footage and blocks approval only while a sized service has neither mode. Mobile layout at <=640 px stacks the quick service fields without horizontal scrolling.
 - Compatibility: old historical quick imports remain active; legacy pre-mode quick rows retain their old behavior. No schema migration or production data rewrite.
-- Verification: full unit suite **1187/1187**, `tsc --noEmit` clean, production build clean. Added mixed Solar quick + Smart detailed coverage for totals, material cost, installer pay and same-service replacement.
-- Not deployed. Await PR review/merge and then production publication from `main` only.
+- Verification: full unit suite **1187/1187**, `tsc --noEmit` clean, production build clean; GitHub CI `Test, typecheck, and build`, clean-database end-to-end gate, conflict radar and bridge all passed. Added mixed Solar quick + Smart detailed coverage for totals, material cost, installer pay and same-service replacement. Visual QA passed at 375, 390 and 430 px without horizontal clipping.
+- Owner authorized publication on 2026-11-15. PR #524 is the reviewed release candidate; production publication proceeds from `main` only.
 
 ## 2026-11-13 — Ввод не слетает, снятие плёнки в «Общем», итог проекта вручную, бригада на весь проект (Claude, PR #512)
 
