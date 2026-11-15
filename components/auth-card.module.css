@@ -126,3 +126,38 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+.passwordField {
+  position: relative;
+  display: block;
+}
+
+.passwordInput {
+  padding-right: 52px;
+}
+
+.passwordToggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 48px;
+  height: 100%;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.passwordToggle:hover,
+.passwordToggle[aria-pressed="true"] {
+  color: #2563eb;
+}
+
+.passwordToggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}

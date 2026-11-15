@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import styles from "./auth-card.module.css";
+import { AuthPasswordField } from "./auth-password-field";
 import { destinationForRoles } from "@/lib/auth/destination";
 
 export function ChangePasswordForm() {
@@ -50,9 +51,7 @@ export function ChangePasswordForm() {
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.label}>
             Новый пароль
-            <input
-              className={styles.input}
-              type="password"
+            <AuthPasswordField
               autoComplete="new-password"
               minLength={12}
               value={password}
@@ -62,9 +61,7 @@ export function ChangePasswordForm() {
           </label>
           <label className={styles.label}>
             Повторите пароль
-            <input
-              className={styles.input}
-              type="password"
+            <AuthPasswordField
               autoComplete="new-password"
               minLength={12}
               value={confirmation}

@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { PASSWORD_MIN_LENGTH } from "@/lib/auth/password-policy";
 
 import styles from "./auth-card.module.css";
+import { AuthPasswordField } from "./auth-password-field";
 
 type ApiResponse = {
   data?: { email?: string; message?: string };
@@ -66,9 +67,7 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.label}>
             Новый пароль
-            <input
-              className={styles.input}
-              type="password"
+            <AuthPasswordField
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -78,9 +77,7 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
           </label>
           <label className={styles.label}>
             Повторите пароль
-            <input
-              className={styles.input}
-              type="password"
+            <AuthPasswordField
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
