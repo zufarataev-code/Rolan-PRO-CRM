@@ -6,7 +6,7 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 
 - Release `2946dfda8484d9724df1b32140a0975380d1da8d` с исправлением deep-link действительно стал активным на production, но workflow ещё шесть минут проверял корневой адрес во время холодного запуска Next.js и завершился красным. Через минуту тот же production отвечал, а браузерная проверка уже открывала правильную карточку Project. Красный статус описывал прогрев сайта, а не отсутствие публикации.
 - Branch `codex/fix-production-health-check-20261115`, deployment workflow only. После подтверждения active-release проверка обращается напрямую к публичной `/login` через лёгкий HEAD-запрос и допускает до 20 повторов с тем же ограниченным интервалом. Несовпадение release SHA по-прежнему остаётся блокирующей ошибкой.
-- Проверка: production release `2946dfd` прочитан браузером; сценарий `Project → Выполненные проекты → тот же Project URL` прошёл, hash очищается при выходе и Project `Josh` снова открывается. Workflow shell и diff проверяются до PR; production workflow изменится только после review и main-only merge.
+- Проверка: production release `2946dfd` прочитан браузером; сценарий `Project → Выполненные проекты → тот же Project URL` прошёл, hash очищается при выходе и Project `Josh` снова открывается. Targeted deploy-health suite **3/3**, full suite **1188/1188**, workflow YAML, production `/login` probe и `git diff --check` проходят. Production workflow изменится только после review и main-only merge.
 
 ## 2026-11-15 — Deep-link карточки больше не остаётся за другим разделом (Codex, PR #527, published)
 
