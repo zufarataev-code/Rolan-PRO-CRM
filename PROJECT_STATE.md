@@ -2,7 +2,7 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-15 — Вход по Face ID / Touch ID (Claude, PR pending, issue #525 п.2)
+## 2026-11-15 — Вход по Face ID / Touch ID (Claude, PR #532, issue #525 п.2)
 
 - Owner подтвердил «фейс айди» и дал слово «Делай» (исключение из жёсткого правила; проверка Codex после). Решение записано в `DECISIONS.md` 2026-11-15.
 - Branch `claude/passkey-login-20261115`. Новая таблица `passkey_credentials` (миграция `20261115200000_passkey_credentials`, только новая таблица). Сервер: `src/features/auth/passkey-core.ts` (разрешённые адреса, подписанный одноразовый challenge), `src/features/auth/passkeys.ts` (церемонии через `@simplewebauthn/server`), маршруты `/api/v1/auth/passkey-login/{options,verify}` (публичные), `/api/v1/auth/passkeys` + `register-options` + `register-verify` + `[passkeyId]` (свои устройства), `/api/v1/team/[userId]/passkeys` (владелец отключает всё у сотрудника). Экран: кнопка «Войти по Face ID / Touch ID» на входе, предложение включить после входа по паролю, страница `/passkeys`, кнопка «Отключить Face ID» в «Команде». Новые зависимости: `@simplewebauthn/server`, `@simplewebauthn/browser` (оба lock-файла обновлены).
