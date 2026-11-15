@@ -3791,7 +3791,7 @@ function quickEntryDefaultForm(keep = {}) {
   const currentOfficeUser = managers.find(user => user.id === currentUser()?.id);
   return {
     date: keep.date || localDateKey(), measurementDate: keep.measurementDate || '', manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
-    client: '', phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
+    client: '', clientId: '', clientNewConfirmed: false, phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '', paid: '', complexity: 'standard',
     pricingMode: keep.pricingMode || 'auto', manualTotal: keep.manualTotal || '',
     lines: [quickEntryNewLine(keep)],
@@ -3849,8 +3849,10 @@ function quickEntryReadForm() {
   const s = quickEntryState();
   const v = id => document.getElementById(id)?.value;
   const f = s.form;
-  const keys = ['date','measurementDate','manager','method','client','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
+  const keys = ['date','measurementDate','manager','method','client','clientId','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
   keys.forEach(k => { const val = v('qe-' + k); if (val != null) f[k] = val; });
+  const clientNewConfirmed = v('qe-clientNewConfirmed');
+  if (clientNewConfirmed != null) f.clientNewConfirmed = clientNewConfirmed === '1';
   quickEntryLines().forEach((line, i) => {
     ['date','endDate','dir','offering','film','filmManual','qty','price','hired','hiredName'].forEach(k => { const val = v(`qe-l${i}-${k}`); if (val != null) line[k] = val; });
     const boxes = [...document.querySelectorAll(`input[data-qe-installer][data-qe-line="${i}"]`)];
@@ -3870,6 +3872,70 @@ function quickEntrySet(field, value) {
   f[field] = value;
   preservePositionForNextRender();
   render();
+}
+
+/**
+ * Historical entry uses the same client directory as ordinary Project intake.
+ * Typing never creates a contact implicitly: the operator either selects one
+ * visible existing card or explicitly confirms that this is a new client.
+ */
+function quickEntryClientInput(value) {
+  const f = quickEntryState().form;
+  f.client = String(value || '');
+  f.clientId = '';
+  f.clientNewConfirmed = false;
+  const resultsNode = document.getElementById('qe-client-results');
+  const newNode = document.getElementById('qe-client-new-state');
+  if (newNode) newNode.innerHTML = '';
+  if (!resultsNode) return;
+  const query = f.client.trim();
+  if (!query) { resultsNode.innerHTML = ''; resultsNode.style.display = 'none'; return; }
+  const matches = searchClientsFuzzy(query);
+  const matchRows = matches.map(client => {
+    const address = clientAddressById(client, client.primaryAddressId) || clientAddressBook(client)[0] || null;
+    return `<button type="button" class="qe-client-result" onclick="quickEntrySelectClient('${academyEsc(jsQuote(client.id))}')">
+      <b>${academyEsc(client.name || 'Без имени')}</b>
+      <span>${academyEsc([client.phone, client.email, address?.address].filter(Boolean).join(' · ') || 'контактные данные не заполнены')}</span>
+      <em>Выбрать существующего клиента</em>
+    </button>`;
+  }).join('');
+  const createLabel = matchRows
+    ? `Не тот контакт? Всё равно создать нового «${academyEsc(query)}»`
+    : `+ Создать нового клиента «${academyEsc(query)}»`;
+  resultsNode.innerHTML = `${matchRows || '<div class="qe-client-empty">Совпадений не найдено.</div>'}<button type="button" class="qe-client-create" onclick="quickEntryConfirmNewClient()">${createLabel}</button>`;
+  resultsNode.style.display = 'block';
+}
+function quickEntrySelectClient(clientId) {
+  const f = quickEntryReadForm();
+  const client = visibleClientsForUser().find(item => item.id === clientId);
+  if (!client) { alert('Клиент недоступен. Обновите список контактов.'); return; }
+  const address = prepareExistingClientForOrder(client);
+  f.clientId = client.id;
+  f.clientNewConfirmed = false;
+  f.client = client.name || '';
+  f.phone = client.phone || '';
+  f.street = address?.street || client.addressStreet || address?.address || '';
+  f.city = address?.city || client.addressCity || '';
+  if (quickEntrySources().some(([id]) => id === client.source)) f.source = client.source;
+  f.site = clientAccountType(client) === 'b2b' ? 'COMMERCIAL' : 'RESIDENTIAL';
+  preservePositionForNextRender();
+  render();
+}
+function quickEntryResetClient() {
+  const f = quickEntryReadForm();
+  Object.assign(f, { client: '', clientId: '', clientNewConfirmed: false, phone: '', street: '', city: '' });
+  preservePositionForNextRender();
+  render();
+  setTimeout(() => document.getElementById('qe-client')?.focus(), 0);
+}
+function quickEntryConfirmNewClient() {
+  const f = quickEntryReadForm();
+  if (!String(f.client || '').trim()) { alert('Сначала введите имя клиента или название компании.'); return; }
+  f.clientId = '';
+  f.clientNewConfirmed = true;
+  preservePositionForNextRender();
+  render();
+  setTimeout(() => document.getElementById('qe-phone')?.focus(), 0);
 }
 function quickEntrySetLine(i, field, value) {
   const f = quickEntryReadForm();
@@ -4094,6 +4160,24 @@ function quickEntryPeople(month) {
   }).filter(p => p.total > 0 || p.user.payConfig.type === 'salary').sort((a, b) => b.total - a.total);
 }
 function quickEntryFindOrCreateClient(f) {
+  const selectedId = String(f.clientId || '').trim();
+  if (selectedId) {
+    const selected = visibleClientsForUser().find(client => client.id === selectedId);
+    if (!selected) { alert('Выбранный клиент больше недоступен. Найдите его ещё раз.'); return null; }
+    const street = String(f.street || '').trim(), city = String(f.city || '').trim();
+    const address = buildAddress(street, city, 'CA', '', '');
+    let addr = (selected.addresses || []).find(item => item.address === address || (street && item.street === street));
+    if (!addr && address) {
+      addr = makeClientAddressRecord({ label: 'Объект', street, city, state: 'CA', zip: '', address }, !(selected.addresses || []).length);
+      selected.addresses = [...(selected.addresses || []), addr];
+      if (!selected.primaryAddressId) selected.primaryAddressId = addr.id;
+    }
+    return { client: selected, address: addr || clientAddressById(selected, selected.primaryAddressId) || prepareExistingClientForOrder(selected) };
+  }
+  if (!f.clientNewConfirmed) {
+    alert('Выберите существующего клиента из найденных контактов или нажмите «Создать нового клиента».');
+    return null;
+  }
   const phone = String(f.phone || '').trim();
   const matches = phone ? clientsMatchingContact(phone, '') : [];
   if (matches.length > 1) { alert('Этот телефон есть у нескольких клиентов: ' + matches.map(c => c.name).join(', ') + '. Откройте «Клиенты» и объедините карточки.'); return null; }
@@ -4447,10 +4531,21 @@ function renderQuickEntry() {
   const dates = lines.map(l => projectQuickDateValue(l.date)).filter(Boolean).sort();
   const endDates = lines.map(l => projectQuickDateValue(l.endDate || l.date)).filter(Boolean).sort();
   const paidShown = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
-  const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'){event.preventDefault();quickEntryCommit({ closeProject: false });}">
+  const selectedClient = f.clientId ? visibleClientsForUser().find(client => client.id === f.clientId) : null;
+  const selectedClientAddress = selectedClient ? (clientAddressById(selectedClient, selectedClient.primaryAddressId) || clientAddressBook(selectedClient)[0] || null) : null;
+  const clientPicker = selectedClient ? `<label class="qe-client-picker">Клиент
+      <input id="qe-client" type="hidden" value="${academyEsc(f.client)}"><input id="qe-clientId" type="hidden" value="${academyEsc(f.clientId)}"><input id="qe-clientNewConfirmed" type="hidden" value="0">
+      <div class="qe-client-selected"><div><b>✓ ${academyEsc(selectedClient.name || 'Без имени')}</b><span>${academyEsc([selectedClient.phone, selectedClient.email, selectedClientAddress?.address].filter(Boolean).join(' · ') || 'контактные данные не заполнены')}</span></div><button type="button" onclick="quickEntryResetClient()">Сменить</button></div>
+    </label>` : `<label class="qe-client-picker">Клиент
+      <input id="qe-client" value="${academyEsc(f.client)}" placeholder="Начните вводить имя, телефон или компанию" autocomplete="off" oninput="quickEntryClientInput(this.value)" onfocus="if(this.value.trim()) quickEntryClientInput(this.value)">
+      <input id="qe-clientId" type="hidden" value=""><input id="qe-clientNewConfirmed" type="hidden" value="${f.clientNewConfirmed ? '1' : '0'}">
+      <div id="qe-client-results" class="qe-client-results" style="display:none"></div>
+      <div id="qe-client-new-state">${f.clientNewConfirmed ? '<span class="qe-client-new">Новый клиент · CRM проверит телефон перед сохранением</span>' : '<span class="qe-client-help">Выберите контакт из CRM. Если его нет — явно создайте нового.</span>'}</div>
+    </label>`;
+  const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'&&event.target.id!=='qe-client'){event.preventDefault();quickEntryCommit({ closeProject: false });}">
     <div class="qe-section-head"><b>1. Проект и клиент</b><span>Один проект — много услуг</span></div>
     <div class="qe-grid qe-grid-a">
-      <label>Клиент<input id="qe-client" value="${academyEsc(f.client)}" placeholder="Имя или компания" autocomplete="off"></label>
+      ${clientPicker}
       <label>Телефон<input id="qe-phone" value="${academyEsc(f.phone)}" placeholder="+1 310 …" inputmode="tel"></label>
       <label>Адрес объекта<input id="qe-street" value="${academyEsc(f.street)}" placeholder="улица, дом"></label>
       <label>Город<input id="qe-city" value="${academyEsc(f.city)}" placeholder="Los Angeles"></label>

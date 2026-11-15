@@ -343,6 +343,34 @@ test('the one-screen UI exposes automatic/manual totals and a real project date 
   assert.match(renderer, /quickEntryCommit\(\{ closeProject: false \}\)/);
 });
 
+test('historical entry selects an existing CRM contact and requires an explicit new-client action', () => {
+  const defaults = fn(stages, 'quickEntryDefaultForm');
+  const read = fn(stages, 'quickEntryReadForm');
+  const search = fn(stages, 'quickEntryClientInput');
+  const select = fn(stages, 'quickEntrySelectClient');
+  const create = fn(stages, 'quickEntryFindOrCreateClient');
+  const renderer = fn(stages, 'renderQuickEntry');
+
+  assert.match(defaults, /client: '', clientId: '', clientNewConfirmed: false/);
+  assert.match(read, /'clientId'/);
+  assert.match(read, /f\.clientNewConfirmed = clientNewConfirmed === '1'/);
+  assert.match(search, /searchClientsFuzzy\(query\)/, 'the same contact search as ordinary Project intake is reused');
+  assert.match(search, /Не тот контакт\? Всё равно создать нового/);
+  assert.match(search, /quickEntrySelectClient/);
+  assert.match(search, /quickEntryConfirmNewClient/);
+  assert.match(select, /visibleClientsForUser\(\)\.find/);
+  assert.match(select, /f\.clientId = client\.id/);
+  assert.match(select, /f\.phone = client\.phone/);
+  assert.match(select, /prepareExistingClientForOrder\(client\)/);
+  assert.match(create, /const selectedId = String\(f\.clientId/);
+  assert.match(create, /Выберите существующего клиента из найденных контактов или нажмите «Создать нового клиента»/);
+  assert.match(create, /if \(!f\.clientNewConfirmed\)/);
+  assert.match(create, /clientsMatchingContact\(phone, ''\)/, 'phone identity still prevents duplicates after explicit new selection');
+  assert.match(renderer, /Начните вводить имя, телефон или компанию/);
+  assert.match(renderer, /Новый клиент · CRM проверит телефон перед сохранением/);
+  assert.match(html, /c\.companyName, c\.contactTitle, c\.phone/, 'company contacts are searchable too');
+});
+
 test('the one-screen form takes direct project expenses — rent, delivery, gas, other — into the project and its margin', () => {
   // Owner, 2026-11-06: «расходы в рамках проекта: аренда, доставка и ещё что-нибудь — списываем прямо в этот проект».
   const stages = readFileSync('private/legacy/production-stages.js', 'utf8');

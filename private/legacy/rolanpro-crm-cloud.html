@@ -2209,6 +2209,17 @@
   .qe-grid { display:grid;gap:8px; } .qe-grid-a { grid-template-columns:130px 1.2fr 1fr 1.4fr .9fr 1fr .8fr; } .qe-grid-b { grid-template-columns:1fr 1.6fr 1.6fr 110px 150px; } .qe-grid-c { grid-template-columns:2fr 1fr 1.1fr 110px .9fr 1fr auto;align-items:end; }
   .qe-grid label, .qe-field { display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:#5A6577;min-width:0; }
   .qe-grid input, .qe-grid select { height:36px;border:1px solid #D9DEE6;border-radius:4px;padding:0 10px;font-size:13px;color:#141A26;background:#fff;width:100%;box-sizing:border-box;min-width:0; }
+  .qe-client-picker { position:relative;grid-column:span 2; }
+  .qe-client-results { position:absolute;z-index:90;top:58px;left:0;width:min(440px,calc(100vw - 40px));max-height:290px;overflow:auto;background:#fff;border:1px solid #CBD5E1;border-radius:8px;box-shadow:0 16px 34px rgba(15,23,42,.18);padding:6px; }
+  .qe-client-result { display:flex;width:100%;flex-direction:column;gap:2px;text-align:left;border:0;border-bottom:1px solid #E5E7EB;background:#fff;padding:10px;border-radius:5px;color:#0F172A; }
+  .qe-client-result:hover,.qe-client-result:focus { background:#EFF6FF;outline:2px solid #93C5FD;outline-offset:-2px; }
+  .qe-client-result b { font-size:13px; }.qe-client-result span { color:#64748B;font-size:11px;font-weight:500; }.qe-client-result em { color:#047857;font-size:11px;font-style:normal;font-weight:800; }
+  .qe-client-create { width:100%;border:1px dashed #0EA5E9;background:#F0F9FF;color:#0369A1;font-size:12px;font-weight:800;padding:10px;margin-top:6px;border-radius:5px;text-align:left; }
+  .qe-client-empty { padding:10px;color:#64748B;font-size:12px;font-weight:500; }
+  .qe-client-help,.qe-client-new { display:block;margin-top:4px;font-size:10px;font-weight:600;color:#64748B; }.qe-client-new { color:#047857; }
+  .qe-client-selected { min-height:48px;border:1px solid #86D4B2;background:#F0FDF4;border-radius:6px;padding:7px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px; }
+  .qe-client-selected div { min-width:0;display:flex;flex-direction:column;gap:2px; }.qe-client-selected b { color:#065F46;font-size:13px; }.qe-client-selected span { color:#475569;font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .qe-client-selected button { border:0;background:transparent;color:#0369A1;font-size:11px;font-weight:800;padding:6px; }
   .qe-checks { display:flex;flex-wrap:wrap;gap:6px;min-height:36px;align-items:center; }
   .qe-check { display:inline-flex;align-items:center;gap:6px;border:1px solid #D9DEE6;border-radius:4px;padding:6px 10px;background:#fff;font-size:12px;font-weight:600;color:#141A26;cursor:pointer;min-height:32px; } .qe-check input { width:16px;height:16px;margin:0; } .qe-check.on { background:var(--qe-tint,#eff6ff);border-color:var(--qe-color,#2563eb);color:var(--qe-color,#2563eb); } .qe-check small { color:#B91C1C;font-weight:600; }
   .qe-commit { height:36px;white-space:nowrap;background:var(--qe-color,#0F2440) !important;border-color:var(--qe-color,#0F2440) !important; }
@@ -2284,6 +2295,7 @@
   }
   @container qe-main (max-width: 420px) {
     .qe-grid-a, .qe-grid-b, .qe-grid-c, .qe-grid-line { grid-template-columns:1fr; }
+    .qe-client-picker { grid-column:1; }
     .qe-pricing-tabs,.qe-manual-total { grid-template-columns:1fr; } .qe-manual-total span { grid-column:auto; }
   }
   @media (max-width:900px) { .qe-current-summary { position:static; } }
@@ -34406,7 +34418,7 @@ function searchClientsFuzzy(q) {
   return visibleClientsForUser()
     .map(c => {
       const addressFields = clientAddressBook(c).flatMap(a => [a.label, a.address, a.street, a.unit, a.city, a.state, a.zip]);
-      const score = [c.name, c.firstName, c.lastName, c.phone, c.email, c.address, c.addressStreet, c.addressUnit, c.addressCity, c.addressState, c.addressZip, ...addressFields].filter(Boolean)
+      const score = [c.name, c.firstName, c.lastName, c.companyName, c.contactTitle, c.phone, c.email, c.address, c.addressStreet, c.addressUnit, c.addressCity, c.addressState, c.addressZip, ...addressFields].filter(Boolean)
         .map(f => norm(f).includes(nq) ? 1 : 0).reduce((a,b) => a+b, 0);
       return { c, score };
     })
