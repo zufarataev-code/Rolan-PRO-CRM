@@ -69,6 +69,8 @@ function load(role = 'owner') {
     alert: (message: string) => calls.push(`alert:${message}`),
     refreshManualFilmNeededBy: (o: Row) => calls.push(`neededBy:${o.id}`),
   });
+  const quickModeStart = html.indexOf('function projectQuickLineIsActive(');
+  vm.runInContext(html.slice(quickModeStart, html.indexOf('/** Editable top-level services', quickModeStart)), context);
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);

@@ -27,6 +27,8 @@ function load() {
       catalog: [{ id: 'f8', category: 'protective', brand: 'R', model: '8 mil', costPerSqft: 2, wastePct: 10, retailPerSqft: 12 }],
       serviceOfferings: [
         { id: 'a1', direction: 'protective', name: 'A1 8 mil', unit: 'sqft', pricePerSqft: 14, installerRatePerSqft: 3, includes: ['silicone'] },
+        { id: 'solar-quick', direction: 'solar', name: 'Solar Prime', unit: 'sqft', pricePerSqft: 12, installerRatePerSqft: 2.5 },
+        { id: 'smart-detailed', direction: 'smart', name: 'Smart 65', unit: 'sqft', pricePerSqft: 50, installerRatePerSqft: 5 },
         { id: 'silicone', direction: 'protective', name: 'Силикон', unit: 'lft', pricePerSqft: 3.5, installerRatePerSqft: 1, materialCostPerUnit: 0.4 },
         { id: 'zone', direction: 'smart', name: 'Подключение зоны', unit: 'zone', pricePerSqft: 100, installerRatePerSqft: 50, materialCostPerUnit: 12 },
       ],
@@ -57,6 +59,8 @@ function load() {
     academyEsc: (value: unknown) => String(value ?? ''),
     alert: () => undefined, save: () => undefined, render: () => undefined, uid: () => 'id',
   });
+  const quickModeStart = html.indexOf('function projectQuickLineIsActive(');
+  vm.runInContext(html.slice(quickModeStart, html.indexOf('/** Editable top-level services', quickModeStart)), context);
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function windowRetailPrice('), html.indexOf('function orderInstallerPayout(o)')), context);
@@ -125,6 +129,63 @@ test('the lines add up to the project revenue and the reference installer pay', 
   assert.deepEqual(plain(draftLines.map((line: Row) => line.kind)), ['quick', 'quantity']);
   assert.equal(draftLines.reduce((total: number, line: Row) => total + line.price, 0), c.orderRevenue(draft));
   assert.equal(draftLines.reduce((total: number, line: Row) => total + line.installerPay, 0), c.orderInstallerPayoutBreakdown(draft).total);
+});
+
+test('one project combines a quick Solar service with a detailed Smart service', () => {
+  const { c } = load();
+  const mixed: Row = {
+    id: 'mixed',
+    serviceType: 'smart_film',
+    serviceTypes: ['solar_film', 'smart_film'],
+    offeringIds: ['solar-quick', 'smart-detailed'],
+    offeringMeasurementModes: { 'solar-quick': 'quick', 'smart-detailed': 'detailed' },
+    measurements: {
+      rooms: [{
+        id: 'living-room',
+        windows: [{
+          id: 'smart-window', sqft: 20, offeringId: 'smart-detailed', offeringName: 'Smart 65',
+          pricePerSqft: 50, catalogId: 'f8', measureScope: 'smart_film',
+        }],
+      }],
+    },
+    extraServices: [{
+      id: 'solar-line', quickProjectLine: true, measurementMode: 'quick',
+      offeringId: 'solar-quick', offeringName: 'Solar Prime', serviceType: 'solar_film',
+      unit: 'sqft', qty: 100, unitPrice: 12, price: 1200, catalogId: 'f8',
+    }],
+  };
+
+  assert.equal(c.projectQuickLineIsActive(mixed, mixed.extraServices[0]), true);
+  assert.deepEqual(plain(c.projectLines(mixed).map((line: Row) => [line.kind, line.name, line.qty, line.price])), [
+    ['windows', 'Smart 65', 20, 1000],
+    ['quick', 'Solar Prime', 100, 1200],
+  ]);
+  assert.equal(c.orderRevenue(mixed), 2200, 'both service calculation modes enter one project total');
+  assert.equal(c.projectLines(mixed).reduce((sum: number, line: Row) => sum + line.materialCost, 0), 264, 'detailed and quick material costs are both counted');
+  assert.equal(c.orderInstallerPayoutBreakdown(mixed).total, 350, 'Smart $5/sqft plus Solar $2.50/sqft');
+
+  mixed.measurements.rooms[0].windows.push({
+    id: 'solar-window', sqft: 10, offeringId: 'solar-quick', offeringName: 'Solar Prime',
+    pricePerSqft: 12, catalogId: 'f8', measureScope: 'solar_film',
+  });
+  assert.equal(c.projectQuickLineIsActive(mixed, mixed.extraServices[0]), false, 'a detailed measurement replaces only the same service quick line');
+});
+
+test('project card exposes quick and detailed calculation per film service', () => {
+  const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
+  assert.match(stages, /function projectServiceMeasurementModeHtml\(o, offering, directionKey, edit\)/);
+  assert.match(stages, /Быстро · общая площадь/);
+  assert.match(stages, /Подробно · комнаты и окна/);
+  assert.match(stages, /Общая площадь, sq ft/);
+  assert.match(stages, /Цена \/ sq ft/);
+  assert.match(html, /function projectSetServiceMeasurementMode\(oid, offeringId, mode\)/);
+  assert.match(html, /measuredSameService = measureAllWindows\(o\)\.filter\(\(\{ win \}\) => win\.offeringId === offeringId\)/);
+  assert.match(html, /room\.windows = \(room\.windows \|\| \[\]\)\.filter\(win => win\.offeringId !== offeringId\)/);
+  assert.match(html, /const totalScopeArea = measuredArea \+ quickArea/);
+  assert.match(html, /Обе входят в один итог проекта и одно КП/);
+  assert.match(html, /@media \(max-width: 640px\)[\s\S]*\.rp-dirwin-steps \{ display:grid !important;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(html, /@media \(max-width: 640px\)[\s\S]*\.rp-service-mode-switch \{ grid-template-columns:1fr; \}/);
+  assert.match(html, /@media \(max-width: 640px\)[\s\S]*\.rp-service-quick-grid \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });
 
 test('the approved estimate snapshots every service line that later forms the proposal', () => {
