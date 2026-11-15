@@ -66,9 +66,8 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.label}>
             Новый пароль
-            <input
+            <PasswordInput
               className={styles.input}
-              type="password"
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -78,9 +77,8 @@ export function AuthResetPasswordForm({ token }: { token: string }) {
           </label>
           <label className={styles.label}>
             Повторите пароль
-            <input
+            <PasswordInput
               className={styles.input}
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}

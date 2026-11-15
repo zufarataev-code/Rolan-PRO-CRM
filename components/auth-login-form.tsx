@@ -48,7 +48,7 @@ export function AuthLoginForm() {
       const payload = (await response.json()) as LoginResponse;
 
       if (!response.ok) {
-        setError(payload.errors?.[0]?.message || "Не удалось войти.");
+        setError("Неверный email или пароль. Если пароль меняли на другом устройстве, введите новый и проверьте, не подставил ли браузер старый сохранённый пароль.");
         return;
       }
 
@@ -84,9 +84,8 @@ export function AuthLoginForm() {
           </label>
           <label className={styles.label}>
             Пароль
-            <input
+            <PasswordInput
               className={styles.input}
-              type="password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
