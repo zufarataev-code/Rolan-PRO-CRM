@@ -351,8 +351,9 @@ test("project estimate uses the canonical measurement basis", () => {
   const estimateRenderer = source.slice(estimateStart, estimateEnd);
   assert.doesNotMatch(estimateRenderer, /1\. Быстрый ввод проекта/);
   assert.doesNotMatch(estimateRenderer, /Плёнка со склада<\/th>/);
-  assert.match(estimateRenderer, /Итог по замеру/);
-  assert.match(estimateRenderer, /Перейти к замеру/);
+  assert.match(estimateRenderer, /Объём и расчёт/);
+  assert.match(estimateRenderer, /Одна услуга может считаться быстро по общей площади, другая — подробно по комнатам и окнам/);
+  assert.match(estimateRenderer, /Выбрать способ расчёта/);
   assert.match(estimateRenderer, /Обязательная основа расчёта и КП/);
 });
 
@@ -433,7 +434,7 @@ test("proposal readiness does not require installation scheduling", () => {
 
 test("proposal readiness reports exact missing commercial fields", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.match(readiness, /не внесены помещения и размеры/);
+  assert.match(readiness, /не выбран быстрый или подробный расчёт для всех услуг с размерами/);
   assert.match(readiness, /есть окна без размера/);
   assert.match(readiness, /не выбрана плёнка для всех окон/);
   assert.match(readiness, /сумма проекта равна нулю/);
@@ -448,19 +449,18 @@ test("fullscreen kanban fits all stages and cut sheets preserve readable scale",
   assert.doesNotMatch(source, /title: 'Лист раскроя'[\s\S]{0,220}disabled: !plan\.pieces/);
 });
 
-test("quick-entry records are calculation input only for completed historical imports", () => {
+test("quick calculation lines belong to their service and enter the canonical proposal", () => {
   const readiness = source.match(/function projectEstimateReadiness\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const revenue = source.match(/function orderExtraServicesRevenue\(o\) \{[\s\S]*?\n\}/)?.[0] || "";
   const snapshot = source.match(/function premiumCanonicalSnapshot\(prop\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(source, /function projectEstimateQuickLinesForBasis\(o\)/);
-  assert.match(source, /return o\?\.quickProjectImportedCompleted === true \? projectQuickLines\(o\) : \[\]/);
+  assert.match(source, /return projectActiveQuickLines\(o\)/);
   assert.doesNotMatch(readiness, /projectEstimateQuickLinesForBasis/);
-  assert.match(readiness, /if \(!windows\.length && orderNeedsMeasurements\(o\)\)/);
-  assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| !measuredProject\)/);
+  assert.match(readiness, /projectPendingSizedServices\(o\)\.length/);
+  assert.match(revenue, /filter\(line => !line\.quickProjectLine \|\| projectQuickLineIsActive\(o, line\)\)/);
   assert.match(source, /const allowedQuickLines = new Set\(projectEstimateQuickLinesForBasis\(order\)\)/);
   assert.match(source, /line\.kind === 'quick' && !\(line\.sources \|\| \[\]\)\.some\(source => allowedQuickLines\.has\(source\)\)/);
-  assert.match(source, /Расчёт идёт по замеру/);
-  assert.match(source, /пустая строка больше не блокирует документ/);
+  assert.match(source, /Обе входят в один итог проекта и одно КП/);
 });
 
 test("the canonical proposal is built from the same project service lines as the estimate", () => {

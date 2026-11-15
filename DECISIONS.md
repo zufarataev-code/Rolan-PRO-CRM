@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-15 — Measurement mode belongs to a service, not to the project
+
+- One Project may mix calculation modes: each sized service chooses either **Quick** (film + total sqft + price/sqft) or **Detailed** (the existing Service → Room → Window measurement).
+- A quick line is scoped by `offeringId`. Detailed windows suppress only the quick line of that same offering; a window from another service never removes it.
+- `projectLines` remains the one commercial projection. The same active quick and detailed rows feed project revenue, warehouse material cost, installer pay, approved estimate and proposal. Do not create a second calculator or proposal total.
+- Detailed film selection keeps the existing inheritance order: service default → room override → window override. Quick mode stores one film on its service line.
+- Historical imported quick projects remain compatible. This decision requires no schema migration and does not rewrite existing projects.
+
 ## 2026-11-06 — Review public Meta form scope in Git
 
 The approved Meta form IDs are public deployment configuration in
