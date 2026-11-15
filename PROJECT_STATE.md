@@ -2,6 +2,18 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Выполненный проект: выбор существующего клиента без дублей (Codex, PR #533)
+
+- Owner: при вводе имени в «Внести выполненный проект» CRM не искала существующий контакт и позволяла создать его ещё раз.
+- Root cause: `quickEntryFindOrCreateClient()` проверял совпадения только по телефону, а поле клиента было обычным текстовым input без выбора карточки CRM.
+- Branch `codex/quick-entry-client-dedup-20261115`, existing client directory only:
+  - поле клиента ищет видимые контакты тем же `searchClientsFuzzy()`, что обычное создание Project: имя, фамилия, компания, должность, телефон, email и адрес;
+  - существующий клиент выбирается явной карточкой; телефон, адрес, тип объекта и источник подставляются в форму, а Project сохраняет его `clientId` вместо создания новой карточки;
+  - новый контакт появляется только после отдельного действия «Создать нового клиента»; при совпадении телефона сохраняется прежняя защита от дублей и конфликтов;
+  - на телефоне поиск и выбранная карточка занимают одну колонку, без горизонтального выхода формы.
+- Verification: full unit suite **1191/1191**, `node --check`, `git diff --check`, `tsc --noEmit` and production build (139 pages) pass. Build emitted a non-fatal local cache warning because the disk was nearly full, but compilation and page generation completed successfully.
+- Safety: no production contacts or projects were changed during development. Publication and read-only production browser verification follow the normal main-only release.
+
 ## 2026-11-15 — Выполненный проект: утверждённая единая карточка готова к публикации (Codex, PR #513)
 
 - Owner: в разделе переноса выполненных проектов нужен один понятный экран: клиент и источник, менеджер, начало/конец проекта, несколько услуг; у каждой услуги — свой материал склада, период работ и исполнители; CRM должна показать выручку, материалы, зарплату, расходы и прибыль. Сумма клиенту вводится либо автоматически из услуг, либо известным итогом проекта; коэффициент сложности должен отражаться в зарплате.
