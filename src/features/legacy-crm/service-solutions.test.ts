@@ -8,6 +8,8 @@ function load() {
   let role = 'owner'; let n=0;
   const services = [{id:'solar_film',catalogCategory:'solar',title:'Solar'}, {id:'protective_film',catalogCategory:'protective',title:'Safety'}];
   const c: any = vm.createContext({db, console, ORDER_PRIMARY_SERVICES: services, primaryServiceInfo:(id:string)=>services.find(s=>s.id===id), canonicalCatalogCategory:(x:string)=>x, catalogMatchesCategory:(film:any,category:string)=>film.category===category, currentUser:()=>({role}), uid:()=>`id${++n}`, alert:()=>{}, save:()=>{}, render:()=>{}, getOrder:(id:string)=>db.orders.find(o=>o.id===id), getCatalogItem:(id:string)=>db.settings.catalog.find(f=>f.id===id), catalogLabel:(f:any)=>`${f.brand} ${f.model}`, academyEsc:(s:any)=>String(s||''), projectQuickLineCatalog:()=>db.settings.catalog.filter(f=>f.category==='solar'), orderUserCanSeeMoney:()=>true, invalidateProjectEstimate:()=>{}, refreshManagerMeasureModal:()=>{}, refreshProjectEstimateWorkspace:()=>{}, measureAllWindows:(o:any)=>(o.measurements?.rooms||[]).flatMap((room:any)=>room.windows.map((win:any)=>({room,win}))), usersByRole:()=>[{id:'a',name:'A'},{id:'b',name:'B'}], datetimeLocalValue:(x:string)=>x, projectQuickLines:(o:any)=>(o.extraServices||[]).filter((l:any)=>l.quickProjectLine)});
+  const quickModeStart = html.indexOf('function projectQuickLineIsActive(');
+  vm.runInContext(html.slice(quickModeStart, html.indexOf('/** Editable top-level services', quickModeStart)), c);
   const start=html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(start,html.indexOf('function projectQuickLineCatalog(',start)),c);
   return {c,db,setRole:(value:string)=>{role=value;}};

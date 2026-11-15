@@ -287,7 +287,7 @@ test('one-screen entry: many services in the form, committed through the histori
   assert.match(commit, /projectQuickSyncProjectInstallers\(o\)/, 'line installers become project installers, so payroll sees them');
   assert.match(commit, /const issues = projectQuickCompletionIssues\(o\);/, 'the editor\'s completion checks guard the one-screen path too');
   assert.match(commit, /closeQuickProjectAsCompletedWith\(o, \{ requestedPaid: paid, paidDate: lastDate, method/, 'closing is the editor\'s own code');
-  assert.match(commit, /if \(actor\?\.role !== 'owner'\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner');
+  assert.match(commit, /if \(actor\?\.role !== 'owner' \|\| !closeProject\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner and the owner may save without posting');
   const build = fn(stages, 'quickEntryBuildLine');
   assert.match(build, /if \(serviceOfferingNeedsSizes\(offering\)\)[\s\S]*quickProjectLine: true[\s\S]*\} else \{[\s\S]*projectOfferingLine\(offering, qty, src\.dir\)/, 'film services become quick lines, size-free ones directory lines');
   assert.match(build, /startDate: date, endDate, installerIds: installers, supplyItems/);
@@ -327,12 +327,20 @@ test('manual project total is allocated into the service rows instead of becomin
 
 test('the one-screen UI exposes automatic/manual totals and a real project date range', () => {
   const renderer = fn(stages, 'renderQuickEntry');
+  assert.match(renderer, /Внести выполненный проект/);
+  assert.match(renderer, /1\. Проект и клиент/);
+  assert.match(renderer, /2\. Как вводим сумму клиенту/);
+  assert.match(renderer, /3\. Услуги проекта/);
+  assert.match(renderer, /4\. Прямые расходы проекта/);
   assert.match(renderer, /Авто · сумма из услуг/);
   assert.match(renderer, /Итог проекта вручную/);
   assert.match(renderer, /quickEntryApplyManualTotal\(\)/);
   assert.match(renderer, /Начало работ<input id="qe-l\$\{i\}-date"/);
   assert.match(renderer, /Окончание<input id="qe-l\$\{i\}-endDate"/);
   assert.match(renderer, /умножает оплату монтажа плёнки/);
+  assert.match(renderer, /Сохранить черновик/);
+  assert.match(renderer, /Закрыть выполненный проект/);
+  assert.match(renderer, /quickEntryCommit\(\{ closeProject: false \}\)/);
 });
 
 test('the one-screen form takes direct project expenses — rent, delivery, gas, other — into the project and its margin', () => {
@@ -341,7 +349,11 @@ test('the one-screen form takes direct project expenses — rent, delivery, gas,
   assert.match(fn(stages, 'quickEntryDefaultForm'), /expenses: \[\],/);
   assert.match(stages, /function quickEntryExpenseTypes\(\) \{ return \[\['rent', 'Аренда'\], \['delivery', 'Доставка'\], \['gas', 'Бензин'\], \['equipment', 'Оборудование'\], \['other', 'Другое'\]\]; \}/);
   assert.match(fn(stages, 'quickEntryReadForm'), /quickEntryExpenses\(\)\.forEach\(\(e, j\) => \{\n\s*\['type', 'label', 'amount'\]\.forEach\(k => \{ const val = v\(`qe-x\$\{j\}-\$\{k\}`\)/);
-  assert.match(fn(stages, 'renderQuickEntry'), /const previewMargin = total - material - labor - managerPay - projectExpenses;/);
+  const renderer = fn(stages, 'renderQuickEntry');
+  assert.match(renderer, /const previewOrder = quickEntryPreviewOrder\(f\);/);
+  assert.match(renderer, /const previewPss = orderPSS\(previewOrder\);/);
+  assert.match(renderer, /const previewProfitability = projectProfitability\(previewOrder\);/);
+  assert.match(renderer, /const previewMargin = previewProfitability\.grossProfit;/);
   assert.match(fn(stages, 'renderQuickEntry'), /<div class="qe-expenses">/);
   assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: quickEntryExpenseTypes\(\)\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now \}\)/);
   assert.match(fn(stages, 'renderQuickEntry'), /⭐ старшему \+/, 'the crew line says when the senior bonus is in the payout');

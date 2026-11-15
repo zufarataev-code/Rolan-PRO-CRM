@@ -43,6 +43,7 @@ function load(role = 'owner') {
     getUser: (id: string) => db.users.find((user: Row) => user.id === id),
     usersByRole: (r: string) => db.users.filter((user: Row) => user.role === r),
     getCatalogItem: () => undefined,
+    catalogLabel: (item: Row) => item?.fullName || item?.name || item?.model || '—',
     windowCatalog: () => undefined,
     windowActualAreaSqft: (win: Row) => Number(win.sqft) || 0,
     warehouseCatalogCostPerSqft: () => 0,
@@ -69,6 +70,8 @@ function load(role = 'owner') {
     alert: (message: string) => calls.push(`alert:${message}`),
     refreshManualFilmNeededBy: (o: Row) => calls.push(`neededBy:${o.id}`),
   });
+  const quickModeStart = html.indexOf('function projectQuickLineIsActive(');
+  vm.runInContext(html.slice(quickModeStart, html.indexOf('/** Editable top-level services', quickModeStart)), context);
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);

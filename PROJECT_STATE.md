@@ -2,17 +2,59 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-14 — Выполненный проект: единый ввод суммы, период каждой услуги и честный расчёт (Codex, PR pending)
+## 2026-11-15 — Выполненный проект: утверждённая единая карточка готова к публикации (Codex, PR #513)
 
 - Owner: в разделе переноса выполненных проектов нужен один понятный экран: клиент и источник, менеджер, начало/конец проекта, несколько услуг; у каждой услуги — свой материал склада, период работ и исполнители; CRM должна показать выручку, материалы, зарплату, расходы и прибыль. Сумма клиенту вводится либо автоматически из услуг, либо известным итогом проекта; коэффициент сложности должен отражаться в зарплате.
 - Branch `codex/completed-project-card-v2-20261114`, legacy CRM only (`production-stages.js`, quick-entry CSS, focused tests):
   - в каждой строке услуги теперь два факта — начало и окончание; проект получает минимальное начало и максимальное окончание, а закрытие и начисления остаются в канонической исторической модели;
   - появился явный переключатель **«Авто · сумма из услуг / Итог проекта вручную»**. Ручной итог пропорционально переписывает суммы строк и их цену за sq ft / единицу, то есть второго несвязанного итога нет; менеджера по-прежнему ограничивает ценовой коридор, владелец может утвердить исключение;
-  - предварительная зарплата монтажников теперь показывает тот же коэффициент сложности плёночных работ, который применяет итоговый payroll; сама зарплата, склад, расходы и прибыль после внесения всё равно считаются каноническими `orderPSS` / `calcUserPayoutForPeriod`;
-  - форма визуально очищена: белая карточка, отдельный блок способа ввода цены, две даты в услуге и явное пояснение единого расчёта.
+  - экран приведён к согласованному макету **«Внести выполненный проект»**: 1) проект и клиент, 2) способ ввода суммы, 3) услуги, 4) прямые расходы; справа закреплён единый итог проекта;
+  - у владельца две разные операции: **«Сохранить черновик»** ничего не проводит, **«Закрыть выполненный проект»** запускает существующие проверки и каноническое закрытие; менеджер может сохранить только черновик;
+  - живой итог справа больше не использует отдельную примерную формулу: временный Project считается через те же `orderPSS()` и `projectProfitability()`, что рабочая карточка; отдельно видны клиентская сумма, оплата, материалы, зарплата, менеджер, расходы, валовая прибыль, резерв и расчётная чистая;
+  - предварительная строка зарплаты монтажников показывает тот же коэффициент сложности плёночных работ, который применяет итоговый payroll; после закрытия склад, зарплата, расходы и прибыль проводятся существующим `closeQuickProjectAsCompletedWith()`.
 - Visual: `rolanpro-completed-project-v2.html` plus desktop/mobile screenshots in the Codex visualizations folder.
-- Verification: focused quick-entry suite 26/26; full unit suite 1187/1187; `tsc --noEmit` clean; production build clean (webpack cache write warned once on a full disk, a cache-only cleanup freed space and the second build completed all 139 pages).
-- Safety: production data, warehouse movements, payroll payments and customer messages were not touched. Deployment remains a separate owner-confirmed action after PR review.
+- Verification: focused quick-entry suite **26/26**; full unit suite **1190/1190**; `tsc --noEmit`, `node --check`, `git diff --check` and production build clean (139 pages). The first parallel build hit a full local disk; only generated `.next` cache was removed, then the sequential build passed.
+- Safety: production data, warehouse movements, payroll payments and customer messages were not touched during development. Owner explicitly authorized publication; normal main-only release and production browser verification follow PR merge.
+
+## 2026-11-15 — Показ пароля при вводе на входе, смене и сбросе пароля (Claude, PR #531, issue #525 п.1)
+
+- Owner: вводит пароль вслепую; сменил пароль на компьютере и не смог войти на iPad. Причина по коду: сессия привязана к отпечатку пароля, смена пароля намеренно разлогинивает остальные устройства, а новый пароль (12+ символов) вводился без возможности его увидеть. Owner дал исключение «давай делай» после двух непринятых сборок Codex Builder (ветка `codex/password-visibility-20261115` не компилируется, не сливать).
+- Branch `claude/password-visibility-20261115`. Новый общий `components/auth-password-field.tsx` (кнопка-глаз, `aria-label`/`aria-pressed`, зона нажатия 48×48, `autoCapitalize="none"`, `autoCorrect="off"`); подключён во всех пяти полях `auth-login-form.tsx`, `auth-reset-password-form.tsx`, `change-password-form.tsx`; `autoComplete`, `minLength`, `required` не менялись. Ошибка входа 401/403 теперь по-русски с подсказкой про старый сохранённый пароль. Сервер, сессии и API не тронуты.
+- Verification: `tsc --noEmit` без ошибок в изменённых файлах (остальные ошибки окружения — Prisma client в облачной сессии не генерируется); формы собраны esbuild и проверены в Chrome через Playwright на 820 px и 390 px: тип поля переключается password ↔ text, значение сохраняется, второе поле не затрагивается, ошибок страницы нет. Полный unit-набор, production build и живой iPad не проверялись.
+- Next: проверка Codex в PR, слияние владельцем. П.2 задачи #525 (вход по Face ID / passkey) — отдельным PR после переезда на `crm.rolanpro.com`.
+
+## 2026-11-15 — Публикация не должна ложно падать во время прогрева CRM (Codex, PR pending)
+
+- Release `2946dfda8484d9724df1b32140a0975380d1da8d` с исправлением deep-link действительно стал активным на production, но workflow ещё шесть минут проверял корневой адрес во время холодного запуска Next.js и завершился красным. Через минуту тот же production отвечал, а браузерная проверка уже открывала правильную карточку Project. Красный статус описывал прогрев сайта, а не отсутствие публикации.
+- Branch `codex/fix-production-health-check-20261115`, deployment workflow only. После подтверждения active-release проверка обращается напрямую к публичной `/login` через лёгкий HEAD-запрос и допускает до 20 повторов с тем же ограниченным интервалом. Несовпадение release SHA по-прежнему остаётся блокирующей ошибкой.
+- Проверка: production release `2946dfd` прочитан браузером; сценарий `Project → Выполненные проекты → тот же Project URL` прошёл, hash очищается при выходе и Project `Josh` снова открывается. Targeted deploy-health suite **3/3**, full suite **1188/1188**, workflow YAML, production `/login` probe и `git diff --check` проходят. Production workflow изменится только после review и main-only merge.
+
+## 2026-11-15 — Deep-link карточки больше не остаётся за другим разделом (Codex, PR #527, published)
+
+- Owner showed a production screen whose address was `#/order/om97ff0k1` while the visible module was «Выполненные проекты». Root cause: generic `selectAppView()` navigation changed only `state.view` and kept the previous deep-link hash. Returning to the same Project URL then emitted no `hashchange`, so the browser stayed on the wrong module even though the address claimed to be the Project card.
+- Branch `codex/fix-stale-project-route-20261115`, existing legacy router only. Every generic top-level section now removes an incompatible deep-link with `history.replaceState`, preserving the canonical path and query. Canonical hashed sections (`#/service-pricing`, `#/projects`, `#/installer-operations`) keep their existing explicit routes.
+- Added a regression that starts on `#/order/order_1`, opens «Выполненные проекты» and verifies both the visible view and URL become route-free. Opening the Project link afterwards therefore produces a real route transition.
+- Verification: focused route/project/script suite **29/29**; full suite **1188/1188**; `pnpm typecheck`, production build (139 static pages) and `git diff --check` pass. PR #527 merged as `2946dfda8484d9724df1b32140a0975380d1da8d`; active-release and production browser verification passed on 2026-11-15.
+
+## 2026-11-15 — Карточка проекта показывает весь расчёт услуги (Codex, PR pending)
+
+- Owner: после PR #524 выбор быстрого/подробного расчёта жил только внутри окна направления, поэтому основная карточка проекта выглядела по-старому и не объясняла, из чего сложился проект.
+- Branch `codex/project-card-service-workbench-20261115`, existing project card only; no second calculator, service directory, payroll or proposal source.
+- Every service row now visibly shows status, material, calculation mode, volume and unit rate, client amount, assignee and installation date. The full rows stay on the main card before and after proposal acceptance instead of collapsing to a name-and-total shortcut.
+- A pending sized service offers **«⚡ Быстро · общая площадь»** and **«▦ Подробно · комнаты и окна»** directly on the main card. For an existing sized line, «Настроить» opens that service's calculation editor inline in the same card. Quick mode keeps film + total sqft + price/sqft + total; detailed mode keeps the existing room/window measurement.
+- Mobile layout at <=680 px uses two-column fact cards, stacks the calculation choice buttons and keeps the service action visible without hiding material, calculation, crew or date.
+- Verification: full unit suite **1187/1187**, `tsc --noEmit` clean and production build clean after regenerating the local Prisma client; `node --check` and `git diff --check` clean. The existing production project was inspected read-only; the new UI is not in production until this PR is merged and the normal main-only release completes.
+
+## 2026-11-15 — Project Calculator P0: быстрый и подробный расчёт по каждой услуге (Codex, PR #524)
+
+- Owner: один Project может включать несколько плёночных услуг; для каждой услуги менеджер отдельно выбирает быстрый расчёт по общей площади или подробный замер по комнатам и окнам. Все услуги должны одновременно входить в расчёт проекта, материалы, зарплату и одно КП.
+- Branch `codex/project-calculator-p0-20261115`, existing legacy CRM only; no parallel calculator, project, proposal, material or payroll store.
+- Root cause fixed: a measured window used to suppress every `quickProjectLine` in the project. Quick lines are now service-scoped through `offeringMeasurementModes`; detailed windows replace only the quick line of the same offering. Mixed projects (for example Solar quick + Smart detailed) retain both services in `projectLines`, `orderRevenue`, material cost, installer pay, estimate snapshot and proposal.
+- The direction window now asks per sized service: «Быстро · общая площадь» or «Подробно · комнаты и окна». Quick mode edits film, total sqft, price/sqft and client total in the same service card. Detailed mode reuses the existing Room → Window measurement editor and its service/room/window film inheritance.
+- Project calculation shows combined detailed + quick footage and blocks approval only while a sized service has neither mode. Mobile layout at <=640 px stacks the quick service fields without horizontal scrolling.
+- Compatibility: old historical quick imports remain active; legacy pre-mode quick rows retain their old behavior. No schema migration or production data rewrite.
+- Verification: full unit suite **1187/1187**, `tsc --noEmit` clean, production build clean; GitHub CI `Test, typecheck, and build`, clean-database end-to-end gate, conflict radar and bridge all passed. Added mixed Solar quick + Smart detailed coverage for totals, material cost, installer pay and same-service replacement. Visual QA passed at 375, 390 and 430 px without horizontal clipping.
+- Owner authorized publication on 2026-11-15. PR #524 is the reviewed release candidate; production publication proceeds from `main` only.
 
 ## 2026-11-13 — Ввод не слетает, снятие плёнки в «Общем», итог проекта вручную, бригада на весь проект (Claude, PR #512)
 

@@ -1629,20 +1629,36 @@
   .project-direction-actions { display:grid;gap:.3rem;justify-items:end; }
   .project-direction-actions label { color:#526176;font-size:.62rem;font-weight:850;white-space:nowrap; }
   .project-direction-services { display:grid; }
-  .project-service-row { display:grid;grid-template-columns:minmax(190px,1.7fr) minmax(92px,.65fr) minmax(100px,.7fr) minmax(120px,.85fr) 36px;gap:.7rem;align-items:center;padding:.85rem 1rem;border:0;border-bottom:1px solid #edf1f5;background:#fff;text-align:left;color:#10213b;width:100%; }
+  .project-service-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.8rem;align-items:center;padding:.85rem 1rem;border:0;border-bottom:1px solid #edf1f5;background:#fff;text-align:left;color:#10213b;width:100%; }
   .project-service-row:hover { background:#f8fbfd; }
   .project-service-row.selected { background:#eef9fc;box-shadow:inset 4px 0 #159bc4; }
   .project-service-row:last-child { border-bottom:0; }
+  .project-service-summary { min-width:0; }
+  .project-service-heading { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
   .project-service-name { font-size:.82rem;font-weight:950; }
   .project-service-meta { margin-top:.18rem;color:#718096;font-size:.66rem;line-height:1.35; }
+  .project-service-material { margin-top:.28rem;color:#526176;font-size:.66rem;overflow-wrap:anywhere; }
+  .project-service-material b { color:#10213b; }
+  .project-service-status { display:inline-flex;align-items:center;min-height:22px;padding:2px 7px;border-radius:999px;background:#eef2f7;color:#526176;font-size:.58rem;font-weight:900; }
+  .project-service-facts { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.35rem;margin-top:.55rem; }
+  .project-service-fact { min-width:0;padding:.42rem .48rem;border:1px solid #e7edf3;border-radius:4px;background:#fbfdff; }
+  .project-service-fact small { display:block;color:#8492a6;font-size:.52rem;font-weight:900;letter-spacing:.04em;text-transform:uppercase; }
+  .project-service-fact b { display:block;margin-top:.1rem;color:#10213b;font-size:.67rem;line-height:1.25;overflow-wrap:anywhere; }
+  .project-service-fact.mode b { color:#0f7fa6; }
   .project-service-label { display:block;color:#8492a6;font-size:.59rem;font-weight:850;text-transform:uppercase; }
   .project-service-value { display:block;margin-top:.16rem;font-size:.76rem;font-weight:900;overflow-wrap:anywhere; }
-  .project-service-arrow { display:grid;place-items:center;width:30px;height:30px;border:1px solid #cfd9e5;border-radius:4px;background:#fff;color:#167ca6;font-size:1.05rem; }
+  .project-service-arrow { display:inline-flex;align-items:center;justify-content:center;gap:.3rem;min-width:86px;min-height:34px;padding:0 .65rem;border:1px solid #cfd9e5;border-radius:4px;background:#fff;color:#167ca6;font-size:.66rem;font-weight:900; }
+  .project-card-service-measurement { grid-column:1/-1; }
+  .project-card-service-measurement .rp-service-mode { margin:0; }
   .project-service-edit { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;padding:.75rem 1rem;background:#fbfdff;border-bottom:1px solid #edf1f5; }
   .project-service-edit label { color:#65758a;font-size:.62rem;font-weight:850; }
   .project-service-edit input,.project-service-edit select { margin-top:.25rem;min-height:38px;font-size:.72rem; }
   .project-service-edit textarea { width:100%;margin-top:.25rem;min-height:64px;resize:vertical;font-size:.72rem; }
   .project-service-pending { padding:.8rem 1rem;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:.73rem; }
+  .project-service-pending-main { display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem; }
+  .project-service-pending-main span { display:block;margin-top:.14rem;color:#a16207;font-size:.64rem; }
+  .project-service-pending-actions { display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.55rem; }
+  .project-service-pending-actions button { min-height:34px; }
   .project-service-footer { display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.75rem 1rem;background:#f8fafc;border-top:1px solid #e7edf3;font-size:.72rem; }
   .project-recommendations { padding:.9rem 1rem;border-top:1px solid #bae6fd;background:#f0f9ff; }
   .project-recommendation-list { display:grid;gap:.45rem;margin-top:.6rem; }
@@ -1795,6 +1811,9 @@
     .project-command-side > :first-child { grid-column:auto; }
     .project-service-row { grid-template-columns:minmax(0,1fr) auto;padding:.8rem; }
     .project-service-row > div:not(:first-child):not(:last-child) { display:none; }
+    .project-service-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .project-service-fact:last-child:nth-child(odd) { grid-column:1/-1; }
+    .project-service-arrow { min-width:72px;padding:0 .45rem; }
     .project-service-edit { grid-template-columns:1fr 1fr;padding:.7rem .8rem; }
     .project-service-ledger-head { padding:.8rem; }
     .project-cashier-map { padding:.75rem .8rem .8rem; }
@@ -1813,6 +1832,8 @@
     .project-expense-row { grid-template-columns:1fr 1fr; }
     .project-expense-row label:nth-child(2),.project-expense-row label:nth-child(5) { grid-column:1/-1; }
     .project-recommendation { align-items:flex-start;flex-direction:column; }
+    .project-service-pending-main { display:block; }
+    .project-service-pending-actions { display:grid;grid-template-columns:1fr; }
     .project-command-mobile-action { position:sticky;bottom:calc(68px + env(safe-area-inset-bottom,0px));z-index:20;display:block;padding:.55rem;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #dbe4ef;border-radius:6px;box-shadow:0 14px 32px rgba(15,35,61,.18); }
     .project-command-mobile-action .order-action-card { width:100%; }
     .project-command-hero-actions { display:none; }
@@ -2179,6 +2200,10 @@
   .qe-body { display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap; } .qe-main { flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:14px;container-type:inline-size;container-name:qe-main; } .qe-side { flex:1 1 320px;max-width:420px;min-width:0;overflow-wrap:normal;word-break:normal;display:flex;flex-direction:column;gap:14px; }
   .qe-form { background:#fff;border:1px solid #D9DEE6;border-top:4px solid #178DB5;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(15,36,64,.06); }
   .qe-form-head { display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline; }
+  .qe-section-head { display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;border-top:1px solid #E7EBF0;padding-top:14px;margin-top:2px; }
+  .qe-section-head:first-child { border-top:0;padding-top:0; }
+  .qe-section-head b { color:#10213B;font-size:15px;font-weight:900; }
+  .qe-section-head span { color:#64748B;font-size:12px; }
   .qe-kicker { font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5A6577; } .qe-form .qe-kicker { color:#167CA6; }
   .qe-muted { font-size:12px;color:#5A6577; } .qe-hint { font-size:11px;color:#5A6577;font-weight:400; }
   .qe-grid { display:grid;gap:8px; } .qe-grid-a { grid-template-columns:130px 1.2fr 1fr 1.4fr .9fr 1fr .8fr; } .qe-grid-b { grid-template-columns:1fr 1.6fr 1.6fr 110px 150px; } .qe-grid-c { grid-template-columns:2fr 1fr 1.1fr 110px .9fr 1fr auto;align-items:end; }
@@ -2228,6 +2253,19 @@
   .qe-actions { text-align:right; } .qe-link { border:0;background:none;color:#1D4ED8;font-size:12px;font-weight:600;cursor:pointer;padding:0 4px;font-family:inherit; }
   /* Owner, 2026-11-05: строки правой колонки — подпись слева переносится по словам, значение справа; никакого побуквенного переноса */
   .qe-row { display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:baseline;font-size:13px;line-height:18px;padding:6px 0;border-top:1px solid #EEF1F5; } .qe-row span { color:#5A6577;min-width:0;overflow-wrap:normal;word-break:normal; } .qe-row small { display:block;font-size:11px; } .qe-row b { font-weight:600;text-align:right;max-width:60%;justify-self:end;overflow-wrap:normal;word-break:normal;white-space:normal; } .qe-row b:empty { display:none; } .qe-total { border-top:2px solid #141A26; } .qe-total span { color:#141A26;font-weight:700; }
+  .qe-current-summary { position:sticky;top:14px;border:1px solid #D9DEE6;box-shadow:0 8px 24px rgba(15,36,64,.08);padding:16px;z-index:2; }
+  .qe-current-summary-head { display:flex;flex-direction:column;gap:2px;padding-bottom:10px;border-bottom:2px solid #10213B; }
+  .qe-current-summary-head > div { display:flex;flex-direction:column;gap:2px; }
+  .qe-current-summary-head small { color:#64748B;font-size:11px;line-height:1.35; }
+  .qe-current-status { align-self:flex-start;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;padding:4px 7px;font-size:10px;font-weight:800;margin-top:6px; }
+  .qe-summary-client { padding-top:12px;border-top:0; } .qe-summary-client span,.qe-summary-client b { color:#10213B;font-size:16px;font-weight:900; }
+  .qe-summary-profit { margin-top:8px;padding:7px 10px;background:#ECF8F2;border-radius:8px; }
+  .qe-summary-profit .qe-row:first-child { border-top:0; }
+  .qe-summary-profit .qe-row span,.qe-summary-profit .qe-row b { color:#047857; }
+  .qe-summary-profit .qe-total span,.qe-summary-profit .qe-total b { color:#10213B;font-size:15px;font-weight:900; }
+  .qe-summary-warn { margin-top:10px;padding:9px 10px;border-radius:8px;background:#FFF7E6;color:#8A5500;font-size:11px;line-height:1.45; }
+  .qe-summary-actions { display:grid;grid-template-columns:1fr;gap:8px;margin-top:12px; }
+  .qe-summary-actions button { min-height:44px;width:100%;font-weight:900; }
   .qe-bar-row { display:flex;flex-direction:column;gap:4px;padding:5px 0; } .qe-bar-top { display:flex;justify-content:space-between;font-size:12px;gap:8px; } .qe-bar { height:8px;border-radius:4px;background:#EEF1F5;overflow:hidden; } .qe-bar i { display:block;height:100%; }
   /* Owner, 2026-11-10 (планшет): сетки формы подстраиваются под ширину СВОЕЙ колонки (container query), а не экрана —
      на iPad правая колонка отнимает место, и строка услуги при ширине окна 1366 имела всего ~760px: поля вылезали за карточку. */
@@ -2248,6 +2286,7 @@
     .qe-grid-a, .qe-grid-b, .qe-grid-c, .qe-grid-line { grid-template-columns:1fr; }
     .qe-pricing-tabs,.qe-manual-total { grid-template-columns:1fr; } .qe-manual-total span { grid-column:auto; }
   }
+  @media (max-width:900px) { .qe-current-summary { position:static; } }
   /* Старые браузеры без container queries — прежние пороги по ширине экрана */
   @supports not (container-type: inline-size) {
     @media (max-width: 1100px) { .qe-grid-a, .qe-grid-c, .qe-grid-line { grid-template-columns:repeat(3, minmax(0,1fr)); } .qe-grid-b { grid-template-columns:1fr 1fr; } .qe-grid-c .qe-commit { grid-column:1 / -1; } .qe-bill-note { margin-left:0;max-width:none; } }
@@ -2348,6 +2387,18 @@
   .rp-dirwin-row.pending { border-style: dashed; border-left-style: solid; }
   .rp-dirwin-row > div:first-child { display: flex; flex-direction: column; min-width: 0; }
   .rp-dirwin-row > div:first-child span { font-size: .78rem; color: #64748b; }
+  .rp-service-mode { display:flex;flex-direction:column;gap:.65rem;min-width:0;overflow:hidden;padding:.8rem;border:1px solid #dbe4ef;border-left:4px solid var(--dir-color);border-radius:6px;background:#fff; }
+  .rp-service-mode, .rp-service-mode * { box-sizing:border-box; }
+  .rp-service-mode-head { display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem; }
+  .rp-service-mode-head b { color:#10213b; }
+  .rp-service-mode-head span { display:block;margin-top:.15rem;color:#64748b;font-size:.76rem; }
+  .rp-service-mode-switch { display:grid;grid-template-columns:1fr 1fr;gap:.4rem; }
+  .rp-service-mode-switch button { min-width:0;min-height:44px;white-space:normal;overflow-wrap:anywhere;border:1px solid #cbd5e1;border-radius:5px;background:#f8fafc;color:#334155;font-weight:800;cursor:pointer; }
+  .rp-service-mode-switch button.on { border-color:var(--dir-color);background:var(--dir-tint);color:var(--dir-deep); }
+  .rp-service-quick-grid { display:grid;grid-template-columns:minmax(180px,1.5fr) repeat(3,minmax(110px,1fr));gap:.5rem;align-items:end; }
+  .rp-service-quick-grid label { display:flex;flex-direction:column;min-width:0;gap:.2rem;color:#64748b;font-size:.72rem;font-weight:700; }
+  .rp-service-quick-grid input,.rp-service-quick-grid select { width:100%;min-width:0;min-height:44px; }
+  .rp-service-mode-note { color:#64748b;font-size:.74rem;line-height:1.35; }
   .rp-dirwin-num { display: flex; flex-direction: column; align-items: flex-end; font-size: .8rem; color: #475569; text-align: right; white-space: nowrap; }
   .rp-dirwin-num b { font-size: .95rem; color: #10213b; }
   .rp-dirwin-ok { color: #15803d; font-weight: 800; }
@@ -2391,11 +2442,22 @@
   .rp-kpwin-channel.off { opacity: .55; cursor: default; }
   .rp-kpwin-sent { padding: .7rem .85rem; border-radius: 4px; background: #e7f6ec; color: #15803d; font-weight: 800; }
   @media (max-width: 640px) {
-    .rp-dirwin-steps { padding: .5rem .75rem; gap: .3rem; }
-    .rp-dirwin-step { font-size: .78rem; padding: .4rem .3rem; }
-    .rp-dirwin-head h3 { font-size: 1rem !important; line-height: 1.2; }
+    .order-workspace-backdrop { padding:.5rem; }
+    .rp-dirwin { width:calc(100vw - 1rem) !important;max-width:calc(100vw - 1rem) !important;box-sizing:border-box;overflow-x:hidden !important; }
+    .rp-dirwin-head,.rp-dirwin-body,.rp-dirwin-foot { min-width:0;overflow-x:hidden; }
+    .rp-dirwin-head { align-items:flex-start;flex-wrap:wrap;gap:.5rem;padding:.75rem; }
+    .rp-dirwin-head .workspace-back { order:1;margin-right:0; }
+    .rp-dirwin-head .order-workspace-modal-heading { order:2;flex:0 0 100%;width:100%; }
+    .rp-dirwin-head .order-workspace-modal-icon { width:2.2rem;height:2.2rem; }
+    .rp-dirwin-steps { display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));padding:.5rem .75rem;gap:.3rem; }
+    .rp-dirwin-step { min-width:0;font-size:.78rem;padding:.4rem .3rem;overflow:hidden;text-overflow:ellipsis; }
+    .rp-dirwin-head h3 { font-size:1rem !important;line-height:1.2;overflow-wrap:anywhere !important; }
     .rp-dirwin-sum { font-size: .95rem; }
     .rp-dirwin-foot { padding: .6rem .75rem .8rem; }
+    .rp-service-mode-head { display:block; }
+    .rp-service-mode-switch { grid-template-columns:1fr; }
+    .rp-service-quick-grid { grid-template-columns:minmax(0,1fr); }
+    .rp-service-quick-grid label { grid-column:1; }
   }
   .workspace-back { display:inline-flex; align-items:center; gap:.25rem; flex:none; padding:.4rem .7rem; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#0f172a; font-weight:700; font-size:.85rem; white-space:nowrap; }
   .workspace-back:hover { background:#f1f5f9; }
@@ -17645,7 +17707,7 @@ function installerRateForQuickLine(_user, line) {
   return serviceRate > 0 ? serviceRate : installerServiceRateByCategory(category);
 }
 function orderQuickInstallerPayoutForUser(o, user) {
-  return projectQuickLines(o)
+  return projectActiveQuickLines(o)
     .filter(line => line.unit === 'sqft' && (line.installerIds || []).includes(user?.id))
     .reduce((sum, line) => {
       const installerCount = Math.max(1, new Set(line.installerIds || []).size);
@@ -17673,11 +17735,12 @@ function orderInstallerPayoutForUser(o, userId) {
   if (pc.type === 'fixed_per_job') return Math.max(0, Number(pc.fixedPerJob) || 0);
   if (pc.type === 'commission') return orderRevenue(o) * Math.max(0, Number(pc.commissionPct) || 0) / 100 / installerIds.length;
   if (pc.type !== 'per_sqft') return 0;
-  const filmPayout = !measureAllWindows(o).length ? orderQuickInstallerPayoutForUser(o, user) : measureAllWindows(o).reduce((sum, { win }) => {
+  const detailedPayout = measureAllWindows(o).reduce((sum, { win }) => {
     const crew = projectServiceCrew(o, win);
     if (!crew.includes(userId)) return sum;
     return sum + windowActualAreaSqft(win) * installerRateForWindow(user, win) / Math.max(1, crew.length);
   }, 0);
+  const filmPayout = detailedPayout + orderQuickInstallerPayoutForUser(o, user);
   return (filmPayout + orderAdditionalWorkPayoutForUser(o, user, installerIds.length)) * installerSeniorFactor(user);
 }
 /** Senior installer (Owner, 2026-10-24): the crew splits the job equally, and the
@@ -17691,11 +17754,10 @@ function orderInstallerPayoutBreakdown(o) {
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.length) {
     const windows = measureAllWindows(o);
-    const total = windows.length
-      ? windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
-      : projectQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
-          return sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line);
-        }, 0);
+    const total = windows.reduce((sum, { win }) => sum + windowInstallerPayout(win), 0)
+      + projectActiveQuickLines(o).filter(line => line.unit === 'sqft').reduce((sum, line) => {
+        return sum + (Number(line.qty) || 0) * installerRateForQuickLine(null, line);
+      }, 0);
     const work = orderAdditionalWorkPayoutForUser(o, null, 1);
     return { total: total + work, byInstaller: [], source: 'REFERENCE_DEFAULT' };
   }
@@ -17715,9 +17777,8 @@ function orderFilmRevenue(o) {
   return s;
 }
 function orderExtraServicesRevenue(o) {
-  const measuredProject = measureAllWindows(o).length > 0;
   return (o.extraServices || [])
-    .filter(line => !line.quickProjectLine || !measuredProject)
+    .filter(line => !line.quickProjectLine || projectQuickLineIsActive(o, line))
     .reduce((s, x) => s + (Number(x.price) || 0), 0);
 }
 function orderExtraServicesCost(o) {
@@ -17753,10 +17814,9 @@ function orderFilmCost(o) {
   if (o._inventoryDeducted && Number.isFinite(o._inventoryMaterialCost)) return o._inventoryMaterialCost;
   const cutCost = orderFilmCutMaterialCost(o);
   if (cutCost != null) return cutCost;
-  if (!measureAllWindows(o).length) return orderQuickLineMaterialCost(o);
   let s = 0;
   (o.measurements?.rooms || []).forEach(r => (r.windows || []).forEach(w => { s += windowFilmCost(w); }));
-  return s;
+  return s + orderQuickLineMaterialCost(o);
 }
 // Auto-formula expenses
 function orderGasExpense(o) {
@@ -20065,6 +20125,19 @@ function selectAppView(key) {
   if (key === 'settings' && user?.role !== 'owner') return;
   if (key === 'ratesCosts' && user?.role !== 'owner') return;
   if (key === 'ratesCosts' && state.view !== 'ratesCosts') state.ratesTab = state.ratesTab || '';
+  // A top-level section must not keep a stale deep-link behind it. Before
+  // this, opening «Выполненные проекты» from #/order/:id changed only the
+  // rendered view: the address still claimed to be the Project card. Opening
+  // that same Project link again then produced no hashchange, so the browser
+  // stayed on the wrong screen. Keep the visible section and URL in sync.
+  if (location.hash) {
+    const routeFreeUrl = `${location.pathname || ''}${location.search || ''}`;
+    if (typeof history !== 'undefined' && typeof history.replaceState === 'function' && routeFreeUrl) {
+      history.replaceState(null, '', routeFreeUrl);
+    } else {
+      location.hash = '';
+    }
+  }
   state.view = key;
   if (key !== 'settings') state.settingsSection = null;
   state.ordersKanbanFullscreen = false;
@@ -26555,7 +26628,7 @@ function projectEstimateReadiness(o) {
   if (typeof crmImportMode === 'function' && crmImportMode()) return [];
   const issues = [];
   const windows = measureAllWindows(o);
-  if (!windows.length && orderNeedsMeasurements(o)) issues.push('не внесены помещения и размеры');
+  if (projectPendingSizedServices(o).length) issues.push('не выбран быстрый или подробный расчёт для всех услуг с размерами');
   projectOfferingLines(o).forEach(line => {
     if (!(Number(line.qty) > 0)) issues.push(`не указано количество: ${line.label || 'услуга'}`);
     if (!line.includedBy && !(Number(line.unitPrice) > 0)) issues.push(`не указана цена услуги: ${line.label || 'услуга'}`);
@@ -26575,6 +26648,25 @@ function projectQuickLines(o) {
   return (o?.extraServices || []).filter(line => line.quickProjectLine === true);
 }
 
+/** A quick line belongs to one service, not to the project as a whole. */
+function projectQuickLineIsActive(o, line) {
+  if (!o || !line?.quickProjectLine) return false;
+  if (o.quickEntry || o.quickProjectImportedCompleted) return true;
+  const key = line.offeringId || line.serviceType || '';
+  const explicit = o.offeringMeasurementModes?.[key] || line.measurementMode || '';
+  if (explicit === 'detailed') return false;
+  const measuredSameService = measureAllWindows(o).some(({ win }) => line.offeringId
+    ? win.offeringId === line.offeringId
+    : (win.measureScope || o.serviceType) === line.serviceType);
+  if (measuredSameService) return false;
+  if (explicit === 'quick') return true;
+  return measureAllWindows(o).length === 0;
+}
+
+function projectActiveQuickLines(o) {
+  return projectQuickLines(o).filter(line => projectQuickLineIsActive(o, line));
+}
+
 /** Editable top-level services of a historical import: film and quantity/fixed rows. */
 function projectHistoricalEntryLines(o) {
   if (!o?.quickEntry) return projectQuickLines(o);
@@ -26582,7 +26674,7 @@ function projectHistoricalEntryLines(o) {
 }
 
 function projectEstimateQuickLinesForBasis(o) {
-  return o?.quickProjectImportedCompleted === true ? projectQuickLines(o) : [];
+  return projectActiveQuickLines(o);
 }
 
 function projectQuickManualFilmName(line) {
@@ -28291,7 +28383,7 @@ function projectServiceGroups(o) {
     if (!groups.has(id)) groups.set(id, { id, name: win.offeringName || serviceOffering(win.offeringId)?.name || primaryServiceInfo(direction)?.title || 'Услуга', windows: [], lines: [] });
     groups.get(id).windows.push(win);
   });
-  (o.extraServices || []).filter(line => !line.quickProjectLine || !windows.length).forEach(line => {
+  (o.extraServices || []).filter(line => !line.quickProjectLine || projectQuickLineIsActive(o, line)).forEach(line => {
     const id = `line:${line.id}`;
     groups.set(id, { id, name: line.offeringName || line.label || 'Услуга', windows: [], lines: [line] });
   });
@@ -28567,8 +28659,9 @@ function projectCardEdit(fn) {
 /** Per-sq-ft services the project chose that no window carries yet: they wait for the measurement. */
 function projectPendingSizedServices(o) {
   const onWindows = new Set(measureAllWindows(o).map(({ win }) => win.offeringId).filter(Boolean));
-  // Before measurement quick lines carry their services.
-  if (!onWindows.size && !measureAllWindows(o).length) projectQuickLines(o).forEach(line => { if (line.offeringId) onWindows.add(line.offeringId); });
+  // A quick line satisfies only its own service. Other services may still use
+  // the detailed Room -> Window measurement in the same project.
+  projectActiveQuickLines(o).forEach(line => { if (line.offeringId) onWindows.add(line.offeringId); });
   return [...new Set(o?.offeringIds || [])]
     .filter(id => !onWindows.has(id) && orderOfferingNeedsSizes(o, id))
     .map(id => serviceOffering(id))
@@ -28903,6 +28996,14 @@ function projectCardServiceIcon(line) {
   return `<span style="color:${t.color};display:inline-flex;vertical-align:middle">${rpIcon(t, 14)}</span>`;
 }
 
+function projectCardLineCalculation(o, line) {
+  if (line.kind === 'quick') return { mode: 'quick', label: 'Быстро · общая площадь' };
+  if (line.kind === 'windows') return { mode: 'detailed', label: 'Подробно · комнаты и окна' };
+  if (line.kind === 'included') return { mode: 'included', label: 'Входит в пакет' };
+  if (line.kind === 'quantity') return { mode: 'quantity', label: `По количеству · ${line.unitShort || 'ед.'}` };
+  return { mode: 'fixed', label: line.unitPriced ? `По объёму · ${line.unitShort || 'ед.'}` : 'Фиксированная сумма' };
+}
+
 /** The project ledger: every service remains independent inside one project. */
 function renderProjectCardServices(o, { money = false, economics = false, manage = false } = {}) {
   const lines = projectLines(o);
@@ -28922,6 +29023,8 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
     const deletable = edit && ['quantity', 'work'].includes(line.kind);
     const offering = serviceOffering(line.offeringId);
+    const calculation = projectCardLineCalculation(o, line);
+    const materials = projectLineMaterialNames(line);
     const range = projectServicePriceRange(offering);
     const coefficient = Number(db.settings.complexityCoefs?.[o.complexity || 'standard'] ?? 1) || 1;
     const unitPrice = line.kind === 'windows' ? (line.qty > 0 ? line.price / line.qty / coefficient : Number(line.windows[0]?.pricePerSqft) || 0) : line.kind === 'quantity' ? Number(source?.unitPrice) || 0 : Number(line.price) || 0;
@@ -28929,11 +29032,19 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     return `<div data-project-line="${academyEsc(line.key)}">
       <div class="project-service-row ${selected ? 'selected' : ''}">
-        <div><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><div class="project-service-meta">${academyEsc(projectLineNote(line))}</div></div>
-        <div><span class="project-service-label">Объём</span><span class="project-service-value">${academyEsc(projectLineQtyText(line))}</span></div>
-        ${money ? `<div><span class="project-service-label">Сумма</span><span class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span></div>` : '<div></div>'}
-        <div><span class="project-service-label">${production ? 'Монтаж' : 'Статус'}</span><span class="project-service-value">${production ? academyEsc(crew.date) : academyEsc(statusLabel)}</span></div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">›</button>
+        <div class="project-service-summary">
+          <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
+          <div class="project-service-meta">${academyEsc(projectLineNote(line))}</div>
+          <div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
+          <div class="project-service-facts">
+            <span class="project-service-fact mode"><small>Расчёт</small><b>${academyEsc(calculation.label)}</b></span>
+            <span class="project-service-fact"><small>Объём</small><b>${academyEsc(projectLineQtyText(line))}</b></span>
+            ${money ? `<span class="project-service-fact"><small>Цена клиенту</small><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></span>` : ''}
+            <span class="project-service-fact"><small>Исполнитель</small><b>${academyEsc(crew.people)}</b></span>
+            <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
+          </div>
+        </div>
+        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">${edit || plan ? 'Настроить' : 'Подробнее'} ›</button>
       </div>
       ${selected && (edit || plan) ? `<div class="project-service-edit">
         ${line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>'}
@@ -29448,8 +29559,7 @@ function projectQuickLineCatalog(serviceType, selectedCatalogId = '', offeringId
 }
 
 function orderQuickLineMaterialCost(o) {
-  if (measureAllWindows(o).length) return 0;
-  return projectQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
+  return projectActiveQuickLines(o).filter(line => line.unit === 'sqft' && line.catalogId).reduce((sum, line) => {
     const catalog = getCatalogItem(line.catalogId);
     const sqftWithWaste = (Number(line.qty) || 0) * (1 + (Number(catalog?.wastePct) || 0) / 100);
     return sum + sqftWithWaste * warehouseCatalogCostPerSqft(line.catalogId, o?.quickEntry === true);
@@ -29485,29 +29595,71 @@ function projectEstimateSyncQuickServices(o) {
   o.serviceType = o.serviceTypes[0] || o.serviceType || 'smart_film';
 }
 
-function projectEstimateAddQuickLine(oid, requestedServiceType = '') {
+function projectEstimateAddQuickLine(oid, requestedServiceType = '', requestedOfferingId = '') {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const requestedOffering = serviceOffering(requestedOfferingId);
   const requestedService = ORDER_PRIMARY_SERVICES.find(service => service.id === requestedServiceType);
-  const serviceType = requestedService?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
-  const catalog = null;
+  const serviceType = requestedOffering ? offeringServiceType(requestedOffering) : requestedService?.id || o.serviceTypes?.[0] || o.serviceType || 'smart_film';
+  const catalog = getCatalogItem(requestedOffering ? projectOfferingCatalogId(o, requestedOffering.id) : '') || null;
   const line = {
-    id: uid(), quickProjectLine: true, serviceType,
-    catalogId: catalog?.id || '', label: catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция',
-    qty: 0, unit: 'sqft', unitPrice: Number(catalog?.retailPerSqft || 0), price: 0, pricingMode: 'total', startDate: '', endDate: '', installerIds: [], supplyItems: [],
+    id: uid(), quickProjectLine: true, measurementMode: 'quick', serviceType,
+    offeringId: requestedOffering?.id || '', offeringName: requestedOffering?.name || '',
+    catalogId: catalog?.id || '', label: requestedOffering?.name || (catalog ? catalogLabel(catalog) : primaryServiceInfo(serviceType)?.title || 'Позиция'),
+    qty: 0, unit: 'sqft', unitPrice: Number(requestedOffering?.pricePerSqft || catalog?.retailPerSqft || 0), price: 0, pricingMode: 'unit', startDate: '', endDate: '', installerIds: [],
+    supplyItems: requestedOffering ? serviceOfferingSupplyItemsFor(requestedOffering, 0, []) : [],
   };
   projectEstimateSyncQuickLine(line);
   o.extraServices = o.extraServices || [];
   o.extraServices.push(line);
+  o.offeringMeasurementModes = { ...(o.offeringMeasurementModes || {}), [requestedOffering?.id || serviceType]: 'quick' };
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Добавлена быстрая позиция проекта');
-  save(); refreshQuickProjectEntry(oid);
+  save(); refreshProjectQuickLineEditor(oid);
+}
+
+function refreshProjectQuickLineEditor(oid) {
+  const o = getOrder(oid);
+  if (!o) return;
+  if (o.quickEntry) { refreshQuickProjectEntry(oid); return; }
+  if (state._directionWindow?.oid === oid) {
+    openProjectDirectionWindow(oid, state._directionWindow.key, state._directionWindow.step || 'services');
+    return;
+  }
+  refreshProjectEstimateWorkspace(oid);
+}
+
+function projectSetServiceMeasurementMode(oid, offeringId, mode) {
+  const o = getOrder(oid);
+  const offering = serviceOffering(offeringId);
+  if (!o || !offering || !['quick', 'detailed'].includes(mode) || !orderUserCanSeeMoney(o, currentUser())) return;
+  const measuredSameService = measureAllWindows(o).filter(({ win }) => win.offeringId === offeringId);
+  if (mode === 'quick' && measuredSameService.length) {
+    if (!confirm(`Перейти на быстрый расчёт «${offering.name}»? ${measuredSameService.length} ${projectWindowsWord(measuredSameService.length)} этой услуги будут удалены. Окна других услуг останутся.`)) return;
+    (o.measurements?.rooms || []).forEach(room => {
+      room.windows = (room.windows || []).filter(win => win.offeringId !== offeringId);
+    });
+  }
+  o.offeringMeasurementModes = { ...(o.offeringMeasurementModes || {}), [offeringId]: mode };
+  const line = projectQuickLines(o).find(item => item.offeringId === offeringId);
+  if (mode === 'quick' && !line) {
+    projectEstimateAddQuickLine(oid, offeringServiceType(offering), offeringId);
+    return;
+  }
+  if (line) line.measurementMode = mode;
+  projectEstimateMarkChanged(o, mode === 'quick' ? `Услуга «${offering.name}» считается по общей площади` : `Услуга «${offering.name}» считается по комнатам и окнам`);
+  save(); refreshProjectQuickLineEditor(oid);
 }
 
 function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
   const o = getOrder(oid);
   const line = projectHistoricalEntryLines(o).find(item => item.id === lineId);
   if (!o || !line || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (!o.quickEntry) {
+    line.measurementMode = 'quick';
+    const modeKey = line.offeringId || line.serviceType || '';
+    if (modeKey) o.offeringMeasurementModes = { ...(o.offeringMeasurementModes || {}), [modeKey]: 'quick' };
+  }
   const previousCatalogId = line.catalogId || '';
   if (field === 'serviceType') {
     const service = ORDER_PRIMARY_SERVICES.find(item => item.id === value);
@@ -29613,7 +29765,7 @@ function projectEstimateUpdateQuickLine(oid, lineId, field, value) {
     if (field === 'startDate') refreshManualFilmNeededBy(o);
   }
   projectEstimateMarkChanged(o, 'Изменена быстрая позиция проекта');
-  save(); refreshQuickProjectEntry(oid);
+  save(); refreshProjectQuickLineEditor(oid);
 }
 
 function projectEstimateDeleteQuickLine(oid, lineId) {
@@ -29625,7 +29777,7 @@ function projectEstimateDeleteQuickLine(oid, lineId) {
   if (removedCatalogId && !o.quickEntryDraft) reconcileManualFilmPurchase(o, removedCatalogId, 'позиция удалена из проекта');
   projectEstimateSyncQuickServices(o);
   projectEstimateMarkChanged(o, 'Удалена быстрая позиция проекта');
-  save(); refreshQuickProjectEntry(oid);
+  save(); refreshProjectQuickLineEditor(oid);
 }
 
 function projectQuickAddSupply(oid, lineId) {
@@ -30479,6 +30631,9 @@ function renderProjectEstimateWorkspace(o) {
   const quickLines = projectEstimateQuickLinesForBasis(o);
   const ignoredQuickLineCount = storedQuickLines.length - quickLines.length;
   const measuredArea = orderActualAreaSqft(o);
+  const quickArea = quickLines.filter(line => line.unit === 'sqft').reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+  const totalScopeArea = measuredArea + quickArea;
+  const pendingSizedServices = projectPendingSizedServices(o);
   const pss = orderPSS(o);
   const margin = orderMargin(o);
   const marginPct = orderMarginPct(o) * 100;
@@ -30537,16 +30692,16 @@ function renderProjectEstimateWorkspace(o) {
   return `
     <div class="project-estimate-summary">
       <div class="project-estimate-kpi"><span>Цена клиенту</span><strong class="text-emerald-700">${fmtMoney(orderRevenue(o))}</strong></div>
-      <div class="project-estimate-kpi"><span>Площадь по замеру</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
-      <div class="project-estimate-kpi"><span>Услуги</span><strong>${new Set(quickLines.map(line => line.serviceType)).size || (o.serviceTypes || []).length}</strong></div>
+      <div class="project-estimate-kpi"><span>Общий объём</span><strong>${totalScopeArea.toFixed(2)} sqft</strong><small>${measuredArea.toFixed(2)} подробно · ${quickArea.toFixed(2)} быстро</small></div>
+      <div class="project-estimate-kpi"><span>Услуги</span><strong>${projectLines(o).filter(line => line.kind !== 'included').length}</strong></div>
       ${canSeeInternalEconomics ? `<div class="project-estimate-kpi"><span>Себестоимость</span><strong class="text-red-600">${fmtMoney(pss.total)}</strong></div><div class="project-estimate-kpi"><span>Валовая прибыль / маржа</span><strong class="${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}">${fmtMoney(margin)} · ${marginPct.toFixed(1)}%</strong></div>` : ''}
     </div>
     <div class="project-estimate-quick">
-      <div class="project-estimate-section-head"><div><h4>Итог по замеру</h4><div class="text-xs text-gray-500">${orderNeedsMeasurements(o) ? 'Расчёт строится по помещениям, размерам, выбранной плёнке, складу и справочнику сотрудников.' : 'Замер не нужен: в проекте только услуги без размеров — количество, цена, материал и оплата специалисту за единицу.'}</div></div>${measuredArea ? '<span class="tag bg-blue-50 text-blue-700">Источник: замер</span>' : orderNeedsMeasurements(o) ? `<button class="btn-primary text-sm" onclick="openManagerMeasureModal('${o.id}')">Перейти к замеру</button>` : '<span class="tag bg-emerald-50 text-emerald-700">Без замера</span>'}</div>
+      <div class="project-estimate-section-head"><div><h4>Объём и расчёт</h4><div class="text-xs text-gray-500">Одна услуга может считаться быстро по общей площади, другая — подробно по комнатам и окнам. Обе входят в один итог проекта и одно КП.</div></div>${pendingSizedServices.length ? `<button class="btn-primary text-sm" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(offeringServiceType(pendingSizedServices[0]))}','services')">Выбрать способ расчёта</button>` : '<span class="tag bg-emerald-50 text-emerald-700">Все услуги рассчитаны</span>'}</div>
       <div class="project-estimate-quick-grid">
         <div class="project-estimate-quick-card"><span>Услуги проекта</span><strong>${academyEsc(orderServiceSummaryLabel(o))}</strong></div>
         <div class="project-estimate-quick-card"><span>Плёнка</span><strong>${selectedFilms.length ? selectedFilms.map(academyEsc).join(', ') : 'не выбрана'}</strong></div>
-        <div class="project-estimate-quick-card"><span>Метраж стекла</span><strong>${measuredArea.toFixed(2)} sqft</strong></div>
+        <div class="project-estimate-quick-card"><span>Метраж проекта</span><strong>${totalScopeArea.toFixed(2)} sqft</strong><small>${quickArea > 0 ? `${quickArea.toFixed(2)} быстро` : 'только подробный замер'}</small></div>
         <div class="project-estimate-quick-card"><span>Расход плёнки</span><strong>${Number(filmPlan.consumedSqft || 0).toFixed(2)} sqft</strong></div>
         <div class="project-estimate-quick-card"><span>Отход раскроя</span><strong>${Number(filmPlan.wastePct || 0).toFixed(1)}% · ${Number(filmPlan.rollWasteSqft || 0).toFixed(2)} sqft</strong></div>
         <div class="project-estimate-quick-card"><span>Доступ / сложность</span><strong>${T('complexity'+(o.complexity||'standard').charAt(0).toUpperCase()+(o.complexity||'standard').slice(1))} · ×${Number(db.settings.complexityCoefs?.[o.complexity||'standard'] || 1).toFixed(2)}</strong></div>

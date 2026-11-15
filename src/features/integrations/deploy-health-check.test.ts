@@ -17,10 +17,11 @@ const workflow = () => readFileSync(".github/workflows/deploy-production.yml", "
 test("the health check retries instead of failing the deploy on a single slow answer", () => {
   const source = workflow();
 
-  assert.match(source, /for health in \$\(seq 1 12\); do/);
-  assert.match(source, /--max-time 30/);
+  assert.match(source, /for health in \$\(seq 1 20\); do/);
+  assert.match(source, /--head --max-time 20/);
+  assert.match(source, /sslip\.io\/login/);
   assert.doesNotMatch(source, /--max-time 15/);
-  assert.match(source, /Health check \$health\/12 did not answer yet/);
+  assert.match(source, /Health check \$health\/20 did not answer yet/);
 });
 
 test("an activated release is reported before the site is probed", () => {
@@ -37,7 +38,7 @@ test("the two failure modes are told apart", () => {
 
   assert.match(
     source,
-    /active on the server, but the site did not answer within 6 minutes/,
+    /active on the server, but the public login page did not answer within the extended warm-up window/,
     "reachability failure says the code is deployed",
   );
   assert.match(

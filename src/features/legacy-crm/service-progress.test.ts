@@ -42,7 +42,9 @@ function load(user: Row) {
     currentUser: () => user,
     getUser: (id: string) => db.users.find((item: Row) => item.id === id),
     usersByRole: (role: string) => db.users.filter((item: Row) => item.role === role),
-    getCatalogItem: () => undefined, windowCatalog: () => undefined,
+    getCatalogItem: () => undefined,
+    catalogLabel: (item: Row) => item?.fullName || item?.name || item?.model || '—',
+    windowCatalog: () => undefined,
     windowActualAreaSqft: (win: Row) => Number(win.sqft) || 0,
     warehouseCatalogCostPerSqft: () => 0, filmRate: () => 2.5, installerServiceRateByCategory: () => 2.5,
     measureAllWindows: (o: Row) => (o.measurements?.rooms || []).flatMap((room: Row) => (room.windows || []).map((win: Row) => ({ room, win }))),
@@ -50,6 +52,7 @@ function load(user: Row) {
     orderUserCanSeeMoney: () => manager, orderUserCanManage: () => manager,
     orderRevenue: () => 0,
     fmtMoney: (value: number) => `$${Number(value).toFixed(2)}`,
+    fmtSqftPrice: (value: number) => `$${Number(value).toFixed(2)}`,
     fmtDate: (value: string) => String(value).slice(0, 10),
     fmtDateTime: (value: string) => String(value).slice(0, 16),
     datetimeLocalValue: (value: string) => String(value).slice(0, 16),
@@ -64,6 +67,8 @@ function load(user: Row) {
     confirm: (message: string) => { calls.push(`confirm:${message}`); return true; },
     refreshManualFilmNeededBy: () => undefined,
   });
+  const quickModeStart = html.indexOf('function projectQuickLineIsActive(');
+  vm.runInContext(html.slice(quickModeStart, html.indexOf('/** Editable top-level services', quickModeStart)), context);
   const start = html.indexOf('// ---------- УСЛУГИ ВНУТРИ НАПРАВЛЕНИЙ');
   vm.runInContext(html.slice(html.indexOf('// ---------- ENTITY COLOUR CODE'), html.indexOf('// ---------- ENGINEERING MEASUREMENT STUDIO')), context);
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);

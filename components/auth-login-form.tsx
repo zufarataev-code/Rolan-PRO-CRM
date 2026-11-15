@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import styles from "./auth-card.module.css";
+import { AuthPasswordField } from "./auth-password-field";
 import { destinationForRoles } from "@/lib/auth/destination";
 
 const INSTALL_ONBOARDING_PENDING = "rolanpro:pwa-install-onboarding-pending";
@@ -28,6 +29,16 @@ function queueInstallOnboarding() {
   }
 }
 
+function loginErrorMessage(status: number, serverMessage?: string) {
+  if (status === 401) {
+    return "Неверный email или пароль. Если пароль меняли на другом устройстве, введите новый и проверьте, не подставил ли браузер старый сохранённый пароль.";
+  }
+  if (status === 403) {
+    return "У этого сотрудника нет активной роли. Обратитесь к владельцу.";
+  }
+  return serverMessage || "Не удалось войти.";
+}
+
 export function AuthLoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,7 +59,7 @@ export function AuthLoginForm() {
       const payload = (await response.json()) as LoginResponse;
 
       if (!response.ok) {
-        setError(payload.errors?.[0]?.message || "Не удалось войти.");
+        setError(loginErrorMessage(response.status, payload.errors?.[0]?.message));
         return;
       }
 
@@ -84,9 +95,7 @@ export function AuthLoginForm() {
           </label>
           <label className={styles.label}>
             Пароль
-            <input
-              className={styles.input}
-              type="password"
+            <AuthPasswordField
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}

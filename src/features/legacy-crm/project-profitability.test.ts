@@ -4,10 +4,11 @@ import test from "node:test";
 
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
-test("project calculator exposes one measured operational summary", () => {
-  assert.match(source, /Итог по замеру/);
+test("project calculator exposes one mixed quick and detailed operational summary", () => {
+  assert.match(source, /Объём и расчёт/);
   assert.match(source, /Услуги проекта/);
-  assert.match(source, /Площадь по замеру/);
+  assert.match(source, /Общий объём/);
+  assert.match(source, /Метраж проекта/);
   assert.match(source, /Расход плёнки/);
   assert.match(source, /Окна \/ двери/);
   assert.match(source, /Резерв оплаты монтажа/);
