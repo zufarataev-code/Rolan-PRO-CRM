@@ -2,7 +2,7 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
-## 2026-11-15 — Показ пароля при вводе на входе, смене и сбросе пароля (Claude, PR pending, issue #525 п.1)
+## 2026-11-15 — Показ пароля при вводе на входе, смене и сбросе пароля (Claude, PR #531, issue #525 п.1)
 
 - Owner: вводит пароль вслепую; сменил пароль на компьютере и не смог войти на iPad. Причина по коду: сессия привязана к отпечатку пароля, смена пароля намеренно разлогинивает остальные устройства, а новый пароль (12+ символов) вводился без возможности его увидеть. Owner дал исключение «давай делай» после двух непринятых сборок Codex Builder (ветка `codex/password-visibility-20261115` не компилируется, не сливать).
 - Branch `claude/password-visibility-20261115`. Новый общий `components/auth-password-field.tsx` (кнопка-глаз, `aria-label`/`aria-pressed`, зона нажатия 48×48, `autoCapitalize="none"`, `autoCorrect="off"`); подключён во всех пяти полях `auth-login-form.tsx`, `auth-reset-password-form.tsx`, `change-password-form.tsx`; `autoComplete`, `minLength`, `required` не менялись. Ошибка входа 401/403 теперь по-русски с подсказкой про старый сохранённый пароль. Сервер, сессии и API не тронуты.
