@@ -79,6 +79,10 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/api/v1/auth/demo-login") ||
     pathname.startsWith("/api/v1/auth/login") ||
     pathname.startsWith("/api/v1/auth/logout") ||
+    // Face ID sign-in happens before a session exists. Only these two exact
+    // routes are public; enrolling and managing keys stays authenticated.
+    pathname === "/api/v1/auth/passkey-login/options" ||
+    pathname === "/api/v1/auth/passkey-login/verify" ||
     pathname.startsWith("/api/v1/auth/forgot-password") ||
     pathname.startsWith("/api/v1/auth/reset-password") ||
     pathname === "/api/v1/integrations/website/leads" ||

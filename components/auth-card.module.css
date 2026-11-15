@@ -161,3 +161,90 @@
   outline: 2px solid #2563eb;
   outline-offset: -2px;
 }
+
+.buttonSecondary {
+  min-height: 50px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.buttonSecondary:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.buttonSecondary:disabled,
+.linkButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.linkButton {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.deviceList {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.deviceName {
+  display: block;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.deviceMeta {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.deviceRemove {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff;
+  color: #b91c1c;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deviceRemove:hover {
+  background: #fef2f2;
+}

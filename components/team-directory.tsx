@@ -119,6 +119,25 @@ export function TeamDirectory({
     }
   }
 
+  async function resetPasskeys(member: Member) {
+    const confirmed = window.confirm(
+      `Отключить вход по Face ID на всех устройствах сотрудника «${member.fullName}»?\n\nВход по паролю останется. Face ID сотрудник сможет включить заново после входа по паролю.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = (await api(`/api/v1/team/${member.userId}/passkeys`, "DELETE")) as { removed?: number };
+      setNotice({
+        tone: "ok",
+        text: result?.removed
+          ? `Face ID отключён у «${member.fullName}»: устройств — ${result.removed}.`
+          : `У «${member.fullName}» вход по Face ID не был включён.`,
+      });
+    } catch (error) {
+      setNotice({ tone: "error", text: (error as Error).message });
+    }
+  }
+
   const active = members.filter((member) => member.isActive);
   const inactive = members.filter((member) => !member.isActive);
 
@@ -147,6 +166,7 @@ export function TeamDirectory({
         ownUserId={ownUserId}
         onEdit={setEditing}
         onPreview={preview}
+        onResetPasskeys={resetPasskeys}
         onArchive={archive}
       />
       {inactive.length ? (
@@ -161,6 +181,7 @@ export function TeamDirectory({
             ownUserId={ownUserId}
             onEdit={setEditing}
             onPreview={preview}
+            onResetPasskeys={resetPasskeys}
             onArchive={archive}
           />
         </details>
@@ -192,6 +213,7 @@ function MemberList({
   ownUserId,
   onEdit,
   onPreview,
+  onResetPasskeys,
   onArchive,
 }: {
   title: string;
@@ -199,6 +221,7 @@ function MemberList({
   ownUserId: string;
   onEdit: (member: Member) => void;
   onPreview: (member: Member) => void;
+  onResetPasskeys: (member: Member) => void;
   onArchive: (member: Member) => void;
 }) {
   return (
@@ -225,6 +248,9 @@ function MemberList({
               ) : null}
               <button className={styles.secondary} onClick={() => onEdit(member)}>
                 Изменить
+              </button>
+              <button className={styles.secondary} onClick={() => onResetPasskeys(member)}>
+                Отключить Face ID
               </button>
               {member.userId !== ownUserId && member.isActive ? (
                 <button className={styles.danger} onClick={() => onArchive(member)}>

@@ -1,8 +1,17 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import styles from "./auth-card.module.css";
+import {
+  PasskeyClientError,
+  devicePasskeyAvailable,
+  enablePasskeyOnThisDevice,
+  passkeysSupported,
+  readPasskeyOffer,
+  signInWithPasskey,
+  writePasskeyOffer,
+} from "./auth-passkey-client";
 import { AuthPasswordField } from "./auth-password-field";
 import { destinationForRoles } from "@/lib/auth/destination";
 
@@ -44,6 +53,46 @@ export function AuthLoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [passkeyReady, setPasskeyReady] = useState(false);
+  // After a password login on a device that can do Face ID / Touch ID we
+  // pause once on this card and offer to enable it before entering the CRM.
+  const [offerDestination, setOfferDestination] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPasskeyReady(passkeysSupported());
+  }, []);
+
+  async function passkeyLogin() {
+    setError("");
+    setPending(true);
+    try {
+      const user = await signInWithPasskey();
+      queueInstallOnboarding();
+      window.location.assign(user.must_change_password ? "/change-password" : destinationForRoles(user.roles ?? []));
+    } catch (caught) {
+      setError(caught instanceof PasskeyClientError ? caught.message : "Не удалось войти по Face ID.");
+      setPending(false);
+    }
+  }
+
+  async function enablePasskey() {
+    if (!offerDestination) return;
+    setError("");
+    setPending(true);
+    try {
+      await enablePasskeyOnThisDevice();
+      window.location.assign(offerDestination);
+    } catch (caught) {
+      setError(caught instanceof PasskeyClientError ? caught.message : "Не удалось включить Face ID.");
+      setPending(false);
+    }
+  }
+
+  function skipPasskey(never: boolean) {
+    if (!offerDestination) return;
+    if (never) writePasskeyOffer("never");
+    window.location.assign(offerDestination);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,16 +113,50 @@ export function AuthLoginForm() {
       }
 
       queueInstallOnboarding();
-      window.location.assign(
-        payload.data?.user?.must_change_password
-          ? "/change-password"
-          : destinationForRoles(payload.data?.user?.roles ?? []),
-      );
+      if (payload.data?.user?.must_change_password) {
+        window.location.assign("/change-password");
+        return;
+      }
+
+      const destination = destinationForRoles(payload.data?.user?.roles ?? []);
+      if (readPasskeyOffer() === null && (await devicePasskeyAvailable())) {
+        setPassword("");
+        setOfferDestination(destination);
+        return;
+      }
+      window.location.assign(destination);
     } catch {
       setError("Сервер недоступен. Попробуйте ещё раз.");
     } finally {
       setPending(false);
     }
+  }
+
+  if (offerDestination) {
+    return (
+      <main className={styles.shell}>
+        <section className={styles.card}>
+          <h1 className={styles.brand}>Вход по Face ID</h1>
+          <p className={styles.subtitle}>
+            Включить на этом устройстве вход по Face ID / Touch ID? В следующий раз пароль вводить не придётся, даже если
+            вы смените его на другом устройстве.
+          </p>
+          <div className={styles.form}>
+            {error ? <p className={styles.error}>{error}</p> : null}
+            <button className={styles.button} disabled={pending} onClick={enablePasskey} type="button">
+              {pending ? "Включаем…" : "Включить Face ID / Touch ID"}
+            </button>
+            <button className={styles.buttonSecondary} disabled={pending} onClick={() => skipPasskey(false)} type="button">
+              Не сейчас
+            </button>
+            <button className={styles.linkButton} disabled={pending} onClick={() => skipPasskey(true)} type="button">
+              Больше не предлагать на этом устройстве
+            </button>
+          </div>
+          <p className={styles.hint}>Отключить можно в любой момент: страница «Вход по Face ID» по адресу /passkeys.</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -109,6 +192,11 @@ export function AuthLoginForm() {
           <button className={styles.button} disabled={pending} type="submit">
             {pending ? "Входим…" : "Войти"}
           </button>
+          {passkeyReady ? (
+            <button className={styles.buttonSecondary} disabled={pending} onClick={passkeyLogin} type="button">
+              Войти по Face ID / Touch ID
+            </button>
+          ) : null}
         </form>
         <p className={styles.hint}>CRM работает с сервера. Скачивать HTML-файл на телефон для входа не нужно.</p>
       </section>
