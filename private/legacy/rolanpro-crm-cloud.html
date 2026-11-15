@@ -20096,6 +20096,19 @@ function selectAppView(key) {
   if (key === 'settings' && user?.role !== 'owner') return;
   if (key === 'ratesCosts' && user?.role !== 'owner') return;
   if (key === 'ratesCosts' && state.view !== 'ratesCosts') state.ratesTab = state.ratesTab || '';
+  // A top-level section must not keep a stale deep-link behind it. Before
+  // this, opening «Выполненные проекты» from #/order/:id changed only the
+  // rendered view: the address still claimed to be the Project card. Opening
+  // that same Project link again then produced no hashchange, so the browser
+  // stayed on the wrong screen. Keep the visible section and URL in sync.
+  if (location.hash) {
+    const routeFreeUrl = `${location.pathname || ''}${location.search || ''}`;
+    if (typeof history !== 'undefined' && typeof history.replaceState === 'function' && routeFreeUrl) {
+      history.replaceState(null, '', routeFreeUrl);
+    } else {
+      location.hash = '';
+    }
+  }
   state.view = key;
   if (key !== 'settings') state.settingsSection = null;
   state.ordersKanbanFullscreen = false;

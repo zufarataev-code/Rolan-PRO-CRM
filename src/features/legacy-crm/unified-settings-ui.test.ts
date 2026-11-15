@@ -54,3 +54,40 @@ test("the services menu opens immediately even when a local file emits no hashch
   assert.equal(state.mobileSidebarOpen, false);
   assert.equal(renders, 1);
 });
+
+test("a top-level section clears a stale project deep-link", () => {
+  const start = legacy.indexOf("function selectAppView(key)");
+  const end = legacy.indexOf("// ---------- ДИЗАЙН CRM", start);
+  const state: Record<string, any> = {
+    view: "orderDetails",
+    openOrderId: "order_1",
+    mobileSidebarOpen: false,
+  };
+  const location = {
+    hash: "#/order/order_1",
+    pathname: "/legacy-crm",
+    search: "?v=release",
+  };
+  let replacedWith = "";
+  const context = vm.createContext({
+    state,
+    location,
+    history: {
+      replaceState: (_state: unknown, _title: string, url: string) => {
+        replacedWith = url;
+        location.hash = "";
+      },
+    },
+    currentUser: () => ({ role: "owner" }),
+    render: () => undefined,
+    isCompactViewport: () => false,
+    window: {},
+  });
+  vm.runInContext(legacy.slice(start, end), context);
+
+  context.selectAppView("quickEntry");
+
+  assert.equal(state.view, "quickEntry");
+  assert.equal(location.hash, "");
+  assert.equal(replacedWith, "/legacy-crm?v=release");
+});
