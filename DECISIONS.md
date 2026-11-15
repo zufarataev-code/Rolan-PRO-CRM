@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-15 — Full legacy renders preserve the real viewport; transient saves retry
+
+- The responsive application has two canonical scroll owners: `.app-content` on desktop/tablet and the document viewport on narrow mobile. Any full `render()` must capture and restore those owners through the shared render-continuity layer; feature buttons must not implement their own scroll patches.
+- A temporary network failure or deployment restart is not a completed save. The browser retains the workspace, retries the same canonical server save with bounded backoff, retries immediately when connectivity returns, and blocks live pulls or release reloads until the server confirms it.
+- Business data remains server-authoritative. The retry mechanism does not introduce another project store or bypass revision/conflict merging.
+
 ## 2026-11-15 — Automatic client notifications can be muted per Project
 
 - While Rolan PRO operates two CRMs, one Project may explicitly set `clientNotificationsMuted=true` to prevent duplicate automatic customer communication.

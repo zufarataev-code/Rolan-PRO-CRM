@@ -2,6 +2,19 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
+
+- Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
+- Confirmed root causes in the shared legacy shell:
+  - desktop/tablet scroll lives on `.app-content`, while the central render-continuity layer watched `.app-main`, which never scrolls; therefore a full `render()` rebuilt the page and restored the wrong element;
+  - a transient server restart left the workspace only in the browser because `cloudPersist()` showed the offline warning but did not schedule a retry.
+- Branch `codex/project-scroll-sync-reliability-20261115`:
+  - `.app-content`, the real desktop/tablet viewport, is now the canonical keyed scroller restored by the existing central render-continuity layer; the document viewport remains the mobile source. Adding a Project expense or any other full render therefore returns to the same position without a feature-specific patch;
+  - transient save failures retry the same canonical PUT with 1–30 second bounded backoff and retry immediately when the browser returns online/visible/focused;
+  - pending retry state blocks remote pulls and automatic release reloads, so the browser cannot replace the unsaved workspace before the server confirms it; success clears the retry state and shows «Сохранено».
+- Verification: legacy inline script and `production-stages.js` syntax clean; full unit suite **1197/1197**; `tsc --noEmit`, production build (139 pages) and `git diff --check` clean.
+- Safety: this branch changes no production Project. Publication still requires owner confirmation after review and verification.
+
 ## 2026-11-15 — Project-level mute for automatic client notifications (Codex, PR #535)
 
 - Owner: while Rolan PRO is operating two CRMs, a newly created Project must be able to stay silent so the client does not receive duplicate automatic SMS/email notifications.
