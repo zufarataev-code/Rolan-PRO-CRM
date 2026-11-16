@@ -380,6 +380,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    if (!owner && ['manualProjectTotal', 'manualProjectTotalBase', 'quickEntryPricingMode'].some(field =>
+      stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+      return 'Итог проекта вручную может менять только владелец.';
+    }
     const liveFunnelFields = [
       'status', 'consultationAt', 'measurementAt', 'measurementAcceptedAt', 'measurementDoneAt',
       'projectEstimateApprovedAt', 'proposalSentAt', 'proposalAcceptedAt', 'productionReadyAt',

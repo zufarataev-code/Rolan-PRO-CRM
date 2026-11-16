@@ -114,10 +114,10 @@ test('a quick-entry project can be repriced by its total; quick rows of a measur
   assert.equal(vm.runInContext('projectTotalAdjustableLines(order).length', ctx), 0, 'measured windows carry the revenue then');
 });
 
-test('the price corridor binds a manager\'s total but not the owner\'s; a closed project is not repriced', () => {
+test('only the owner can set a manual total; a closed project is not repriced', () => {
   const manager = loadTotal('manager');
   assert.equal(vm.runInContext("projectSetTotal('o','500')", manager), false, '$7.20 / sq ft is under the $8 minimum');
-  assert.match(manager.alerts[0], /за рамки прайса/);
+  assert.equal(manager.alerts.length, 0);
   assert.equal(manager.orderRevenue(), 625, 'nothing changed');
 
   const owner = loadTotal('owner');
@@ -131,7 +131,9 @@ test('the price corridor binds a manager\'s total but not the owner\'s; a closed
 test('the card footer carries the editable total; lines show the rate their sum is made of', () => {
   const card = fn(stages, 'renderProjectCardServices');
   assert.match(card, /edit && lines\.length \? projectTotalEditHtml\(o\)/, 'read-only roles and closed projects keep the plain total');
-  assert.match(fn(stages, 'projectTotalEditHtml'), /aria-label="Итог проекта"[^>]*onchange="projectCardSetTotal\('\$\{o\.id\}',this\.value\)"/);
+  const totalEditor = fn(stages, 'projectTotalEditHtml');
+  assert.match(totalEditor, /currentUser\(\)\?\.role !== 'owner'/, 'a manager sees the total but cannot edit it');
+  assert.match(totalEditor, /aria-label="Итог проекта"[^>]*onchange="projectCardSetTotal\('\$\{o\.id\}',this\.value\)"/);
   assert.match(card, /projectLineRateText\(o, line\)/);
   assert.match(fn(stages, 'projectLineRateText'), /fmtSqftPrice\(projectLineUnitPrice\(o, line\)\)/, 'cents are shown: $2.50, not $3');
 });
@@ -250,18 +252,18 @@ test('with counted rows only, the cents remainder still lands on the typed total
   for (const row of [one, two]) assert.equal(Math.round(row.unitPrice * row.qty * 100) / 100, row.price, 'rate × quantity rebuilds the same sum after a sync');
 });
 
-test('the manager\'s corridor is checked per unit: a quick row by its rate, windows one by one', () => {
+test('a manager cannot set the total for quick rows or measured windows', () => {
   const quickCtx = loadTotal('manager');
   const quick: Row = { id: 'q1', quickProjectLine: true, offeringId: 'film', qty: 40, unit: 'sqft', unitPrice: 10, price: 400 };
   quickCtx.projectLines = () => [{ key: 'k', kind: 'quick', name: 'Black Silver', offeringId: 'film', qty: 40, price: quick.price, sources: [quick] }];
   quickCtx.measureAllWindows = () => [];
-  assert.equal(vm.runInContext("projectSetTotal('o','440')", quickCtx), true, '$11 / sq ft is inside the corridor from $8');
-  assert.equal(vm.runInContext("projectSetTotal('o','300')", quickCtx), false, '$7.50 / sq ft is under it');
+  assert.equal(vm.runInContext("projectSetTotal('o','440')", quickCtx), false);
+  assert.equal(quick.price, 400);
 
   const ctx = loadTotal('manager');
   const a: Row = { id: 'a', area: 10, pricePerSqft: 9 };
   const b: Row = { id: 'b', area: 10, pricePerSqft: 20 };
   ctx.projectLines = () => [{ key: 'w', kind: 'windows', name: 'Black Silver', offeringId: 'film', qty: 20, price: a.area * a.pricePerSqft + b.area * b.pricePerSqft, windows: [a, b], sources: [] }];
-  assert.equal(vm.runInContext("projectSetTotal('o','250')", ctx), false, 'the average stays above $8, but window «a» would fall to $7.76');
+  assert.equal(vm.runInContext("projectSetTotal('o','250')", ctx), false);
   assert.deepEqual([a.pricePerSqft, b.pricePerSqft], [9, 20]);
 });

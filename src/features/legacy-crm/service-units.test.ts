@@ -586,6 +586,12 @@ test('owner price corridor lets a manager override the project price only inside
 
   assert.equal(prepareServiceSolutions(current, structuredClone(below), true), null, 'the owner may approve a total below the manager corridor');
   assert.equal(prepareServiceSolutions(current, structuredClone(above), true), null, 'the owner may approve a total above the manager corridor');
+
+  const manual = structuredClone(current);
+  Object.assign(manual.orders[0], { manualProjectTotal: 240, manualProjectTotalBase: { lines: { l: 100 } } });
+  manual.orders[0].extraServices[0].unitPrice = 120;
+  assert.match(prepareServiceSolutions(current, structuredClone(manual), false) || '', /только владелец/);
+  assert.equal(prepareServiceSolutions(current, manual, true), null);
 });
 
 test('the owner manual total may move a measured window outside the manager corridor', () => {

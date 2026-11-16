@@ -3293,6 +3293,7 @@ function projectTotalIsManual(o) {
 }
 function projectTotalEditHtml(o) {
   const total = Math.round(orderRevenue(o) * 100) / 100;
+  if (currentUser()?.role !== 'owner') return `<strong>Клиенту ${fmtMoney(total)}</strong>`;
   const manual = projectTotalIsManual(o);
   return `<span class="project-total-edit" data-project-total style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
     ${manual ? `<span class="rp-price-manual">итог вручную</span><button type="button" class="rp-price-reset" onclick="projectCardResetTotal('${o.id}')">↺ вернуть цены</button>` : ''}
@@ -3314,7 +3315,7 @@ function projectScaleLinePrice(o, line, factor) {
 /** Sets the project total by moving every priced line proportionally. Returns true when saved. */
 function projectSetTotal(oid, value) {
   const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  if (!o || currentUser()?.role !== 'owner' || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
   const target = Math.round(Math.max(0, parseFloat(value) || 0) * 100) / 100;
   const current = orderRevenue(o);
   if (Math.abs(target - current) < 0.005) return false;
@@ -3376,7 +3377,7 @@ function projectSetTotal(oid, value) {
 /** Back to the prices the lines had before the manual total (the directory price for a line added later). */
 function projectResetTotal(oid) {
   const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  if (!o || currentUser()?.role !== 'owner' || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
   const base = o.manualProjectTotalBase || {};
   projectTotalAdjustableLines(o).forEach(line => {
     const list = projectLineListPrice(line);
@@ -4060,6 +4061,10 @@ function quickEntryLineBasePrice(line) {
  * source for proposal, payroll, warehouse cost and project economics.
  */
 function quickEntryDistributeTotal(f, value, warn = true) {
+  if (currentUser()?.role !== 'owner') {
+    if (warn) alert('Итог проекта вручную может менять только владелец.');
+    return false;
+  }
   const target = Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
   const rows = quickEntryLines();
   if (!(target > 0) || !rows.length) { if (warn) alert('Введите итог проекта больше нуля.'); return false; }
@@ -4072,14 +4077,6 @@ function quickEntryDistributeTotal(f, value, warn = true) {
   const prices = bases.map(price => Math.round(target * price / basis * 100) / 100);
   const anchor = bases.indexOf(Math.max(...bases));
   prices[anchor] = Math.round((prices[anchor] + target - prices.reduce((sum, price) => sum + price, 0)) * 100) / 100;
-  if (currentUser()?.role !== 'owner') {
-    const blocked = rows.find((line, i) => {
-      const range = projectServicePriceRange(serviceOffering(line.offering));
-      const unit = prices[i] / Math.max(1, Number(line.qty) || 0);
-      return range && ((Number(range.min) > 0 && unit < Number(range.min) - 0.005) || (Number(range.max) > 0 && unit > Number(range.max) + 0.005));
-    });
-    if (blocked) { if (warn) alert(`Итог выводит цену «${serviceOffering(blocked.offering)?.name || 'услуги'}» за разрешённый коридор. Такую сумму утверждает владелец.`); return false; }
-  }
   rows.forEach((line, i) => { line.price = String(prices[i]); });
   f.pricingMode = 'manual';
   f.manualTotal = String(target);
@@ -4093,6 +4090,7 @@ function quickEntryApplyManualTotal() {
 }
 function quickEntrySetPricingMode(mode) {
   const f = quickEntryReadForm();
+  if (mode === 'manual' && currentUser()?.role !== 'owner') return false;
   f.pricingMode = mode === 'manual' ? 'manual' : 'auto';
   if (f.pricingMode === 'auto') {
     quickEntryLines().forEach(line => { const price = quickEntryLineBasePrice(line); line.price = price > 0 ? String(Math.round(price * 100) / 100) : ''; });
@@ -4572,9 +4570,9 @@ function renderQuickEntry() {
       <input id="qe-pricingMode" type="hidden" value="${academyEsc(f.pricingMode || 'auto')}">
       <div class="qe-pricing-tabs" role="group" aria-label="Способ ввода суммы проекта">
         <button type="button" class="${f.pricingMode !== 'manual' ? 'on' : ''}" onclick="quickEntrySetPricingMode('auto')">Авто · сумма из услуг</button>
-        <button type="button" class="${f.pricingMode === 'manual' ? 'on' : ''}" onclick="quickEntrySetPricingMode('manual')">Итог проекта вручную</button>
+        ${owner ? `<button type="button" class="${f.pricingMode === 'manual' ? 'on' : ''}" onclick="quickEntrySetPricingMode('manual')">Итог проекта вручную</button>` : ''}
       </div>
-      ${f.pricingMode === 'manual' ? `<div class="qe-manual-total"><label>Итоговая сумма проекта, $<input id="qe-manualTotal" type="number" min="0" step="1" inputmode="decimal" value="${academyEsc(f.manualTotal || total)}" placeholder="${total || 0}"></label><button type="button" class="btn-primary" onclick="quickEntryApplyManualTotal()">Распределить по услугам</button><span>CRM пропорционально изменит суммы строк и покажет новую цену за sq ft / единицу. Зарплата, склад и расходы продолжат считаться по своим правилам.</span></div>` : `<input id="qe-manualTotal" type="hidden" value=""><div class="qe-pricing-note">Сумма проекта складывается из услуг по ценам справочника. Цену каждой строки можно поправить отдельно.</div>`}
+      ${owner && f.pricingMode === 'manual' ? `<div class="qe-manual-total"><label>Итоговая сумма проекта, $<input id="qe-manualTotal" type="number" min="0" step="1" inputmode="decimal" value="${academyEsc(f.manualTotal || total)}" placeholder="${total || 0}"></label><button type="button" class="btn-primary" onclick="quickEntryApplyManualTotal()">Распределить по услугам</button><span>CRM пропорционально изменит суммы строк и покажет новую цену за sq ft / единицу. Зарплата, склад и расходы продолжат считаться по своим правилам.</span></div>` : `<input id="qe-manualTotal" type="hidden" value=""><div class="qe-pricing-note">Сумма проекта складывается из услуг по ценам справочника. Цену каждой строки можно поправить отдельно.</div>`}
     </div>
     <div class="qe-section-head"><b>3. Услуги проекта · ${lines.length}</b><span>У каждой — материал, даты, исполнители и своя зарплата</span></div>
     ${lines.map(lineHtml).join('')}
