@@ -2,6 +2,13 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-15 — Telegram is a server-only staff notification channel
+
+- `TELEGRAM_BOT_TOKEN` is a protected server secret. It must never live in legacy workspace JSON, browser storage, browser markup or a `NEXT_PUBLIC_*` variable, and the browser never calls Telegram Bot API directly.
+- CRM employee identity is the notification address. The browser sends an authenticated employee ID; the server reads that active employee's saved `telegramChatId` from the canonical workspace. The send API does not accept arbitrary Chat IDs from the browser.
+- Existing Project/status/task recipient rules remain authoritative. Telegram adds a delivery channel; it does not create another employee directory, Project store or notification audience.
+- Production secret synchronization is optional and non-destructive: an absent GitHub secret retains the existing protected server value. A real test notification still requires explicit owner authorization immediately before sending.
+
 ## 2026-11-15 — Full legacy renders preserve the real viewport; transient saves retry
 
 - The responsive application has two canonical scroll owners: `.app-content` on desktop/tablet and the document viewport on narrow mobile. Any full `render()` must capture and restore those owners through the shared render-continuity layer; feature buttons must not implement their own scroll patches.

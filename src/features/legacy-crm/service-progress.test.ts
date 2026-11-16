@@ -13,6 +13,7 @@ import { prepareServiceSolutions } from './service-solutions';
 // their own service, and the project becomes «Монтаж выполнен» once every
 // service is done.
 const html = composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html','utf8'), readFileSync('private/legacy/production-stages.js','utf8'));
+const telegramService = readFileSync('src/features/telegram/service.ts', 'utf8');
 type Row = Record<string, any>;
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 
@@ -747,9 +748,8 @@ test('changing the work of a done service sends it back to work; its price may c
 });
 
 test('a stalled Telegram request gives up after a bounded time', () => {
-  assert.match(html, /const TELEGRAM_TIMEOUT_MS = 15000;/);
-  const send = html.slice(html.indexOf('async function sendTelegram('), html.indexOf('function whatsappLink('));
-  assert.match(send, /setTimeout\(\(\) => controller\.abort\(\), TELEGRAM_TIMEOUT_MS\)/);
-  assert.match(send, /signal: controller\.signal/);
-  assert.match(send, /finally \{ if \(timer\) clearTimeout\(timer\); \}/);
+  assert.match(telegramService, /export const TELEGRAM_TIMEOUT_MS = 15_000;/);
+  assert.match(telegramService, /setTimeout\(\(\) => controller\.abort\(\), TELEGRAM_TIMEOUT_MS\)/);
+  assert.match(telegramService, /signal: controller\.signal/);
+  assert.match(telegramService, /finally \{\s*clearTimeout\(timer\);\s*\}/);
 });

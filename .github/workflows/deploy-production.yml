@@ -145,6 +145,36 @@ jobs:
           REMOTE
           } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
 
+      - name: Sync protected Telegram bot token when supplied
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo 'Telegram token not supplied; retaining server configuration.'
+            exit 0
+          fi
+          [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]{6,12}:[A-Za-z0-9_-]{20,}$ ]]
+
+          # The token travels only through encrypted SSH stdin. It is never
+          # written to the repository, workflow command line, or browser state.
+          {
+            printf 'set -euo pipefail\n'
+            printf 'telegram_bot_token=%q\n' "$TELEGRAM_BOT_TOKEN"
+            cat <<'REMOTE'
+          env_file=/home/runcloud/.rolanpro-crm.env.production.local
+          test -f "$env_file"
+          if grep -Fqx "TELEGRAM_BOT_TOKEN=$telegram_bot_token" "$env_file"; then exit 0; fi
+          temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
+          trap 'rm -f "$temporary_file"' EXIT
+          awk '!/^TELEGRAM_BOT_TOKEN=/' "$env_file" > "$temporary_file"
+          printf 'TELEGRAM_BOT_TOKEN=%q\n' "$telegram_bot_token" >> "$temporary_file"
+          chmod 600 "$temporary_file"
+          mv "$temporary_file" "$env_file"
+          trap - EXIT
+          REMOTE
+          } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
+
       - name: Advance production to verified main commit
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
