@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Tablet shell and Project card responsive architecture (Codex, in progress)
+
+- Owner showed the live CRM on a tablet: top-bar labels and actions overlap, the desktop sidebar consumes the workspace, payroll rows clip to the right, and the Project card does not adapt to the approved «Balance» hierarchy.
+- Root cause confirmed in `private/legacy/rolanpro-crm-cloud.html`: several overlapping viewport patches leave the 841–1366 px range in the desktop shell; the top bar has no compact action contract, payroll has no responsive row representation, and the prepared Project summary rail is not mounted in the active clean card.
+- Branch `codex/project-card-balance-layout-20261115` owns this task. Scope: one desktop/tablet/phone shell contract; the existing Project feed as the primary workspace plus the existing role-safe economics/work summary; responsive payroll rows. No price, payroll formula, Project calculation, notification, customer data or production deployment is changed.
+- Verification and PR will be recorded after desktop/tablet/phone browser review. Production publication still requires the owner's explicit confirmation after review.
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
