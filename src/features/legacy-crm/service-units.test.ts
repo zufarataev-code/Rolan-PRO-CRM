@@ -573,16 +573,41 @@ test('owner price corridor lets a manager override the project price only inside
   };
   const inside = structuredClone(current);
   inside.orders[0].extraServices[0].unitPrice = 120;
-  assert.equal(prepareServiceSolutions(current, inside, true), null);
+  assert.equal(prepareServiceSolutions(current, inside, false), null);
   assert.equal(inside.orders[0].extraServices[0].price, 240);
 
   const below = structuredClone(current);
   below.orders[0].extraServices[0].unitPrice = 70;
-  assert.match(prepareServiceSolutions(current, below, true) || '', /ниже разрешённого минимума/);
+  assert.match(prepareServiceSolutions(current, below, false) || '', /ниже разрешённого минимума/);
 
   const above = structuredClone(current);
   above.orders[0].extraServices[0].unitPrice = 140;
-  assert.match(prepareServiceSolutions(current, above, true) || '', /выше разрешённого максимума/);
+  assert.match(prepareServiceSolutions(current, above, false) || '', /выше разрешённого максимума/);
+
+  assert.equal(prepareServiceSolutions(current, structuredClone(below), true), null, 'the owner may approve a total below the manager corridor');
+  assert.equal(prepareServiceSolutions(current, structuredClone(above), true), null, 'the owner may approve a total above the manager corridor');
+});
+
+test('the owner manual total may move a measured window outside the manager corridor', () => {
+  const current: Row = {
+    settings: {
+      serviceOfferings: [{ id: 'film', direction: 'solar', name: 'Solar', unit: 'sqft', pricePerSqft: 10, minPricePerUnit: 8, maxPricePerUnit: 15, active: true }],
+      catalog: [{ id: 'film-model', category: 'solar' }],
+    },
+    users: [],
+    orders: [{
+      id: 'o',
+      offeringIds: ['film'],
+      offeringCatalogIds: { film: 'film-model' },
+      measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', offeringId: 'film', catalogId: 'film-model', measureScope: 'solar_film', pricePerSqft: 10 }] }] },
+      extraServices: [],
+    }],
+  };
+  const discounted = structuredClone(current);
+  discounted.orders[0].measurements.rooms[0].windows[0].pricePerSqft = 7;
+
+  assert.match(prepareServiceSolutions(current, structuredClone(discounted), false) || '', /ниже разрешённого минимума/);
+  assert.equal(prepareServiceSolutions(current, discounted, true), null);
 });
 
 test('the server accepts a size-free service shared into other directions and a line sold under one of them', () => {

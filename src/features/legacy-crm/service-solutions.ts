@@ -561,8 +561,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
           if (!Number.isFinite(price) || price < 0) return 'Цена услуги должна быть неотрицательным числом.';
           const min = Number(offering.minPricePerUnit) || 0;
           const max = Number(offering.maxPricePerUnit) || 0;
-          if (min > 0 && price < min) return `Цена «${offering.name}» ниже разрешённого минимума ${min.toFixed(2)}.`;
-          if (max > 0 && price > max) return `Цена «${offering.name}» выше разрешённого максимума ${max.toFixed(2)}.`;
+          // The corridor protects manager discounts. The owner may deliberately
+          // set a project total outside it; the browser already grants that
+          // exception and the server must accept the same authorized write.
+          if (!owner && min > 0 && price < min) return `Цена «${offering.name}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (!owner && max > 0 && price > max) return `Цена «${offering.name}» выше разрешённого максимума ${max.toFixed(2)}.`;
         }
       }
       // A service without sizes is «quantity × price» (Owner, 2026-10-05). The
@@ -612,8 +615,8 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
           }
           if (included) item.unitPrice = 0;
           const unitPrice = Number(item.unitPrice) || 0;
-          if (!included && min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
-          if (!included && max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
+          if (!owner && !included && min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (!owner && !included && max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
           const qty = Number(item.qty);
           if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
           item.qty = qty;
