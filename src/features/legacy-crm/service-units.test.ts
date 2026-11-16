@@ -592,6 +592,10 @@ test('owner price corridor lets a manager override the project price only inside
   manual.orders[0].extraServices[0].unitPrice = 120;
   assert.match(prepareServiceSolutions(current, structuredClone(manual), false) || '', /только владелец/);
   assert.equal(prepareServiceSolutions(current, manual, true), null);
+
+  const automatic = structuredClone(current);
+  automatic.orders[0].quickEntryPricingMode = 'auto';
+  assert.equal(prepareServiceSolutions(current, automatic, false), null, 'a manager may save the normal automatic mode on a historical draft');
 });
 
 test('the owner manual total may move a measured window outside the manager corridor', () => {

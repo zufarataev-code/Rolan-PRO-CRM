@@ -380,8 +380,15 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
   }
   for (const order of rows(next.orders)) {
     const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
-    if (!owner && ['manualProjectTotal', 'manualProjectTotalBase', 'quickEntryPricingMode'].some(field =>
-      stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null))) {
+    const manualTotalChanged = ['manualProjectTotal', 'manualProjectTotalBase'].some(field =>
+      stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null));
+    const pricingModeChanged = order.quickEntryPricingMode !== oldOrder.quickEntryPricingMode;
+    const manualModeChanged = pricingModeChanged
+      && (order.quickEntryPricingMode === 'manual' || oldOrder.quickEntryPricingMode === 'manual');
+    // Managers may create their normal historical draft with the explicit
+    // default `auto` mode. Only entering/leaving manual-total mode or changing
+    // its saved total/base is reserved for the Owner.
+    if (!owner && (manualTotalChanged || manualModeChanged)) {
       return 'Итог проекта вручную может менять только владелец.';
     }
     const liveFunnelFields = [
