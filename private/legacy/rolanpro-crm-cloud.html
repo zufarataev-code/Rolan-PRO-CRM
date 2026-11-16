@@ -7952,7 +7952,7 @@ const I18N = {
     telegramToken: 'Telegram Bot Token',
     telegramChatId: 'Telegram Chat ID',
     telegramConfigure: 'Настройка Telegram',
-    telegramHint: 'Создайте бота через @BotFather, вставьте токен. Каждый сотрудник отправляет боту /start и его chat_id заполняется автоматически.',
+    telegramHint: 'Бот работает через защищённый сервер CRM. Токен хранится только в TELEGRAM_BOT_TOKEN; в карточках сотрудников указываются их Chat ID.',
     testNotification: 'Тест уведомления',
     notifyClient: 'Уведомить клиента',
     notifyInstaller: 'Уведомить специалистов по установке',
@@ -8381,7 +8381,7 @@ const I18N = {
     telegramToken: 'Telegram Bot Token',
     telegramChatId: 'Telegram Chat ID',
     telegramConfigure: 'Telegram configuration',
-    telegramHint: 'Create a bot via @BotFather, paste the token. Each team member sends /start to the bot and their chat_id will auto-fill.',
+    telegramHint: 'The bot runs through the protected CRM server. Its token stays only in TELEGRAM_BOT_TOKEN; employee cards keep their Chat IDs.',
     testNotification: 'Test notification',
     notifyClient: 'Notify client',
     notifyInstaller: 'Notify installers',
@@ -15819,10 +15819,7 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
 
   if (communicationChannelEnabled('telegram') && (opts.manual || opts.teamTelegram)) {
     const recipients = orderCommunicationTeamIds(o).map(getUser).filter(u => u?.telegramChatId);
-    if (!db.settings.telegramBotToken) {
-      recordCommunicationDispatch(o, 'telegram', 'skipped', body, 'Telegram Bot Token не указан');
-      notes.push('Telegram не настроен');
-    } else if (!recipients.length) {
+    if (!recipients.length) {
       recordCommunicationDispatch(o, 'telegram', 'skipped', body, 'нет Chat ID у команды заказа');
       notes.push('Telegram: нет Chat ID');
     } else {
@@ -15831,7 +15828,7 @@ async function dispatchClientCommunication(o, subject, body, timelineKey, opts =
       const text = `🔔 ${subject}\n\nЗаказ: ${o.number}\nКлиент: ${c.name || '—'}\n${orderAddress(o, c) || ''}\n\n${body}`;
       for (const u of recipients) {
         try {
-          const r = await sendTelegram(u.telegramChatId, text);
+          const r = await sendTelegram(u.id, text);
           if (r?.ok) sent++;
           else failed++;
         } catch (e) {
@@ -16087,7 +16084,7 @@ async function sendOrderTelegramToTeam(orderId) {
   let sent = 0;
   let failed = 0;
   for (const u of recipients) {
-    const result = await sendTelegram(u.telegramChatId, safeBody);
+    const result = await sendTelegram(u.id, safeBody);
     if (result?.ok) sent++;
     else failed++;
   }
@@ -18981,7 +18978,7 @@ function acceptMeasurementTask(orderId, openStudio = false) {
       );
       const mgr = getUser(o.managerId);
       if (mgr?.telegramChatId) {
-        sendTelegram(mgr.telegramChatId, `📐 Замерщик ${u.name} принял замер\nЗаказ: ${o.number}\nКлиент: ${c?.name || '—'}`);
+        sendTelegram(mgr.id, `📐 Замерщик ${u.name} принял замер\nЗаказ: ${o.number}\nКлиент: ${c?.name || '—'}`);
       }
     }
     save();
@@ -19103,25 +19100,20 @@ function checkNotifySound() {
 }
 setInterval(checkNotifySound, 3000);
 
-// A stalled Telegram request gives up after this time, so a notice that waits
-// for it (a claimed project close) does not hold the ones after it.
-const TELEGRAM_TIMEOUT_MS = 15000;
-async function sendTelegram(chatId, text) {
-  const token = db.settings.telegramBotToken;
-  if (!token || !chatId) return { ok: false, error: 'Telegram not configured' };
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS) : null;
+async function sendTelegram(recipientUserId, text) {
+  if (!recipientUserId || !String(text || '').trim()) return { ok: false, error: 'Telegram recipient or text is missing' };
   try {
-    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await fetch('/api/v1/integrations/telegram/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-      ...(controller ? { signal: controller.signal } : {}),
+      body: JSON.stringify({ recipient_user_id: recipientUserId, text }),
     });
-    const j = await r.json();
-    return j;
-  } catch (e) { return { ok: false, error: String(e) }; }
-  finally { if (timer) clearTimeout(timer); }
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) return { ok: false, error: payload?.errors?.[0]?.message || `Telegram server error (${response.status})` };
+    return { ok: true, ...(payload?.data || {}) };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
 }
 function whatsappLink(phone, text) {
   const p = (phone || '').replace(/[^0-9]/g, '');
@@ -19159,8 +19151,6 @@ async function notifyStatusChange(order, options = {}) {
   const deliveries = [];
   if (skipTelegram) {
     // In-app-only pass used by durable completion follow-ups.
-  } else if (!db.settings.telegramBotToken) {
-    skipReasons.push('Telegram Bot Token не указан');
   } else {
     recipientIds.forEach(uid => {
       const recipientId = String(uid);
@@ -19175,8 +19165,8 @@ async function notifyStatusChange(order, options = {}) {
       tgSent++;
       deliveries.push((async () => {
         try {
-          const r = await sendTelegram(u.telegramChatId,
-            `🔔 <b>${order.number}</b> — <b>${T(order.status)}</b>\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n<a href="${clientPortalUrl(order.id)}">Открыть заказ</a>`
+          const r = await sendTelegram(u.id,
+            `🔔 ${order.number} — ${T(order.status)}\nКлиент: ${clientName}\n${client?.address?.slice(0,80)||''}\n${clientPortalUrl(order.id) || ''}`
           );
           if (r && r.ok) {
             console.log('[Telegram]', u.name, 'OK');
@@ -23242,7 +23232,7 @@ function openTeamMemberEdit(userId) {
       <input id="tm-edit-phone" value="${academyEsc(u.phone || '')}" placeholder="+1 818...">
       <!-- Owner, 2026-11-06: у каждого сотрудника телефон в карточке, и на него приходят уведомления CRM. -->
       <label class="text-sm mt-2" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="tm-edit-sms" style="width:auto" ${u.notifySms === false ? '' : 'checked'}> SMS-уведомления на этот номер</label>
-      <div class="text-xs text-gray-400 mt-1">Новый проект, замер, монтаж, оплата — коротким SMS, как и в приложении${db.settings?.telegramBotToken ? ' и в Telegram' : ''}.</div>
+      <div class="text-xs text-gray-400 mt-1">Новый проект, замер, монтаж, оплата — коротким SMS, как и в приложении и подключённом Telegram.</div>
 
       <label class="mt-3">Почта для входа</label>
       <input id="tm-edit-email" type="email" value="${academyEsc(u.email || '')}" oninput="this.dataset.touched = '1'"
@@ -24127,8 +24117,8 @@ async function sendTaskReminder(id) {
   const u = t.responsibleId ? getUser(t.responsibleId) : null;
   if (!u || !u.telegramChatId) { alert('У исполнителя не привязан Telegram'); return; }
   const when = t.dueAt ? fmtDate(t.dueAt) : 'без срока';
-  await sendTelegram(u.telegramChatId, `🔔 Напоминание: ${t.title}\n📅 ${when}${t.notes ? '\n📝 ' + t.notes : ''}`);
-  alert('Напоминание отправлено');
+  const result = await sendTelegram(u.id, `🔔 Напоминание: ${t.title}\n📅 ${when}${t.notes ? '\n📝 ' + t.notes : ''}`);
+  alert(result.ok ? 'Напоминание отправлено' : 'Не отправлено: ' + (result.error || 'Telegram недоступен'));
 }
 
 // ---------- LEADS INBOX (заявки с сайта / Facebook / ИИ-чата → заказы) ----------
@@ -24661,6 +24651,7 @@ function openSettingsSection(key) {
   state.settingsSection = key;
   window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
+  if (key === 'telegram') loadTelegramServerStatus();
 }
 
 function closeSettingsSection() {
@@ -24816,14 +24807,17 @@ function renderSettings() {
     <div ${settingsPanelAttrs('telegram')}>
       <h3 class="font-semibold mb-1">${T('telegramConfigure')}</h3>
       <p class="text-sm text-gray-600 mb-3">${T('telegramHint')}</p>
-      <label>${T('telegramToken')}</label>
-      <input id="set-tg" value="${s.telegramBotToken}" placeholder="123456:ABC-DEF...">
-      <div class="flex gap-2 mt-3">
-        <button class="btn-primary" onclick="saveTelegramToken()">${T('save')}</button>
-        <button class="btn-ghost" onclick="testTelegram()">${T('testNotification')}</button>
+      <div class="p-3 rounded-lg border ${state.telegramServerStatus?.connected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
+        <div class="font-semibold text-sm">${state.telegramServerStatus?.connected ? `✅ Telegram подключён${state.telegramServerStatus.bot_username ? ` · ${academyEsc(state.telegramServerStatus.bot_username)}` : ''}` : state.telegramServerStatus?.configured ? '⚠️ Токен найден, но Telegram не отвечает' : state.telegramServerStatusLoading ? '⏳ Проверяю сервер…' : '⏳ Telegram ещё не подключён на сервере'}</div>
+        <div class="text-xs text-gray-600 mt-1">Секрет не попадает в браузер. Сервер ожидает переменную <code>TELEGRAM_BOT_TOKEN</code>.</div>
+      </div>
+      <div class="flex gap-2 mt-3 flex-wrap">
+        <button class="btn-ghost" onclick="loadTelegramServerStatus(true)">Проверить подключение</button>
+        <button class="btn-primary" onclick="testTelegram()" ${state.telegramServerStatus?.connected ? '' : 'disabled'}>${T('testNotification')}</button>
       </div>
       <div class="mt-4 pt-4 border-t">
         <div class="text-sm font-medium mb-2">Chat ID сотрудников</div>
+        <p class="text-xs text-gray-500 mb-3">Сотрудник открывает бота в Telegram и нажимает Start. Его числовой Chat ID сохраняется здесь; уведомления получает только привязанный сотрудник.</p>
         <div class="space-y-2">
           ${activeUsers().map(u => `
             <div class="flex items-center gap-2">
@@ -25431,15 +25425,28 @@ function saveCompanySettings() {
   db.settings.referralReward = parseFloat(document.getElementById('set-ref').value) || 0;
   save(); render();
 }
-function saveTelegramToken() {
-  db.settings.telegramBotToken = document.getElementById('set-tg').value.trim();
-  save(); alert('OK');
+async function loadTelegramServerStatus(force = false) {
+  if (state.telegramServerStatusLoading || (state.telegramServerStatus && !force)) return;
+  state.telegramServerStatusLoading = true;
+  if (state.view === 'settings' && state.settingsSection === 'telegram') render();
+  try {
+    const response = await fetch('/api/v1/integrations/telegram/messages', { cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.errors?.[0]?.message || 'Сервер Telegram не отвечает');
+    state.telegramServerStatus = payload?.data || { configured: false, connected: false };
+  } catch (error) {
+    state.telegramServerStatus = { configured: false, connected: false, error: error?.message || String(error) };
+    if (force) alert('Не удалось проверить Telegram: ' + state.telegramServerStatus.error);
+  } finally {
+    state.telegramServerStatusLoading = false;
+    if (state.view === 'settings' && state.settingsSection === 'telegram') render();
+  }
 }
 async function testTelegram() {
   const u = currentUser();
   if (!u.telegramChatId) { alert('Укажите ваш Chat ID сначала'); return; }
-  const r = await sendTelegram(u.telegramChatId, '✅ RolanPRO CRM — тест уведомления');
-  alert(r.ok ? 'Отправлено!' : 'Ошибка: ' + (r.description || r.error));
+  const r = await sendTelegram(u.id, '✅ RolanPRO CRM — тест уведомления');
+  alert(r.ok ? 'Отправлено!' : 'Ошибка: ' + (r.error || 'Telegram не принял сообщение'));
 }
 function setUserTgChat(id, val) {
   const u = getUser(id); if (u) { u.telegramChatId = val.trim(); save(); }
@@ -34405,14 +34412,13 @@ function confirmProposal(orderId) {
     );
   }
 
-  // 3. Telegram (if configured)
-  if (db.settings.telegramBotToken) {
-    db.users.filter(u => u.id === o.managerId && u.telegramChatId).forEach(u => {
-      sendTelegram(u.telegramChatId,
-        `✅ *КП подтверждено клиентом*\n\nЗаказ: ${o.number}\nКлиент: ${c?.name || ''}\nСумма: ${fmtMoney(orderRevenue(o))}\n\nСогласуйте дату монтажа и подтвердите получение аванса.`
-      );
-    });
-  }
+  // 3. Telegram through the authenticated CRM server. The server owns the
+  // bot token; this page only names the employee recipient.
+  db.users.filter(u => u.id === o.managerId && u.telegramChatId).forEach(u => {
+    sendTelegram(u.id,
+      `✅ КП подтверждено клиентом\n\nЗаказ: ${o.number}\nКлиент: ${c?.name || ''}\nСумма: ${fmtMoney(orderRevenue(o))}\n\nСогласуйте дату монтажа и подтвердите получение аванса.`
+    );
+  });
 
   // 4. Email manager (if configured)
   const mgr = getUser(o.managerId);

@@ -2,6 +2,16 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Telegram staff notifications move behind the CRM server (Codex, PR #540)
+
+- Owner asked to connect the Telegram bot so staff receive CRM notifications.
+- Root cause: the legacy page stored `telegramBotToken` in browser workspace state and called `api.telegram.org` directly, while server sanitization deliberately removed that token on every save. The setting therefore could not be shared safely or survive across devices.
+- Branch `codex/telegram-staff-notifications-20261115` introduces one server-only adapter using `TELEGRAM_BOT_TOKEN` and an authenticated same-origin API. The browser sends only the CRM employee ID and message; the server resolves that active employee's existing `telegramChatId` from the canonical legacy workspace and never accepts an arbitrary Chat ID from the browser.
+- Existing status, task, measurement, proposal and manual team notification flows now use this adapter. The owner/manager Telegram settings panel shows server connection status, keeps employee Chat IDs and offers a test button only when the bot is connected; the token field and every direct browser Bot API call are removed.
+- Deployment can synchronize a protected GitHub production secret without erasing an existing server token when the secret is absent. No real token is committed or returned to the browser.
+- Verification: focused Telegram/legacy suite **35/35**, full unit suite **1205/1205**, `tsc --noEmit`, production build (140 pages) and `git diff --check` pass.
+- Remaining production action: add the real BotFather token as protected `TELEGRAM_BOT_TOKEN`, confirm each employee's numeric Chat ID, then obtain explicit owner authorization immediately before sending one real test notification. No real Telegram message was sent during implementation.
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
