@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Telegram notifications move behind the CRM server (Codex, in progress)
+
+- Owner asked to connect the Telegram bot so staff receive CRM notifications.
+- Existing legacy code is not a safe production connection: it stores `telegramBotToken` in browser workspace state and calls `api.telegram.org` directly. Server sanitization deliberately clears that token, so the settings field cannot create a durable shared connection; the promised `/start` auto-link is not implemented.
+- Branch `codex/telegram-staff-notifications-20261115` owns this task. Scope: one authenticated same-origin Telegram server adapter using `TELEGRAM_BOT_TOKEN`, owner-visible connection status/test, existing employee `telegramChatId` recipients, and the existing project/status notification flow. No client messages, payroll, price, project data or production bot token is changed during development.
+- Production still needs a real BotFather token in the protected production environment and explicit owner authorization before any test notification is sent.
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
