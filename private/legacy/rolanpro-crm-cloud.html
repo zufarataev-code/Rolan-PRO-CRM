@@ -7533,6 +7533,167 @@
     .settings-hub-item { min-height: 96px; padding: 14px; }
     .settings-hub-intro h2 { font-size: 21px; }
   }
+  /* === One responsive contract: desktop / tablet / phone ===
+     Tablet used to be a squeezed desktop: the 232px sidebar and every top-bar
+     action stayed visible while only the search moved to another row. Keep one
+     structural breakpoint here, after the older feature-specific rules. */
+  .project-card-page {
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+  .project-card-page .project-command-side {
+    position: sticky;
+    top: .25rem;
+  }
+  .payroll-page {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .payroll-table-wrap {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .payroll-breakdown-table { min-width: 640px; }
+
+  @media (min-width: 841px) and (max-width: 1366px) {
+    .app-shell,
+    .app-shell.sidebar-collapsed {
+      grid-template-columns: 72px minmax(0, 1fr);
+    }
+    .app-shell .sidebar-brand {
+      justify-content: center;
+      padding-inline: .65rem;
+    }
+    .app-shell .sidebar-mark { display: inline-flex !important; }
+    .app-shell .sidebar-brand-text,
+    .app-shell .sidebar-toggle-btn,
+    .app-shell .nav-label,
+    .app-shell .sidebar-user-meta,
+    .app-shell .sidebar-logout-label {
+      display: none !important;
+    }
+    .app-shell .app-sidebar .nav-item {
+      justify-content: center;
+      padding: .72rem;
+    }
+    .app-shell .sidebar-user {
+      justify-content: center;
+      padding: .5rem;
+    }
+    .app-topbar {
+      grid-template-areas:
+        "menu title actions"
+        "search search search";
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-rows: auto auto;
+      gap: .65rem .8rem;
+      min-height: auto;
+      padding: .75rem .9rem;
+    }
+    .app-topbar > .topbar-icon-btn:first-child { grid-area: menu; }
+    .app-topbar > .topbar-title { grid-area: title; }
+    .app-topbar > .topbar-search { grid-area: search; }
+    .app-topbar > .topbar-actions { grid-area: actions; }
+    .topbar-title { min-width: 0; }
+    .topbar-title h1 {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar-subtitle { display: none; }
+    .topbar-role-testing,
+    .topbar-pwa,
+    .topbar-user-pill,
+    .topbar-switch-user { display: none !important; }
+    .topbar-actions { flex-wrap: nowrap; }
+    .topbar-actions .topbar-language {
+      width: auto;
+      min-width: 3.2rem;
+      padding-inline: .45rem;
+    }
+    .app-content { padding: .9rem; }
+    .project-card-page { max-width: 1120px; }
+    .project-card-page .project-command-grid { grid-template-columns: minmax(0, 1fr); }
+    .project-card-page .project-command-side {
+      order: -1;
+      position: static;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .project-command-hero .order-clean-progress--buttons {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1180px) {
+    .payroll-breakdown-table,
+    .payroll-breakdown-table tbody { display: block; min-width: 0; }
+    .payroll-breakdown-table thead { display: none; }
+    .payroll-breakdown-table tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+      padding: .35rem 0;
+      border-top: 1px solid #e2e8f0;
+    }
+    .payroll-breakdown-table td {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 6.5rem minmax(0, 1fr);
+      gap: .55rem;
+      align-items: start;
+      padding: .55rem .65rem;
+      overflow-wrap: anywhere;
+    }
+    .payroll-breakdown-table td::before {
+      content: attr(data-label);
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .payroll-breakdown-table td:nth-child(3) { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 840px) {
+    .topbar-role-testing,
+    .topbar-create-project,
+    .topbar-pwa,
+    .topbar-user-pill,
+    .topbar-switch-user { display: none !important; }
+    .topbar-title { min-width: 0; }
+    .topbar-title h1 {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-card-page .project-command-side {
+      order: -1;
+      position: static;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .project-command-hero .order-clean-progress--buttons {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 680px) {
+    .payroll-toolbar-row { align-items: stretch; }
+    .payroll-toolbar-row > * { width: 100%; margin-left: 0; }
+    .payroll-toolbar-row > .flex-1 { display: none; }
+    .payroll-employee-card > .flex:first-child,
+    .payroll-employee-card > .flex:first-child > .flex {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .payroll-breakdown-table tr { grid-template-columns: minmax(0, 1fr); }
+    .payroll-breakdown-table td,
+    .payroll-breakdown-table td:nth-child(3) { grid-column: 1; }
+  }
   /* === Print === */
   @page { size: Letter portrait; margin: 0.55in; }
   @media print {
@@ -20408,17 +20569,17 @@ function renderAppShell() {
           <div id="global-search-results" class="absolute left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-30" style="display:none;"></div>
         </div>` : `<div></div>`}
         <div class="topbar-actions">
-          ${role === 'owner' ? `<button class="btn-ghost text-sm" onclick="openRoleTesting()">Проверка ролей</button>` : ''}
-          ${canSearch ? `<button class="btn-primary text-sm" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
-          ${pwaInstallButtonHtml()}
+          ${role === 'owner' ? `<button class="btn-ghost text-sm topbar-role-testing" onclick="openRoleTesting()">Проверка ролей</button>` : ''}
+          ${canSearch ? `<button class="btn-primary text-sm topbar-create-project" onclick="openOrderModal()" title="Создать новый проект">+ Проект</button>` : ''}
+          <span class="topbar-pwa">${pwaInstallButtonHtml()}</span>
           <div class="topbar-user-pill" title="${academyEsc(u.name)}">${academyEsc(u.name)} · ${T(u.role)}</div>
-          <button class="btn-ghost text-sm" onclick="logout()">Сменить</button>
+          <button class="btn-ghost text-sm topbar-switch-user" onclick="logout()">Сменить</button>
           <button class="topbar-icon-btn relative ${unreadInboundClientMessages().length ? 'bg-rose-50 text-rose-700 border border-rose-200' : ''}" onclick="openInboundMessagesInbox()" title="Открыть входящие SMS и WhatsApp" aria-label="Входящие сообщения${unreadInboundClientMessages().length ? ': ' + unreadInboundClientMessages().length + ' новых' : ''}">💬${unreadInboundClientMessages().length ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center font-black">${unreadInboundClientMessages().length}</span>` : ''}</button>
           <button class="topbar-icon-btn relative" onclick="state.view='notifications'; markAllRead();">
             🔔 ${unreadCount() > 0 ? `<span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">${unreadCount()}</span>` : ''}
           </button>
           <button class="topbar-icon-btn" onclick="toggleNotifySound()" title="${notifySoundEnabled() ? 'Звук уведомлений включён — нажмите, чтобы выключить' : 'Звук уведомлений выключен — нажмите, чтобы включить'}" aria-label="Звук уведомлений">${notifySoundEnabled() ? '🔊' : '🔇'}</button>
-          <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm">
+          <select onchange="state.lang=this.value; save(); render();" class="w-auto text-sm topbar-language">
             <option value="ru" ${state.lang==='ru'?'selected':''}>RU</option>
             <option value="en" ${state.lang==='en'?'selected':''}>EN</option>
           </select>
@@ -29588,9 +29749,12 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
 function renderProjectCommandHeader(o, c, primary, { money = false, pendingRequests = [], nextEvent = null } = {}) {
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
+  // Money belongs to the Balance summary rail. Repeating the same three values
+  // in the hero made the Project feel longer without adding another decision.
+  const fieldFacts = money ? '' : `<div class="project-command-facts"><div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div></div>`;
   return `<section class="project-command-hero">
     <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
-    <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
+    ${fieldFacts}${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;
 }
@@ -31076,15 +31240,18 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
     ${recentTimeline.length ? `<div class="mt-3">${renderOrderCleanRows(recentTimeline.map(ev => [T(ev.key), `${fmtDateTime(ev.at)}${ev.note ? ' · ' + academyEsc(ev.note).slice(0, 60) : ''}`]))}</div>` : `<div class="order-clean-note mt-3">История пока пустая.</div>`}`;
 
   return `
+    <div class="project-card-page">
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : u?.role === 'measurer' ? 'measurements' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : u?.role === 'measurer' ? 'Мои замеры' : T('orders')}</button>
       ${u?.role === 'owner' ? `<details class="project-more-menu"><summary class="btn-ghost text-sm" aria-label="Ещё действия">⋯</summary><div class="project-more-menu-body"><button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();">Все поля (старая форма)</button><button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')">🗑 Удалить в архив</button></div></details>` : ''}
     </div>
     <div class="order-clean-shell">
       ${renderProjectCommandHeader(o, c, primary, { money: canSeeMoney, pendingRequests, nextEvent })}
-      ${projectFeedHtml(o, c, u, { canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline })}
-      <!-- next step lives at the top of the feed (2026-10-24) -->
-      <div class="order-workspace-grid project-workspace-templates" aria-hidden="true">
+      <div class="project-command-grid">
+      <main class="project-command-main">
+        ${projectFeedHtml(o, c, u, { canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline })}
+        <!-- next step lives at the top of the feed (2026-10-24) -->
+        <div class="order-workspace-grid project-workspace-templates" aria-hidden="true">
         ${pendingRequests.length ? renderOrderWorkspaceTile({ orderId: o.id, key: 'request', icon: '⚠️', title: 'Запрос клиента', summary: 'Перенос или отмена события', badge: `${pendingRequests.length}`, body: renderOrderClientRequests(o), color: '#dc2626', soft: '#fef2f2' }) : ''}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'client', icon: '👤', title: 'Клиент и связь', summary: c?.name || 'Данные и все каналы связи', badge: c?.phone || c?.email ? 'контакт' : 'заполнить', body: clientBody, color: '#2563eb', soft: '#eff6ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'site', icon: '📍', title: 'Объект', summary: projectSiteSummary(o, c) || projectAddress || 'Доступ и парковка не заполнены', badge: site.gateCode || site.parkingAvailable != null ? 'инструкции' : 'заполнить', body: siteBody, color: '#0369a1', soft: '#f0f9ff' })}
@@ -31095,7 +31262,11 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'payment', icon: '💵', title: 'Оплата', summary: canSeeMoney ? (orderDebt(o) > 0 ? `Долг ${fmtMoney(orderDebt(o))}` : 'Оплачено полностью') : 'Скрыто по роли', badge: canSeeMoney ? (canSeeInternalEconomics ? `${(orderMarginPct(o)*100).toFixed(0)}%` : (orderDebt(o) > 0 ? 'долг' : 'оплачено')) : 'скрыто', body: financeBody, color: '#059669', soft: '#ecfdf5' })}
         ${isInstaller ? '' : renderOrderWorkspaceTile({ orderId: o.id, key: 'route', icon: '🧭', title: 'Маршрут заказа', summary: `Лид: ${orderLeadIntentLabel(o)} · проект: ${orderServiceSummaryLabel(o)}`, badge: `${orderMeasureScopes(o).length} услуг`, body: routeBody, color: '#4f46e5', soft: '#eef2ff' })}
         ${renderOrderWorkspaceTile({ orderId: o.id, key: 'history', icon: '🗂', title: 'Файлы и история', summary: `${(o.photos||[]).length} фото · ${(visibleTimeline||[]).length} событий`, badge: 'журнал', body: photosBody, color: '#475569', soft: '#f8fafc' })}
+        </div>
+      </main>
+      ${renderProjectCommandSide(o, { money: canSeeMoney, economics: canSeeInternalEconomics, installer: isInstaller })}
       </div>
+    </div>
     </div>`;
 }
 
@@ -43160,8 +43331,9 @@ function renderPayroll() {
   const totalPayroll = payouts.reduce((s,p) => s + p.total, 0);
 
   return `
-  <div class="card mb-4">
-    <div class="flex items-center gap-3 flex-wrap">
+  <section class="payroll-page">
+  <div class="card mb-4 payroll-toolbar">
+    <div class="flex items-center gap-3 flex-wrap payroll-toolbar-row">
       <h3 class="font-semibold">💰 Зарплата к выплате</h3>
       <select onchange="state.payrollPeriod=this.value; render();">
         <option value="this_week" ${period==='this_week'?'selected':''}>Эта неделя</option>
@@ -43187,7 +43359,7 @@ function renderPayroll() {
       <div>За этот период никому не начислено. Возможно нужно завершить заказы или настроить тип оплаты у сотрудников (Команда → 💰).</div>
     </div>
   ` : payouts.map(p => `
-    <div class="card mb-3">
+    <div class="card mb-3 payroll-employee-card">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-full brand-gradient text-white flex items-center justify-center font-semibold">${p.user.name[0]}</div>
@@ -43201,20 +43373,23 @@ function renderPayroll() {
           <button class="btn-primary text-sm" onclick="markPayoutPaid('${p.user.id}','${start.toISOString()}','${end.toISOString()}')">✓ Выплачено</button>
         </div>
       </div>
-      <table class="w-full text-sm">
+      <div class="payroll-table-wrap">
+      <table class="w-full text-sm payroll-breakdown-table">
         <thead><tr class="text-xs text-gray-500"><th class="text-left p-1">Дата</th><th class="text-left p-1">Заказ</th><th class="text-left p-1">Описание</th><th class="text-left p-1">Сумма</th><th class="text-left p-1">Статус</th></tr></thead>
         <tbody>
           ${p.breakdown.map(b => `<tr class="border-t ${b.paid?'opacity-50':''}">
-            <td class="p-1.5 text-xs">${b.date ? fmtDate(b.date) : '—'}</td>
-            <td class="p-1.5">${b.orderNumber ? `<a class="text-blue-600 underline cursor-pointer" onclick="openOrder('${b.orderId}')">${b.orderNumber}</a>` : '—'}</td>
-            <td class="p-1.5 text-xs">${b.label}</td>
-            <td class="p-1.5 font-semibold text-emerald-700">${fmtMoney(b.amount)}</td>
-            <td class="p-1.5"><span class="tag ${b.paid?'bg-gray-200':'bg-amber-100 text-amber-800'}">${b.paid?'✓ Выплачено':'⏳ Pending'}</span></td>
+            <td data-label="Дата" class="p-1.5 text-xs">${b.date ? fmtDate(b.date) : '—'}</td>
+            <td data-label="Заказ" class="p-1.5">${b.orderNumber ? `<a class="text-blue-600 underline cursor-pointer" onclick="openOrder('${b.orderId}')">${b.orderNumber}</a>` : '—'}</td>
+            <td data-label="Описание" class="p-1.5 text-xs">${b.label}</td>
+            <td data-label="Сумма" class="p-1.5 font-semibold text-emerald-700">${fmtMoney(b.amount)}</td>
+            <td data-label="Статус" class="p-1.5"><span class="tag ${b.paid?'bg-gray-200':'bg-amber-100 text-amber-800'}">${b.paid?'✓ Выплачено':'⏳ Pending'}</span></td>
           </tr>`).join('')}
         </tbody>
       </table>
+      </div>
     </div>
   `).join('')}
+  </section>
   `;
 }
 
