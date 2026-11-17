@@ -7,7 +7,17 @@ RELEASES_DIR="/home/runcloud/rolanpro-crm-releases"
 STATE_FILE="/home/runcloud/.rolanpro-crm-active-release"
 ENV_BACKUP="/home/runcloud/.rolanpro-crm.env.production.local"
 POLL_SECONDS=15
+TICK_SECONDS=5
 BACKUP_DIR="/home/runcloud/backups/crm-db"
+HEALTH_URL="http://127.0.0.1:3000/api/health"
+HEALTH_FAILURES_BEFORE_RESTART=3
+# Runtime heap cap: when the CRM leaks or a huge payload arrives, Node dies and
+# this watcher restarts it, instead of the kernel OOM-killer picking a victim
+# (possibly PostgreSQL) while the whole droplet swaps.
+NEXT_MAX_OLD_SPACE_MB="${ROLANPRO_NEXT_MAX_OLD_SPACE_MB:-1024}"
+# A failed release build is retried after this pause, not on every poll: an
+# endless npm ci + next build loop kept the 4 GB droplet in swap.
+DEPLOY_RETRY_SECONDS=300
 
 export PATH="$RUNTIME_DIR/bin:$PATH"
 export NODE_ENV="production"
@@ -15,11 +25,172 @@ export NODE_ENV="production"
 child_pid=""
 active_dir=""
 active_sha=""
-SELF_PATH="$(readlink -f "$0")"
+health_failures=0
+restart_failures=0
+next_restart_at=0
+last_health_check_at=0
+guarded_job=""
+failed_deploy_sha=""
+failed_deploy_at=0
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SELF_HASH="$(sha256sum "$SELF_PATH" | cut -d' ' -f1)"
 
 log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
+now_epoch() {
+  date +%s
+}
+
+# HTTP status of the health endpoint; "000" when nothing answers on port 3000.
+health_status() {
+  local code
+  code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null)"
+  printf '%s' "${code:-000}"
+}
+
+# The Next.js process answers HTTP. 503 means "running, database unreachable":
+# restarting Next.js would not fix that, so it counts as answering. An older
+# release without /api/health answers 404 or a redirect, which also counts.
+server_answers() {
+  case "$(health_status)" in
+    000|502|504) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+process_rss_mb() {
+  awk '/^VmRSS:/ { printf "%d", $2 / 1024 }' "/proc/$1/status" 2>/dev/null || printf '?'
+}
+
+log_memory() {
+  local summary
+  summary="$(free -m 2>/dev/null | awk '/^Mem:/ { printf "RAM used %s/%s MB", $3, $2 } /^Swap:/ { printf ", swap used %s/%s MB", $3, $2 }')"
+  [ -n "$summary" ] && log "Memory: $summary"
+  return 0
+}
+
+# Reaps a finished Next.js process and records why it stopped.
+note_child_exit() {
+  local pid="$1" rc
+  wait "$pid" 2>/dev/null
+  rc=$?
+  if [ "$rc" -eq 127 ]; then
+    log "Next.js process $pid stopped (exit code unknown: process adopted after watcher re-exec)"
+  elif [ "$rc" -gt 128 ]; then
+    log "Next.js process $pid was killed by signal $((rc - 128)) (exit code $rc)"
+  else
+    log "Next.js process $pid exited with code $rc"
+  fi
+}
+
+restart_delay() {
+  case "$1" in
+    1) echo 5 ;;
+    2) echo 15 ;;
+    3) echo 30 ;;
+    4) echo 60 ;;
+    *) echo 120 ;;
+  esac
+}
+
+# Keeps the active release serving. Called every tick of the main loop and
+# while a release builds, so the CRM is never left down until the next commit:
+#  - a dead process is restarted, with growing pauses between failed attempts
+#    and no limit on the number of attempts;
+#  - a live process that stops answering HTTP three checks in a row is
+#    restarted too.
+supervise_next() {
+  local now delay pid
+  if [ -z "$active_dir" ] || [ ! -f "$active_dir/.next/BUILD_ID" ]; then
+    return 0
+  fi
+  now="$(now_epoch)"
+
+  if [ -n "$child_pid" ] && ! kill -0 "$child_pid" 2>/dev/null; then
+    log "Next.js exited unexpectedly"
+    note_child_exit "$child_pid"
+    log_memory
+    child_pid=""
+    health_failures=0
+  fi
+
+  if [ -z "$child_pid" ]; then
+    if [ "$now" -lt "$next_restart_at" ]; then
+      return 0
+    fi
+    log "Restarting Next.js (attempt $((restart_failures + 1)))"
+    clear_stale_next
+    if start_next "$active_dir"; then
+      return 0
+    fi
+    restart_failures=$((restart_failures + 1))
+    delay="$(restart_delay "$restart_failures")"
+    next_restart_at=$(( $(now_epoch) + delay ))
+    log "Next.js restart failed; next attempt in ${delay}s"
+    return 0
+  fi
+
+  if [ $((now - last_health_check_at)) -lt "$POLL_SECONDS" ]; then
+    return 0
+  fi
+  last_health_check_at="$now"
+  if server_answers; then
+    health_failures=0
+    return 0
+  fi
+
+  health_failures=$((health_failures + 1))
+  log "Next.js did not answer the health check ($health_failures/$HEALTH_FAILURES_BEFORE_RESTART)"
+  if [ "$health_failures" -ge "$HEALTH_FAILURES_BEFORE_RESTART" ]; then
+    pid="$child_pid"
+    log "Next.js process $pid is unresponsive (RSS $(process_rss_mb "$pid") MB); restarting"
+    log_memory
+    stop_next
+    clear_stale_next
+    health_failures=0
+    next_restart_at=0
+  fi
+}
+
+# Runs a long build step in the background while the active release stays
+# supervised, so a crash during a 10-15 minute build is repaired within
+# seconds instead of after the build.
+run_guarded() {
+  local rc
+  "$@" &
+  guarded_job=$!
+  while kill -0 "$guarded_job" 2>/dev/null; do
+    sleep 2
+    supervise_next
+  done
+  wait "$guarded_job"
+  rc=$?
+  guarded_job=""
+  return "$rc"
+}
+
+stop_guarded_job() {
+  if [ -n "$guarded_job" ] && kill -0 "$guarded_job" 2>/dev/null; then
+    kill "$guarded_job" 2>/dev/null || true
+  fi
+  guarded_job=""
+}
+
+in_dir() {
+  local dir="$1"
+  shift
+  (cd "$dir" && "$@")
+}
+
+# Builds yield CPU and disk to the live CRM and PostgreSQL.
+low_priority() {
+  if command -v ionice >/dev/null 2>&1; then
+    nice -n 10 ionice -c2 -n7 "$@"
+  else
+    nice -n 10 "$@"
+  fi
 }
 
 clear_stale_next() {
@@ -69,21 +240,28 @@ start_next() {
     # shellcheck disable=SC1090
     . "$ENV_BACKUP" || exit 1
     set +a
+    case " ${NODE_OPTIONS:-} " in
+      *--max-old-space-size*) ;;
+      *) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=$NEXT_MAX_OLD_SPACE_MB" ;;
+    esac
     exec ./node_modules/.bin/next start -H 0.0.0.0 -p 3000
   ) &
   child_pid=$!
 
   for _ in $(seq 1 60); do
     if ! kill -0 "$child_pid" 2>/dev/null; then
-      wait "$child_pid" 2>/dev/null || true
+      note_child_exit "$child_pid"
       child_pid=""
       return 1
     fi
 
-    if curl --silent --fail --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+    if server_answers; then
       sleep 1
       if kill -0 "$child_pid" 2>/dev/null; then
-        log "Next.js is healthy on port 3000"
+        log "Next.js is healthy on port 3000 (pid $child_pid)"
+        health_failures=0
+        restart_failures=0
+        next_restart_at=0
         return 0
       fi
     fi
@@ -195,12 +373,12 @@ build_release() {
   set +a
 
   log "Installing dependencies for $sha"
-  if ! (cd "$temporary_dir" && env -u NODE_ENV npm ci); then
+  if ! run_guarded in_dir "$temporary_dir" low_priority env -u NODE_ENV npm ci; then
     log "Dependency installation failed for $sha"
     return 1
   fi
 
-  if ! (cd "$temporary_dir" && ./node_modules/.bin/prisma generate); then
+  if ! run_guarded in_dir "$temporary_dir" low_priority ./node_modules/.bin/prisma generate; then
     log "Prisma client generation failed for $sha"
     return 1
   fi
@@ -208,7 +386,7 @@ build_release() {
   log "Building Next.js release $sha"
   # The current CRM route graph exceeds a 768 MB V8 heap during Next.js type/build analysis.
   # Keep this bounded below total server memory while leaving room for the active release.
-  if ! (cd "$temporary_dir" && NODE_OPTIONS=--max-old-space-size=1024 npm run build); then
+  if ! run_guarded in_dir "$temporary_dir" low_priority env NODE_OPTIONS=--max-old-space-size=1024 npm run build; then
     log "Next.js build failed for $sha"
     return 1
   fi
@@ -315,62 +493,84 @@ reexec_if_script_changed() {
   fi
 }
 
-trap 'cleanup_partials; stop_next; exit 0' INT TERM
+record_failed_deploy() {
+  failed_deploy_sha="$1"
+  failed_deploy_at="$(now_epoch)"
+  log "Deployment $1 failed; retrying in ${DEPLOY_RETRY_SECONDS}s"
+}
 
-mkdir -p "$RELEASES_DIR"
+deploy_is_backing_off() {
+  [ "$1" = "$failed_deploy_sha" ] && [ $(( $(now_epoch) - failed_deploy_at )) -lt "$DEPLOY_RETRY_SECONDS" ]
+}
 
-if [ ! -s "$ENV_BACKUP" ]; then
-  log "Missing production environment backup: $ENV_BACKUP"
-  exit 1
-fi
+main() {
+  trap 'stop_guarded_job; cleanup_partials; stop_next; exit 0' INT TERM
 
-cleanup_partials
+  mkdir -p "$RELEASES_DIR"
 
-current_sha="$(cd "$APP_DIR" && git rev-parse HEAD)"
-
-if [ -s "$STATE_FILE" ]; then
-  IFS=$'\t' read -r active_sha active_dir <"$STATE_FILE" || true
-fi
-
-adopt_pid="${ROLANPRO_ADOPT_CHILD_PID:-}"
-unset ROLANPRO_ADOPT_CHILD_PID
-if [ -n "$adopt_pid" ] && kill -0 "$adopt_pid" 2>/dev/null && [ -n "$active_sha" ]; then
-  # Re-executed after a script update: keep serving from the running process.
-  child_pid="$adopt_pid"
-  log "Adopted running Next.js process $child_pid for $active_sha"
-else
-  clear_stale_next
-fi
-
-if [ -n "$child_pid" ]; then
-  :
-elif [ -n "$active_sha" ] && [ -f "$active_dir/.next/BUILD_ID" ]; then
-  start_next "$active_dir" || exit 1
-elif [ -z "$active_sha" ] && [ -f "$APP_DIR/.next/BUILD_ID" ]; then
-  active_sha="$current_sha"
-  active_dir="$APP_DIR"
-  write_state "$active_sha" "$active_dir"
-  start_next "$active_dir" || exit 1
-else
-  deploy_sha "$current_sha" || exit 1
-fi
-
-while true; do
-  sleep "$POLL_SECONDS"
-
-  if [ -n "$child_pid" ] && ! kill -0 "$child_pid" 2>/dev/null; then
-    log "Next.js exited unexpectedly; restarting"
-    wait "$child_pid" 2>/dev/null || true
-    child_pid=""
-    start_next "$active_dir" || true
+  if [ ! -s "$ENV_BACKUP" ]; then
+    log "Missing production environment backup: $ENV_BACKUP"
+    exit 1
   fi
 
-  current_sha="$(cd "$APP_DIR" && git rev-parse HEAD 2>/dev/null || true)"
-  if [ -z "$current_sha" ] || [ "$current_sha" = "$active_sha" ]; then
-    continue
-  fi
-  reexec_if_script_changed
+  cleanup_partials
 
-  log "Detected new Git commit $current_sha"
-  deploy_sha "$current_sha" || log "Deployment $current_sha failed; will retry"
-done
+  current_sha="$(cd "$APP_DIR" && git rev-parse HEAD)"
+
+  if [ -s "$STATE_FILE" ]; then
+    IFS=$'\t' read -r active_sha active_dir <"$STATE_FILE" || true
+  fi
+
+  adopt_pid="${ROLANPRO_ADOPT_CHILD_PID:-}"
+  unset ROLANPRO_ADOPT_CHILD_PID
+  if [ -n "$adopt_pid" ] && kill -0 "$adopt_pid" 2>/dev/null && [ -n "$active_sha" ]; then
+    # Re-executed after a script update: keep serving from the running process.
+    child_pid="$adopt_pid"
+    log "Adopted running Next.js process $child_pid for $active_sha"
+  else
+    clear_stale_next
+  fi
+
+  # A failed first start no longer exits the watcher (supervisord gives up
+  # after a few quick exits and leaves the CRM down): the loop below keeps
+  # retrying with growing pauses.
+  if [ -n "$child_pid" ]; then
+    :
+  elif [ -n "$active_sha" ] && [ -f "$active_dir/.next/BUILD_ID" ]; then
+    start_next "$active_dir" || log "Initial Next.js start failed; the watcher will keep retrying"
+  elif [ -z "$active_sha" ] && [ -f "$APP_DIR/.next/BUILD_ID" ]; then
+    active_sha="$current_sha"
+    active_dir="$APP_DIR"
+    write_state "$active_sha" "$active_dir"
+    start_next "$active_dir" || log "Initial Next.js start failed; the watcher will keep retrying"
+  else
+    deploy_sha "$current_sha" || record_failed_deploy "$current_sha"
+  fi
+
+  while true; do
+    sleep "$TICK_SECONDS"
+
+    supervise_next
+
+    current_sha="$(cd "$APP_DIR" && git rev-parse HEAD 2>/dev/null || true)"
+    if [ -z "$current_sha" ] || [ "$current_sha" = "$active_sha" ]; then
+      continue
+    fi
+    if deploy_is_backing_off "$current_sha"; then
+      continue
+    fi
+    reexec_if_script_changed
+
+    log "Detected new Git commit $current_sha"
+    if deploy_sha "$current_sha"; then
+      failed_deploy_sha=""
+    else
+      record_failed_deploy "$current_sha"
+    fi
+  done
+}
+
+# Sourcing the script (tests) defines the functions without starting the watcher.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

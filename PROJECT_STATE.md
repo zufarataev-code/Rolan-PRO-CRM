@@ -2,6 +2,20 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — CRM больше не остаётся лежать: сторож перезапускает Next.js и проверяет здоровье (Claude, issue #541, PR pending)
+
+- Owner: CRM падает почти каждый день, лиды получают 502. RunCloud 7–16 ноября: 9 тревог «connect() failed (111) to upstream 172.17.0.1:3000» — Next.js не слушал порт, база жива. 4 падения совпали с деплоем (сборка на живом сервере), 5 — между деплоями.
+- Root causes in `deploy/watch-production.sh`: одна неудачная попытка перезапуска оставляла `child_pid=""`, и сторож больше никогда не перезапускал CRM до следующего коммита; пока шла 10–15-минутная сборка, сторож вообще не следил; проверялся только PID, зависший процесс считался живым; при падении первого старта сторож выходил, и supervisord после нескольких быстрых выходов сдавался; неудачная сборка повторялась каждые 15 с; причина смерти процесса нигде не писалась.
+- Branch `claude/project-thread-xyg6pz`:
+  - `supervise_next` каждые 5 с: мёртвый процесс перезапускается без ограничения попыток с паузами 5/15/30/60/120 с, перед стартом освобождается порт 3000; живой, но 3 раза подряд не ответивший процесс (раз в 15 с) перезапускается; 503 «база недоступна» Next.js не перезапускает;
+  - долгие шаги сборки (`npm ci`, `prisma generate`, `next build`) идут через `run_guarded` в фоне с `nice`/`ionice`, а сторож всё это время продолжает следить за живым релизом;
+  - `next start` получает `--max-old-space-size=1024` (переопределяется `ROLANPRO_NEXT_MAX_OLD_SPACE_MB`), чтобы падал и перезапускался Node, а не OOM-killer выбирал жертву;
+  - в лог пишутся код выхода/сигнал, RSS зависшего процесса и память сервера; неудачный деплой повторяется через 5 минут, а не каждые 15 с; сторож больше не выходит при неудачном старте;
+  - новый публичный `GET /api/health` (`SELECT 1`, 200/503, без данных), сторож проверяет по нему; `server-diagnose` показывает лог сторожа CRM по имени, OOM-строки ядра, swap и память next-server.
+  - не сделано здесь: сборка в GitHub Actions вместо сервера (пункт 3 issue #541) — следующим PR.
+- Verification: full unit suite **1208/1208** (new: `watch-production-supervision.test.ts` drives the real script functions — restart with backoff, restart of an unresponsive process, 503 without restart, supervision during a build; `health.test.ts`; public-path test), `tsc --noEmit` clean, `bash -n` clean, production build clean (`/api/health` is a dynamic route), `git diff --check` clean.
+- Safety: на сервере ничего не менялось; изменения вступают в силу после слияния обычным деплоем (сторож перезапускает сам себя при изменении скрипта).
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
