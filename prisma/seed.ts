@@ -186,6 +186,10 @@ async function seedStatusesAndReferences() {
   const pipelineStatuses = [
     ["NEW_LEAD", "Новый лид", "New Lead", "active", "slate", false, 1],
     ["CONTACTED", "Контакт установлен", "Contacted", "active", "blue", false, 2],
+    ["CONTACTING", "Пытаемся связаться", "Contact Attempted", "active", "blue", false, 2],
+    ["QUALIFIED", "Квалифицирован", "Qualified Lead", "active", "emerald", false, 3],
+    ["DISQUALIFIED", "Не квалифицирован", "Disqualified Lead", "lost", "red", true, 22],
+    ["SPAM", "Спам / дубль", "Spam / Duplicate", "lost", "slate", true, 23],
     ["CONSULTATION_SCHEDULED", "Консультация назначена", "Consultation Scheduled", "active", "amber", false, 3],
     ["CONSULTATION_COMPLETED", "Консультация проведена", "Consultation Completed", "active", "yellow", false, 4],
     ["SURVEY_COMPLETED", "Замер завершен", "Survey Completed", "active", "indigo", false, 5],

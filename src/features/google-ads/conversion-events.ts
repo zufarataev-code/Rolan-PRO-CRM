@@ -1,5 +1,6 @@
 import { findAcquisitionTouchpoint } from "./attribution";
 import { Prisma } from "@prisma/client";
+import { enqueueConvertedLead } from "@/features/meta-capi/events";
 
 export const GOOGLE_ADS_DEFAULT_SETTING_KEY = "default";
 export const GOOGLE_ADS_QUALIFIED_LEAD_EVENT = "qualified_lead";
@@ -224,6 +225,8 @@ export async function ensureClosedWonConversion(
       },
     },
   });
+
+  if (event.lead_id) await enqueueConvertedLead(tx, { conversionEventId: event.conversion_event_id });
 
   if (!settings?.conversion_owner_customer_id || !settings.converted_lead_action_id) {
     return {

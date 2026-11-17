@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ensureClosedWonConversion, ensureQualifiedLeadConversion } from "./conversion-events";
 import { createConversionAdjustment } from "./conversion-adjustments";
+import { enqueueLeadStage } from "@/features/meta-capi/events";
 
 type Row = Record<string, any>;
 
@@ -28,7 +29,7 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
   let recorded = 0, failed = 0;
   for (const order of orders) {
     const point = points.find(item => item.legacy_order_id === order.id)
-      ?? points.find(item => item.lead_id === order.canonicalLeadId && (item.gclid || item.gbraid || item.wbraid || item.google_ads_campaign_id));
+      ?? points.find(item => item.lead_id === order.canonicalLeadId);
     try {
       await prisma.$transaction(async tx => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`google-ads:legacy:${order.id}`}))`;
@@ -38,6 +39,7 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
             const fact = (Array.isArray(order.timeline) ? order.timeline : []).find((item: Row) => item.key === key || (key === "proposal_sent" && item.key === "premium_proposal_sent"));
             const at = new Date(fact?.at || "");
             if (!Number.isNaN(at.getTime())) await ensureQualifiedLeadConversion(tx, { dealId: deal?.deal_id, leadId: point.lead_id, clientId: point.client_id, attributionTouchpointId: point.acquisition_touchpoint_id, pipelineStatusCode: stage, occurredAt: at, eventSource: (point.session_attributes as Row)?.source_channel === "PHONE" ? "PHONE" : "OTHER" });
+            if (point.lead_id && !Number.isNaN(at.getTime())) await enqueueLeadStage(tx, { leadId: point.lead_id, stageCode: stage, occurredAt: at, eventId: `legacy-${order.id}-${key}-${at.toISOString()}` });
           }
           const sale = legacyGoogleAdsSale(order);
           if (sale) {

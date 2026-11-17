@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 
 import { GOOGLE_ADS_DEFAULT_SETTING_KEY } from "./conversion-events";
 
-const PIPELINE_STAGE_SET = new Set<string>(PIPELINE_STAGE_CODES);
+const PIPELINE_STAGE_SET = new Set<string>([...PIPELINE_STAGE_CODES, "QUALIFIED"]);
 
 export class GoogleAdsSettingsValidationError extends Error {
   constructor(

@@ -15,6 +15,7 @@ test("actual proposal sharing qualifies once, while publishing its link does not
   const events: any[] = [], outboxes: any[] = [];
   const tx = {
     $executeRaw: async () => 1,
+    lead: { findUnique: async () => null },
     deal: { findFirst: async () => null },
     acquisitionTouchpoint: { findUnique: async () => point },
     googleAdsIntegrationSetting: { findUnique: async () => ({

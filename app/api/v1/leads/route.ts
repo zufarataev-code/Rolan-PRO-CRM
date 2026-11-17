@@ -10,6 +10,7 @@ import { listLeads } from "@/features/sales/service";
 import { onLeadCreated } from "@/features/core/events";
 import { persistLeadAttribution } from "@/features/google-ads/attribution";
 import type { AttributionCaptureInput, ConsentState } from "@/features/google-ads/types";
+import { LEAD_STAGES } from "@/features/sales/lead-stages";
 
 type ApiAttributionInput = {
   google_ads_customer_id?: string | null;
@@ -83,6 +84,7 @@ export async function GET(request: NextRequest) {
 
   return apiSuccess({
     items: data,
+    stages: LEAD_STAGES,
   });
 }
 
@@ -118,6 +120,10 @@ export async function POST(request: NextRequest) {
   }
 
   const trimmedName = body.name.trim();
+
+  if (body.pipeline_status_code && body.pipeline_status_code !== "NEW_LEAD") {
+    return apiError(400, "invalid_pipeline_status", "Create a new lead, then record its verified stage through the lead update action.");
+  }
 
   const pipelineStatus =
     (body.pipeline_status_code ? await getPipelineStatusId(body.pipeline_status_code) : null) ??

@@ -9,7 +9,7 @@ test("active CRM inbox reads canonical Messenger leads without copying them into
   assert.match(source, /let canonicalLeads = \[\]/);
   assert.match(source, /fetch\('\/api\/v1\/leads', \{ cache: 'no-store' \}\)/);
   // Messenger and website leads both live in PostgreSQL and are read, never copied.
-  assert.match(source, /\['facebook_messenger', 'website', 'callrail', 'meta_lead_ads'\]\.includes\(lead\?\.source\)/);
+  assert.match(source, /\.filter\(lead => lead\?\.lead_id && lead\?\.pipeline_status\)/);
   assert.match(source, /CONSULTATION_SCHEDULED/);
   assert.match(source, /new Date\(right\.scheduled_start_at\).*new Date\(left\.scheduled_start_at\)/);
   assert.match(source, /!\['cancelled', 'canceled', 'deleted'\]\.includes\(item\?\.status\)/);
@@ -33,6 +33,7 @@ test("incoming Meta forms expose project and dismiss actions while Messenger kee
       db: { settings: {} }, state: {}, canonicalLeadsRefreshedAt: Date.now(),
       canonicalMessengerLeadRows: () => [{ id: "fixture", source: leadSource, canonical: true, name: "Test enquiry", phone: "+12025550123", consultation }],
       fetchCanonicalLeads: () => {}, callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
+      canonicalLeadStages: [], leadStageControlsHtml: () => "",
       existingClientByContact: () => null, academyEsc: String, jsQuote: String, fmtDateTime: () => "fixture date",
     });
     vm.runInContext(render, context);

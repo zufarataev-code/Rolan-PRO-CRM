@@ -3,10 +3,12 @@ import { NextRequest } from "next/server";
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
-import { logSalesActivity } from "@/features/sales/activity";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
 import { claimableBy } from "@/features/sales/lead-claim";
 import { buildLeadAccessWhere, getRecordManagerScope, isCrossManagerAssignment } from "@/features/sales/access";
+import { validateManualLeadStage } from "@/features/sales/lead-stages";
+import { ensureQualifiedLeadConversion } from "@/features/google-ads/conversion-events";
+import { enqueueLeadStage } from "@/features/meta-capi/events";
 
 type RouteContext = {
   params: Promise<{
@@ -32,6 +34,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         city_id?: string | null;
         assigned_manager_id?: string | null;
         pipeline_status_code?: string;
+        stage_reason?: string;
         /**
          * Compare-and-set: the update applies only while the lead is in one of
          * these statuses. «Создать проект» claims an open lead this way, so a
@@ -43,6 +46,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   if (!body) {
     return apiError(400, "invalid_payload", "Request body is required.");
+  }
+
+  if (body.pipeline_status_code !== undefined) {
+    const error = validateManualLeadStage(body.pipeline_status_code, body.stage_reason);
+    if (error) return apiError(400, "invalid_lead_stage", error);
+    if (!Array.isArray(body.expected_status_codes) || !body.expected_status_codes.length || body.expected_status_codes.length > 30 || body.expected_status_codes.some(code => typeof code !== "string" || !code || code.length > 60)) {
+      return apiError(400, "invalid_expected_status", "Обновите список лидов перед сменой этапа.");
+    }
   }
 
   const managerId = getRecordManagerScope(auth.session);
@@ -87,10 +98,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     : [];
 
   const lead = await prisma.$transaction(async (tx) => {
+    const previous = await tx.lead.findFirst({
+      where: buildLeadAccessWhere(leadId, managerId),
+      include: { pipeline_status: true },
+    });
+    if (!previous) return null;
+    if (data.pipeline_status_id && await tx.conversionEvent.count({ where: { lead_id: leadId, event_type: "converted_lead" } })) {
+      return "converted" as const;
+    }
     const result = await tx.lead.updateMany({
       where: {
         AND: [
           buildLeadAccessWhere(leadId, managerId),
+          { updated_at: previous.updated_at },
           ...(expectedStatusCodes.length
             ? [
                 { pipeline_status: { status_code: { in: expectedStatusCodes } } },
@@ -103,8 +123,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       data,
     });
 
-    return result.count === 1 ? tx.lead.findUnique({ where: { lead_id: leadId } }) : null;
-  }).catch(() => null);
+    if (result.count !== 1) return null;
+    const changed = Boolean(data.pipeline_status_id && data.pipeline_status_id !== previous.pipeline_status_id);
+    if (changed) {
+      await ensureQualifiedLeadConversion(tx, { leadId, pipelineStatusCode: body.pipeline_status_code!, occurredAt: new Date() });
+    }
+    const activity = await tx.activityLog.create({ data: {
+      actor_user_id: auth.session.user.user_id,
+      entity_type: "lead",
+      entity_id: leadId,
+      action_key: changed ? "lead.stage_changed" : "lead.updated",
+      message: changed ? `Этап лида: ${previous.pipeline_status.status_code} → ${body.pipeline_status_code}.` : "Лид обновлён.",
+      metadata: {
+        previous_status_code: previous.pipeline_status.status_code,
+        pipeline_status_code: body.pipeline_status_code ?? previous.pipeline_status.status_code,
+        ...(changed && body.stage_reason?.trim() ? { reason: body.stage_reason.trim() } : {}),
+      },
+    } });
+    if (changed) await enqueueLeadStage(tx, { leadId, stageCode: body.pipeline_status_code!, occurredAt: activity.created_at, eventId: activity.activity_id });
+    return { lead_id: leadId };
+  });
+
+  if (lead === "converted") {
+    return apiError(409, "verified_sale", "Продажа уже подтверждена. Возвраты и отмена оформляются в проекте, история продажи сохраняется.");
+  }
 
   if (!lead) {
     if (expectedStatusCodes.length) {
@@ -115,14 +157,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     return apiError(404, "not_found", "Lead was not found.");
   }
-
-  await logSalesActivity({
-    actorUserId: auth.session.user.user_id,
-    entityType: "lead",
-    entityId: lead.lead_id,
-    actionKey: "lead.updated",
-    message: `Лид ${lead.name} обновлен.`,
-  });
 
   return apiSuccess({
     lead_id: lead.lead_id,

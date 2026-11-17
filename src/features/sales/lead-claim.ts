@@ -1,5 +1,5 @@
 /** Statuses in which a lead is still in the «Новые лиды» inbox. */
-export const OPEN_LEAD_STATUS_CODES = ["NEW_LEAD", "LEAD", "CONSULTATION_SCHEDULED"];
+export const OPEN_LEAD_STATUS_CODES = ["NEW_LEAD", "LEAD", "CONTACTING", "CONTACTED", "QUALIFIED", "CONSULTATION_SCHEDULED"];
 
 /** A claim older than this is treated as abandoned (e.g. a closed tab). */
 export const LEAD_CLAIM_TTL_MS = 10 * 60 * 1000;
