@@ -13,19 +13,24 @@ async function fixture(run: (state: { row: any; sale: any; writes: any[]; submis
   const occurredAt = new Date();
   const payload = { event_name: "ConvertedLead", event_time: Math.floor(occurredAt.getTime() / 1000), event_id: "sale-event", action_source: "system_generated", user_data: { lead_id: "1234567890123456" }, custom_data: { event_source: "crm", lead_event_source: "RolanPRO CRM", value: 1000, currency: "USD" } };
   const state = {
-    row: { meta_capi_outbox_id: "row", lead_id: "lead", conversion_event_id: "sale", event_name: "ConvertedLead", event_id: "sale-event", occurred_at: occurredAt, attempt_count: 0, dataset_id: "123", payload_snapshot: payload, test_accepted_at: null } as any,
+    row: { meta_capi_outbox_id: "row", lead_id: "lead", conversion_event_id: "sale", event_name: "ConvertedLead", event_id: "sale-event", occurred_at: occurredAt, attempt_count: 0, first_attempt_at: null, processing_status: "queued", next_attempt_at: occurredAt, last_error_code: null, dataset_id: "123", payload_snapshot: payload, test_accepted_at: null } as any,
     sale: { conversion_value: "1000.00", adjustments: [] } as any,
     writes: [] as any[], submissions: [] as any[], network: { response: (): Response | Promise<Response> => Response.json({ events_received: 1 }) },
   };
   try {
     process.env.META_CAPI_DATASET_ID = "123"; process.env.META_CAPI_ACCESS_TOKEN = "fixture-token"; process.env.META_CAPI_UPLOAD_ENABLED = "true";
     delete process.env.META_CAPI_TEST_EVENT_CODE;
-    (prisma.metaCapiOutbox as any).findFirst = async () => structuredClone(state.row);
+    (prisma.metaCapiOutbox as any).findFirst = async (args: any) => {
+      if (args.select?.next_attempt_at) return state.row.processing_status === "retry" && ["graph_190", "graph_200", "http_401", "http_403"].includes(state.row.last_error_code) && state.row.next_attempt_at > new Date() && state.row.occurred_at.getTime() >= Date.now() - 7 * 86400000
+        ? { next_attempt_at: state.row.next_attempt_at, last_error_code: state.row.last_error_code } : null;
+      return structuredClone(state.row);
+    };
     (prisma.metaCapiOutbox as any).updateMany = async (args: any) => {
       state.writes.push(args);
       if (args.data.payload_snapshot) state.row.payload_snapshot = structuredClone(args.data.payload_snapshot);
       if (args.data.attempt_count) state.row.attempt_count += args.data.attempt_count.increment;
       if (args.data.test_accepted_at) state.row.test_accepted_at = args.data.test_accepted_at;
+      for (const key of ["first_attempt_at", "processing_status", "last_error_code", "next_attempt_at"]) if (args.data[key] !== undefined) state.row[key] = args.data[key];
       return { count: 1 };
     };
     (prisma.lead as any).findUnique = async () => ({ consent_snapshots: [] });
@@ -35,6 +40,7 @@ async function fixture(run: (state: { row: any; sale: any; writes: any[]; submis
     globalThis.fetch = async (_url, init) => {
       const submitted = JSON.parse(String(init?.body));
       assert.deepEqual(submitted.data[0], state.row.payload_snapshot, "actual outgoing payload is durable before HTTP");
+      assert.ok(state.row.first_attempt_at instanceof Date, "first actual attempt timestamp is durable before HTTP");
       state.submissions.push(submitted);
       return state.network.response();
     };
@@ -91,5 +97,79 @@ test("systemic credential and permission failures stop the batch after one event
     assert.equal(result.results.length, 1);
     assert.equal(state.submissions.length, 1);
     assert.equal("code" in result.results[0] && result.results[0].code, "code" in failure ? `graph_${failure.code}` : `http_${failure.http}`);
+    assert.equal(state.row.processing_status, "retry");
+    assert.equal(state.row.first_attempt_at, null, "known rejection does not start an uncertain-outcome window");
+    assert.ok(state.row.next_attempt_at.getTime() - Date.now() >= 3600000 - 1000, "credential retries wait at least an hour");
+    const writeCount = state.writes.length;
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      const paused = await runMetaCapiSyncCycle({ limit: 25 });
+      assert.equal(paused.results.length, 0);
+      assert.ok("paused_until" in paused && paused.paused_until instanceof Date);
+      assert.equal("pause_code" in paused && paused.pause_code, state.row.last_error_code);
+      assert.equal(state.writes.length, writeCount, "shared auth pause must not claim other queued rows");
+      assert.equal(state.submissions.length, 1);
+    }
+    state.row.next_attempt_at = new Date(Date.now() - 1);
+    const repeated = await runMetaCapiSyncCycle({ limit: 25 });
+    assert.equal(repeated.results.length, 1);
+    assert.equal(state.submissions.length, 2);
+    assert.equal(state.row.first_attempt_at, null, "repeated confirmed auth rejection remains recoverable");
+  });
+});
+
+test("known auth rejection preserves a prior uncertain attempt window", async () => {
+  await fixture(async state => {
+    const firstAttempt = new Date(Date.now() - 4 * 3600000);
+    state.row.first_attempt_at = firstAttempt;
+    state.row.attempt_count = 10;
+    state.network.response = () => Response.json({ error: { code: 190 } }, { status: 400 });
+    const result = await runMetaCapiSyncCycle({ limit: 25 });
+    assert.equal(result.results.length, 1);
+    assert.equal(state.row.processing_status, "retry");
+    assert.equal(state.row.first_attempt_at.getTime(), firstAttempt.getTime());
+  });
+});
+
+test("four-hour transient failures remain retryable past eight attempts", async () => {
+  await fixture(async state => {
+    state.row.attempt_count = 10;
+    state.row.first_attempt_at = new Date(Date.now() - 4 * 3600000);
+    state.network.response = () => Response.json({}, { status: 503 });
+    assert.deepEqual(await processNextMetaCapiEvent(), { status: "retry", code: "http_503" });
+    assert.equal(state.row.processing_status, "retry");
+    assert.equal(state.submissions.length, 1);
+  });
+});
+
+test("unknown prior submissions stop after the 48-hour dedup window without rewriting event time", async () => {
+  await fixture(async state => {
+    state.row.attempt_count = 12;
+    state.row.first_attempt_at = new Date(Date.now() - 48 * 3600000 - 1);
+    const time = state.row.payload_snapshot.event_time;
+    assert.deepEqual(await processNextMetaCapiEvent(), { status: "needs_operator_action", code: "dedup_window_elapsed" });
+    assert.equal(state.submissions.length, 0);
+    assert.equal(state.row.payload_snapshot.event_time, time);
+  });
+});
+
+test("seven-day event expiry remains terminal before the retry dedup guard", async () => {
+  await fixture(async state => {
+    state.row.occurred_at = new Date(Date.now() - 7 * 86400000 - 1);
+    state.row.first_attempt_at = new Date(Date.now() - 50 * 3600000);
+    state.row.processing_status = "retry"; state.row.last_error_code = "graph_190"; state.row.next_attempt_at = new Date(Date.now() - 1);
+    const result = await runMetaCapiSyncCycle({ limit: 1 });
+    assert.equal(result.results[0]?.status, "suppressed");
+    assert.equal("code" in result.results[0] && result.results[0].code, "event_too_old");
+    assert.equal(state.submissions.length, 0);
+  });
+});
+
+test("provider rate limiting stops the current batch with the row retryable", async () => {
+  for (const code of [4, 17, 32, 613, null]) await fixture(async state => {
+    state.network.response = () => Response.json(code === null ? {} : { error: { code } }, { status: code === null ? 429 : 400 });
+    const result = await runMetaCapiSyncCycle({ limit: 25 });
+    assert.equal(result.results.length, 1);
+    assert.equal(state.submissions.length, 1);
+    assert.equal(state.row.processing_status, "retry");
   });
 });

@@ -9,6 +9,7 @@ CREATE TABLE "meta_capi_outbox" (
   "payload_snapshot" JSONB,
   "processing_status" VARCHAR(40) NOT NULL DEFAULT 'queued',
   "attempt_count" INTEGER NOT NULL DEFAULT 0,
+  "first_attempt_at" TIMESTAMPTZ(6),
   "next_attempt_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "lease_token" UUID,
   "lease_expires_at" TIMESTAMPTZ(6),

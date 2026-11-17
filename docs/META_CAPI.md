@@ -74,10 +74,17 @@ operator review. There is no automatic live activation or bidding-goal change.
 Workers atomically claim a two-minute database lease. Only its token can complete
 the claim. Expired leases may retry with the original `event_id`; the 8-second
 HTTP deadline is well inside the lease. Network/timeout/429/transient/5xx failures
-retry with exponential delay from one minute to six hours, at most eight
-attempts. Authentication and permanent provider errors need operator action.
-An account authentication/permission failure stops the current batch instead
-of marking the next 24 events failed under the same broken credential.
+retry with exponential delay from one minute to six hours. A multi-hour outage
+does not exhaust a fixed attempt count. Automatic resends stop 48 hours after
+the first HTTP attempt, before the event-ID deduplication window can expire;
+an uncertain older submission requires operator review instead of blind replay.
+The separate seven-day event-age limit still applies.
+Confirmed authentication rejection does not start a new uncertainty window;
+any window from an earlier uncertain or test submission remains intact.
+An account authentication/permission failure leaves the event retryable and
+pauses the shared queue for one hour. The owner status reports the pause and its
+end time; other events remain untouched during that backoff. Rate-limit errors
+also stop the current batch. Permanent payload errors need operator action.
 Graph bodies and exception messages are never returned or logged; status shows
 only fixed error codes, queue totals and pending age, without lead identifiers.
 

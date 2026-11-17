@@ -3,10 +3,13 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { reconcileLegacyGoogleAdsOutcomes } from "@/features/google-ads/legacy-outcomes";
 import { sha256Hex } from "@/features/google-ads/normalization";
-import { META_GRAPH_VERSION, metaEventTimeError, metaRetryDelayMs, type MetaEventPayload } from "./payload";
+import { META_EVENT_MAX_AGE_MS, META_GRAPH_VERSION, metaEventTimeError, metaRetryDelayMs, type MetaEventPayload } from "./payload";
 
 const LEASE_MS = 2 * 60 * 1000;
-const MAX_ATTEMPTS = 8;
+const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000;
+const AUTH_PAUSE_MS = 60 * 60 * 1000;
+const AUTH_FAILURE_CODES = ["graph_190", "graph_200", "http_401", "http_403"];
+const RATE_LIMIT_CODES = ["http_429", "graph_4", "graph_17", "graph_32", "graph_613"];
 
 export function metaCapiConfiguration(env: Record<string, string | undefined> = process.env) {
   const candidate = env.META_CAPI_DATASET_ID?.trim() || "";
@@ -29,8 +32,8 @@ export async function deliverMetaEvent(input: { datasetId: string; token: string
     const body = await response.json().catch(() => null) as { events_received?: unknown; error?: { code?: unknown; is_transient?: unknown } } | null;
     if (response.ok && body?.events_received === 1) return { status: "accepted", code: null };
     const graphCode = typeof body?.error?.code === "number" && Number.isInteger(body.error.code) ? body.error.code : null;
-    const code = graphCode === null ? `http_${response.status}` : `graph_${graphCode}`;
-    const retryable = response.status === 429 || response.status >= 500 || body?.error?.is_transient === true || [4, 17, 32, 613].includes(graphCode ?? -1);
+    const code = graphCode === null || [401, 403, 429].includes(response.status) ? `http_${response.status}` : `graph_${graphCode}`;
+    const retryable = AUTH_FAILURE_CODES.includes(code) || response.status === 429 || response.status >= 500 || body?.error?.is_transient === true || [4, 17, 32, 613].includes(graphCode ?? -1);
     return { status: retryable || (response.ok && graphCode === null) ? "retry" : "needs_operator_action", code: response.ok && graphCode === null ? "unconfirmed_acceptance" : code };
   } catch {
     // Unknown network outcomes retry the identical event_id; Meta deduplicates it.
@@ -64,6 +67,7 @@ export async function processNextMetaCapiEvent() {
   if (next.dataset_id && next.dataset_id !== config.datasetId) return finish("needs_operator_action", "dataset_changed");
   const timeError = metaEventTimeError(next.occurred_at, now);
   if (timeError) return finish("suppressed", timeError);
+  if (next.first_attempt_at && now.getTime() - next.first_attempt_at.getTime() >= DEDUP_WINDOW_MS) return finish("needs_operator_action", "dedup_window_elapsed");
   const lead = next.lead_id ? await prisma.lead.findUnique({ where: { lead_id: next.lead_id }, select: { consent_snapshots: { where: { effective_at: { lte: now } }, orderBy: [{ effective_at: "desc" }, { created_at: "desc" }], take: 1, select: { ad_user_data: true, ad_personalization: true } } } }) : null;
   if (!lead) return finish("suppressed", "lead_unavailable");
   if (lead.consent_snapshots.some(consent => consent.ad_user_data === "DENIED" || consent.ad_personalization === "DENIED")) return finish("suppressed", "consent_denied");
@@ -90,15 +94,24 @@ export async function processNextMetaCapiEvent() {
     delete payload.user_data.ph;
     if (!payload.user_data.lead_id) return finish("suppressed", "missing_matching_data");
   }
-  const prepared = await prisma.metaCapiOutbox.updateMany({ where: key, data: { payload_snapshot: payload as unknown as Prisma.InputJsonValue, lease_expires_at: new Date(Date.now() + LEASE_MS) } });
+  const prepared = await prisma.metaCapiOutbox.updateMany({ where: key, data: { payload_snapshot: payload as unknown as Prisma.InputJsonValue, first_attempt_at: next.first_attempt_at ?? new Date(), lease_expires_at: new Date(Date.now() + LEASE_MS) } });
   if (!prepared.count) return { status: "busy" as const };
   const outcome = await deliverMetaEvent({ datasetId: config.datasetId!, token: config.token!, testCode: config.testCode, payload });
   if (outcome.status === "accepted") return finish(config.testCode ? "test_accepted" : "accepted", null, config.testCode ? { test_accepted_at: now, test_event_code_hash: testCodeHash } : { accepted_at: now });
-  const exhausted = outcome.status === "retry" && next.attempt_count + 1 >= MAX_ATTEMPTS;
-  return finish(exhausted ? "needs_operator_action" : outcome.status, exhausted ? "retry_exhausted" : outcome.code, { next_attempt_at: new Date(now.getTime() + metaRetryDelayMs(next.attempt_count + 1)) });
+  const delay = AUTH_FAILURE_CODES.includes(outcome.code ?? "") ? AUTH_PAUSE_MS : metaRetryDelayMs(next.attempt_count + 1);
+  return finish(outcome.status, outcome.code, { next_attempt_at: new Date(now.getTime() + delay), ...(AUTH_FAILURE_CODES.includes(outcome.code ?? "") && !next.first_attempt_at ? { first_attempt_at: null } : {}) });
+}
+
+function activeAuthPause(now: Date) {
+  return prisma.metaCapiOutbox.findFirst({
+    where: { processing_status: "retry", last_error_code: { in: AUTH_FAILURE_CODES }, next_attempt_at: { gt: now }, occurred_at: { gte: new Date(now.getTime() - META_EVENT_MAX_AGE_MS) } },
+    orderBy: { next_attempt_at: "desc" }, select: { next_attempt_at: true, last_error_code: true },
+  });
 }
 
 export async function runMetaCapiSyncCycle({ limit = 25 } = {}) {
+  const paused = await activeAuthPause(new Date());
+  if (paused) return { reconciliation: null, results: [], paused_until: paused.next_attempt_at, pause_code: paused.last_error_code };
   const reconciliation = await reconcileLegacyGoogleAdsOutcomes().catch(() => {
     console.error("[meta-capi] legacy_outcomes_unavailable");
     return { recorded: 0, failed: 1 };
@@ -108,19 +121,20 @@ export async function runMetaCapiSyncCycle({ limit = 25 } = {}) {
     const result = await processNextMetaCapiEvent();
     results.push(result);
     if (["idle", "disabled", "busy"].includes(result.status)) break;
-    if ("code" in result && ["graph_190", "graph_200", "http_401", "http_403"].includes(result.code ?? "")) break;
+    if ("code" in result && [...AUTH_FAILURE_CODES, ...RATE_LIMIT_CODES].includes(result.code ?? "")) break;
   }
   return { reconciliation, results };
 }
 
 export async function getMetaCapiStatus() {
   const config = metaCapiConfiguration();
-  const [counts, oldest, error] = await Promise.all([
+  const [counts, oldest, error, paused] = await Promise.all([
     prisma.metaCapiOutbox.groupBy({ by: ["processing_status"], _count: { _all: true } }),
     prisma.metaCapiOutbox.findFirst({ where: { processing_status: { in: ["queued", "retry", "processing"] } }, orderBy: { occurred_at: "asc" }, select: { occurred_at: true } }),
     prisma.metaCapiOutbox.findFirst({ where: { last_error_code: { not: null } }, orderBy: { updated_at: "desc" }, select: { last_error_code: true } }),
+    activeAuthPause(new Date()),
   ]);
-  return { configured: config.configured, enabled: config.enabled, dataset_id: config.datasetId, mode: !config.enabled || !config.configured ? "disabled" : config.testCode ? "test" : "live", access_token_present: Boolean(config.token), queue: Object.fromEntries(counts.map(item => [item.processing_status, item._count._all])), oldest_pending_at: oldest?.occurred_at ?? null, latest_error_code: error?.last_error_code ?? null };
+  return { configured: config.configured, enabled: config.enabled, dataset_id: config.datasetId, mode: !config.enabled || !config.configured ? "disabled" : config.testCode ? "test" : "live", access_token_present: Boolean(config.token), queue: Object.fromEntries(counts.map(item => [item.processing_status, item._count._all])), oldest_pending_at: oldest?.occurred_at ?? null, latest_error_code: error?.last_error_code ?? null, paused_until: paused?.next_attempt_at ?? null, pause_code: paused?.last_error_code ?? null };
 }
 
 export function startMetaCapiSyncScheduler() {

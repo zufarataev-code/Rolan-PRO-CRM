@@ -93,7 +93,7 @@ test("Graph acceptance requires one received event; retries keep event_id and re
   assert.equal(body.data[0].event_id, "fixture");
   assert.equal(calls[0].url.includes("private-token"), false);
   assert.deepEqual(await deliverMetaEvent({ datasetId: "123", token: "private-token", testCode: null, payload }, async () => Response.json({ events_received: 0 })), { status: "retry", code: "unconfirmed_acceptance" });
-  assert.deepEqual(await deliverMetaEvent({ datasetId: "123", token: "private-token", testCode: null, payload }, async () => Response.json({ error: { code: 190, message: "private-token contact@example.com" } }, { status: 400 })), { status: "needs_operator_action", code: "graph_190" });
+  assert.deepEqual(await deliverMetaEvent({ datasetId: "123", token: "private-token", testCode: null, payload }, async () => Response.json({ error: { code: 190, message: "private-token contact@example.com" } }, { status: 400 })), { status: "retry", code: "graph_190" });
   assert.deepEqual(await deliverMetaEvent({ datasetId: "123", token: "private-token", testCode: null, payload }, async () => { throw new Error("private-token"); }), { status: "retry", code: "network_or_timeout" });
 });
 
