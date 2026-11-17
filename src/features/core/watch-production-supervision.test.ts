@@ -122,3 +122,25 @@ test("long build steps run guarded and at low priority", () => {
     assert.match(line!, /run_guarded in_dir "\$temporary_dir" low_priority/, step);
   }
 });
+
+test("stopping the watcher mid-build stops the whole build tree, not only its wrapper", () => {
+  const out = runScenario(`
+supervise_next() { :; }
+dir=$(mktemp -d)
+# a build step that, like npm, leaves its own children running
+run_guarded in_dir "$dir" low_priority bash -c 'sleep 7391 & sleep 7391' &
+runner=$!
+sleep 1
+# the job run_guarded started, as the watcher's TERM trap sees it
+guarded_job=$(pgrep -P "$runner" | head -n1)
+echo "TREE $(process_tree "$guarded_job" | wc -l)"
+stop_guarded_job
+sleep 0.5
+echo "LEFT $(pgrep -fx 'sleep 7391' | wc -l)"
+pkill -fx 'sleep 7391'; kill "$runner" 2>/dev/null; wait "$runner" 2>/dev/null
+true
+`);
+  const tree = Number(/TREE (\d+)/.exec(out)?.[1] ?? 0);
+  assert.ok(tree >= 4, `expected wrapper, priority shell, build and its child, got ${tree}\n${out}`);
+  assert.match(out, /LEFT 0/);
+});

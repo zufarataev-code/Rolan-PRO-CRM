@@ -171,9 +171,48 @@ run_guarded() {
   return "$rc"
 }
 
+# True while a pid exists and has not already exited (a zombie counts as gone).
+process_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"
+  [ -n "$state" ] && [ "${state#Z}" = "$state" ]
+}
+
+# Prints a pid and all of its descendants (children first found, then theirs).
+process_tree() {
+  local pid child
+  for pid in "$@"; do
+    echo "$pid"
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+      process_tree "$child"
+    done
+  done
+}
+
+# Stops the whole guarded build (wrapper, npm, prisma, next build), not only
+# the wrapper, so a replacement watcher never builds on top of a leftover one.
 stop_guarded_job() {
-  if [ -n "$guarded_job" ] && kill -0 "$guarded_job" 2>/dev/null; then
-    kill "$guarded_job" 2>/dev/null || true
+  local pids pid waited=0
+  if [ -n "$guarded_job" ]; then
+    pids="$(process_tree "$guarded_job")"
+    for pid in $pids; do
+      kill -TERM "$pid" 2>/dev/null || true
+    done
+    while [ "$waited" -lt 10 ]; do
+      local alive=""
+      for pid in $pids; do
+        if process_running "$pid"; then
+          alive="yes"
+        fi
+      done
+      [ -z "$alive" ] && break
+      sleep 1
+      waited=$((waited + 1))
+    done
+    for pid in $pids; do
+      kill -KILL "$pid" 2>/dev/null || true
+    done
+    wait "$guarded_job" 2>/dev/null || true
   fi
   guarded_job=""
 }
