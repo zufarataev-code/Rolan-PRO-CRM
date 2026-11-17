@@ -81,7 +81,7 @@ test("manager lead stages are audited, concurrent-safe and cannot forge a sale",
     create: { setting_key: "default", qualification_rules: { pipeline_status_code: "QUALIFIED" } },
   });
   try {
-    const created = await call(manager, "POST", "/api/v1/leads", { name: `${runTag} Stage fixture`, source: "manual" });
+    const created = await call(manager, "POST", "/api/v1/leads", { name: `Stage-${runTag}`, source: "manual" });
     assert.equal(created.status, 200);
     const id = data<{ lead_id: string }>(created.json).lead_id;
     const path = `/api/v1/leads/${id}`;

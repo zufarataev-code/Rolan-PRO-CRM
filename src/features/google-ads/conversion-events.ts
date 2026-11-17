@@ -60,6 +60,9 @@ export async function ensureQualifiedLeadConversion(
   tx: Prisma.TransactionClient,
   input: QualifiedLeadConversionInput,
 ) {
+  if (["DISQUALIFIED", "CLOSED_LOST", "SPAM"].includes(input.pipelineStatusCode.trim().toUpperCase())) {
+    return { event: null, outbox: null, deliveryState: "rule_not_matched" as const };
+  }
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {

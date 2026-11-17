@@ -46,7 +46,7 @@ export function normalizeQualificationPipelineStatus(value: unknown) {
   if (value === null || value === "") return null;
   if (typeof value !== "string") fail("invalid_qualification_stage", "qualification_pipeline_status_code must be a string or null.");
   const normalized = value.trim().toUpperCase();
-  if (!PIPELINE_STAGE_SET.has(normalized)) {
+  if (!PIPELINE_STAGE_SET.has(normalized) || normalized === "CLOSED_LOST") {
     fail("invalid_qualification_stage", "qualification_pipeline_status_code is not a known CRM pipeline stage.");
   }
   return normalized;

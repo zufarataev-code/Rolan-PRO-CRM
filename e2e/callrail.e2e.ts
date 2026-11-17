@@ -129,7 +129,7 @@ test("signed calls deduplicate concurrently, preserve original source, and creat
   assert.notEqual(nextReview.body.lead_id, review.body.lead_id, "dismissed review does not swallow future calls");
   const dismissed = await db.lead.create({ data: { name: "Dismissed fixture", phone: "+12025550188", source: "website", pipeline_status_id: status.pipeline_status_id } });
   ids.push(dismissed.lead_id);
-  const dismissedResponse = await fetch(base + "/api/v1/leads/" + dismissed.lead_id, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ pipeline_status_code: "CLOSED_LOST", expected_status_codes: ["NEW_LEAD"] }) });
+  const dismissedResponse = await fetch(base + "/api/v1/leads/" + dismissed.lead_id, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ pipeline_status_code: "CLOSED_LOST", expected_status_codes: ["NEW_LEAD"], stage_reason: "Fixture enquiry no longer needed" }) });
   assert.equal(dismissedResponse.status, 200);
   assert.equal((await db.lead.findUniqueOrThrow({ where: { lead_id: dismissed.lead_id }, include: { pipeline_status: true } })).pipeline_status.status_code, "CLOSED_LOST");
   const renewed = await send(fixture("renewed-enquiry", "+12025550188"));

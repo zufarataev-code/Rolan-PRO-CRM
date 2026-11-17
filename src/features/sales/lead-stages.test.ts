@@ -13,6 +13,7 @@ test("manual stages cover contact, qualification and negative outcomes without f
   for (const code of ["DISQUALIFIED", "CLOSED_LOST", "SPAM"]) assert.ok(validateManualLeadStage(code, "  "));
   assert.ok(validateManualLeadStage("QUALIFIED", "x".repeat(501)));
   assert.equal(normalizeQualificationPipelineStatus("qualified"), "QUALIFIED");
+  assert.throws(() => normalizeQualificationPipelineStatus("CLOSED_LOST"));
   assert.equal(LEAD_STAGES.find(stage => stage.code === "CLOSED_WON")?.manual, false);
 });
 
