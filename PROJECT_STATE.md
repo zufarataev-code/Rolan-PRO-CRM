@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Provision CRM CAPI credentials and one isolated provider test (Codex)
+
+- Owner authorized a dedicated credential for dataset `865337699151965`, exactly one isolated synthetic Meta Test Events submission, and production activation only after verification and normal release gates. No customer test/replay or WhatsApp changes are in scope.
+- Task branch: `codex/capi-vault-runtime-20261117`, based on main `3617fdf`; task worktree: `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`. The original checkout's lead-delivery UI task is preserved.
+- Created dedicated self-hosted Infisical Secret Manager project **RolanPRO CRM**, ID `f63ecb45-8d12-4f8f-b2bb-4bb004b3aed1`, slug `rolanpro-crm`, in the verified existing organization. Runtime consumer provisioning, scoped Meta credential, single-event receipt and activation are in progress. Production CAPI remains off; no provider event has been sent.
+- Scope claim: CAPI deployment/secret wiring, `PROJECT.md`, `docs/META_CAPI.md` and this handoff. No legacy UI or lead-delivery display functions are claimed. Next: publish draft PR, finish the scoped consumer, perform the single authorized fixture submission, cross-review and release verification.
+
 ## 2026-11-17 — Lead lifecycle and advertising outcome stages (Codex, PR #557)
 
 - Owner requested qualified, disqualified, converted and the remaining lead stages needed for Google CPA and Facebook CAPI. Task branch: `codex/lead-lifecycle-stages-20261117`, based on main `1cfd5a1`.
