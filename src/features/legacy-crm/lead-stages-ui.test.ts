@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { LEAD_STAGES } from "../sales/lead-stages";
+import { OPEN_LEAD_STATUS_CODES } from "../sales/lead-claim";
 
 const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 function fn(name: string) {
@@ -18,6 +19,7 @@ function fixture() {
   const calls: Array<{ url: string; options: any }> = [];
   const context: any = vm.createContext({
     db: { settings: {}, orders: [] }, state: {}, canonicalLeadsRefreshedAt: Date.now(), canonicalLeadStages: LEAD_STAGES,
+    CANONICAL_OPEN_LEAD_STATUSES: new Set(OPEN_LEAD_STATUS_CODES),
     canonicalMessengerLeadRows: () => rows, canonicalLeadRow: (id: string) => rows.find(row => row.id === id),
     fetchCanonicalLeads: async () => {}, callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
     existingClientByContact: () => null, academyEsc: (s: unknown) => String(s).replaceAll("<", "&lt;"), jsQuote: String,
@@ -29,7 +31,7 @@ function fixture() {
 }
 
 test("lead inbox filters retain closed enquiries and open an existing project", () => {
-  const { context } = fixture();
+  const { context, rows } = fixture();
   let html = context.renderLeadsView();
   assert.match(html, /Active fixture/);
   assert.doesNotMatch(html, /Rejected fixture/);
@@ -37,6 +39,8 @@ test("lead inbox filters retain closed enquiries and open an existing project", 
   html = context.renderLeadsView();
   assert.match(html, /Rejected fixture/);
   context.db.orders.push({ id: "project-1", canonicalLeadId: "active" });
+  assert.match(context.renderLeadsView(), /convertLead\('active'\)/);
+  rows[0].statusCode = rows[0].stageCode = "PROJECT_CREATED";
   assert.match(context.renderLeadsView(), /openOrder\('project-1'\)/);
   context.db.orders = [];
   context.db.archivedOrders = [{ id: "archived-1", canonicalLeadId: "active" }];
@@ -57,13 +61,19 @@ test("stage control persists expected status and reason, while a cancelled reaso
   assert.match(context.leadStageControlsHtml({ id: "sale", name: "Sale", stageCode: "CLOSED_WON", stageName: "Converted", stageLocked: true }), /disabled/);
 });
 
-test("an interrupted saved-project conversion completes its reservation without creating another claim", async () => {
+test("the inbox action retries an interrupted saved-project conversion without matching clients or claiming again", async () => {
   const { context } = fixture();
   const actions: string[] = [];
+  context.db.orders.push({ id: "saved-project", canonicalLeadId: "active" });
   context.canonicalLeads = [{ lead_id: "active" }];
   context.claimCanonicalLead = async (_: string, action: string) => { actions.push(action); return { ok: true }; };
-  vm.runInContext(fn("closeCanonicalLead"), context);
-  assert.equal((await context.closeCanonicalLead("active")).ok, true);
-  assert.deepEqual(actions, ["complete"]);
+  context.openOrder = (id: string) => actions.push(`open:${id}`);
+  context.clientsMatchingContact = () => { throw new Error("saved projects need no client selection"); };
+  vm.runInContext(`const convertingLeadIds = new Set();\n${["closeCanonicalLead", "convertLead", "convertLeadOnce"].map(fn).join("\n")}`, context);
+  const action = context.renderLeadsView().match(/onclick="(convertLead\('active'\))"/)?.[1];
+  assert.ok(action, "a pending stage exposes completion retry through the real inbox button");
+  await vm.runInContext(action, context);
+  assert.deepEqual(actions, ["complete", "open:saved-project"]);
+  assert.equal(context.db.orders.length, 1);
   assert.equal(context.canonicalLeads.length, 0);
 });
