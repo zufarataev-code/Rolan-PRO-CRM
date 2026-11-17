@@ -76,7 +76,7 @@ test("measurement opening follows a compact field sequence inspired by the prove
     legacyCrm.indexOf("function openManagerMeasureModal"),
   );
   assert.match(managerMeasurement, /Направление плёнки/);
-  assert.match(managerMeasurement, /Количество панелей/);
+  assert.match(managerMeasurement, /Количество одинаковых элементов/);
   assert.match(managerMeasurement, /Ширина \(/);
   assert.match(managerMeasurement, /Высота \(/);
   assert.match(managerMeasurement, /Площадь, sqft/);
@@ -88,6 +88,20 @@ test("measurement opening follows a compact field sequence inspired by the prove
   assert.match(legacyCrm, /function managerWindowPhotoCount/);
   assert.match(legacyCrm, /roomId,/);
   assert.match(legacyCrm, /windowId,/);
+});
+
+test("measurement continues below the current elements and reuses quantity for identical windows", () => {
+  const managerMeasurement = legacyCrm.slice(
+    legacyCrm.indexOf("function renderManagerMeasureModal"),
+    legacyCrm.indexOf("function openManagerMeasureModal"),
+  );
+  const cardsIndex = managerMeasurement.indexOf('<div class="manager-window-cards">');
+  const addNextIndex = managerMeasurement.indexOf("${managerRoomAddChooserHtml(oid, r, roomScopeKey)}");
+
+  assert.ok(cardsIndex >= 0, "measurement element cards must exist");
+  assert.ok(addNextIndex > cardsIndex, "the next-element chooser must follow the current element cards");
+  assert.match(managerMeasurement, /Одинаковых элементов/);
+  assert.match(legacyCrm, /Если тип и размеры совпадают, не создавайте копию/);
 });
 
 test("one project supports separate measurements for multiple film services", () => {

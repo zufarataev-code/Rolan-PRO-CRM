@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-16 — Measurement entry continues downward inside each room (Codex, PR #539)
+
+- Owner clarified the field workflow: after entering one window, the next action must be below the completed window rather than above the room.
+- The shared measurement workspace now renders the existing window cards first and the single «next element» chooser below them. It does not repeat an add button inside every card.
+- Identical type and dimensions stay one element with `qty`; the field is now labelled «Одинаковых элементов» and the inline help tells the user to add a new element only for another type or size. Area, material, estimate and installer-pay calculations continue to use the existing `qty` model.
+- Verification: focused measurement/shell/pay/package suite **51/51**; full unit suite **1202/1202**; `tsc --noEmit`, production build and `git diff --check` pass.
+- No Project, measurement, price or payroll data is migrated. Publication still requires review and merge from `main`.
+
 ## 2026-11-15 — Tablet shell and Project card responsive architecture (Codex, PR #539)
 
 - Owner showed the live CRM on a tablet: top-bar labels and actions overlap, the desktop sidebar consumes the workspace, payroll rows clip to the right, and the Project card does not adapt to the approved «Balance» hierarchy.
