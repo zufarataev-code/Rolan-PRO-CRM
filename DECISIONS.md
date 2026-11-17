@@ -919,3 +919,20 @@ Owner requires Claude and Codex to work as one team: same repository and project
 - The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
 - The owner sees active, overlapping, stale and owner-blocked work in `/legacy-crm/control-center` → «Агенты».
 
+## 2026-11-16 — Measurement entry follows the physical top-to-bottom sequence (Owner)
+
+- Inside a room, existing measured elements come first and the single action for the next window, door, skylight or glass partition comes after the list.
+- Repeating the same add button inside every element card is rejected because it creates visual noise and several equivalent actions.
+- Elements with the same type and dimensions are one measurement row with `qty`. A new element is created only when its type or dimensions differ. The existing `qty` remains the source for area, material, estimate and installer-pay calculations.
+
+## 2026-11-15 — Project card and shell have three structural viewport modes (Owner)
+
+The CRM must not shrink the desktop interface into a tablet viewport. Responsive behavior is a structural contract, not a collection of feature-specific patches.
+
+- Desktop keeps the full sidebar, one-row command header and the Project «Balance» layout: work feed on the left, one role-safe economics/work summary on the right.
+- Tablet (841–1366 px) uses a compact icon rail and a two-row top bar. Search has its own row; secondary owner actions are available in their working sections instead of competing with the title. The Project summary moves above the work feed and no sticky narrow rail remains.
+- Phone (up to 840 px) uses the existing drawer, one-column Project summary and one-column operational facts.
+- The Project hero does not repeat amount, paid and balance when they are already visible in the role-safe summary. One financial fact has one visual owner.
+- Wide operational tables must either become labelled facts/cards on tablet and phone or be placed in an explicit horizontal scroller. They cannot widen or clip the application shell.
+- Breakpoint rules live in one late responsive contract. New feature CSS must not add a competing shell breakpoint.
+

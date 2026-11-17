@@ -2,6 +2,23 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-16 — Measurement entry continues downward inside each room (Codex, PR #539)
+
+- Owner clarified the field workflow: after entering one window, the next action must be below the completed window rather than above the room.
+- The shared measurement workspace now renders the existing window cards first and the single «next element» chooser below them. It does not repeat an add button inside every card.
+- Identical type and dimensions stay one element with `qty`; the field is now labelled «Одинаковых элементов» and the inline help tells the user to add a new element only for another type or size. Area, material, estimate and installer-pay calculations continue to use the existing `qty` model.
+- Verification: focused measurement/shell/pay/package suite **51/51**; full unit suite **1202/1202**; `tsc --noEmit`, production build and `git diff --check` pass.
+- No Project, measurement, price or payroll data is migrated. Publication still requires review and merge from `main`.
+
+## 2026-11-15 — Tablet shell and Project card responsive architecture (Codex, PR #539)
+
+- Owner showed the live CRM on a tablet: top-bar labels and actions overlap, the desktop sidebar consumes the workspace, payroll rows clip to the right, and the Project card does not adapt to the approved «Balance» hierarchy.
+- Root cause confirmed in `private/legacy/rolanpro-crm-cloud.html`: several overlapping viewport patches leave the 841–1366 px range in the desktop shell; the top bar has no compact action contract, payroll has no responsive row representation, and the prepared Project summary rail is not mounted in the active clean card.
+- Branch `codex/project-card-balance-layout-20261115` now applies one desktop/tablet/phone shell contract. At 841–1366 px the 232 px desktop sidebar becomes a compact 72 px rail, the top bar becomes a deliberate two-row header, and nonessential owner actions no longer compete with the page title. Phone keeps the existing drawer contract.
+- The active Project card now mounts the approved «Balance» hierarchy: the existing Project feed remains the primary workspace and the existing role-safe economics/upcoming-work summary is the only summary. Duplicate amount/paid/balance facts were removed from the hero. On tablet the summary moves above the feed; on desktop it remains a sticky rail.
+- Payroll uses the same responsive contract: at tablet width the five-column breakdown becomes labelled two-column facts; on phone it becomes one column. Calculations, payroll rates and payment actions are unchanged.
+- Verification: focused responsive/Project suite **30/30**; full unit suite **1201/1201**; legacy inline scripts parse; `tsc --noEmit`, production build and `git diff --check` pass. Local visual browser review was unavailable because the Mac was locked and Work local-browser access was disabled; the responsive contract is covered by source-level regressions. Production publication still requires the owner's explicit confirmation.
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
