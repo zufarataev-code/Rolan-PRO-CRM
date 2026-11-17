@@ -18,7 +18,7 @@ function fixture() {
   ];
   const calls: Array<{ url: string; options: any }> = [];
   const context: any = vm.createContext({
-    db: { settings: {}, orders: [] }, state: {}, canonicalLeadsRefreshedAt: Date.now(), canonicalLeadStages: LEAD_STAGES,
+    db: { settings: {}, orders: [] }, state: {}, canonicalLeadsRefreshedAt: Date.now(), canonicalLeadsRefreshFailed: false, canonicalLeadStages: LEAD_STAGES,
     CANONICAL_OPEN_LEAD_STATUSES: new Set(OPEN_LEAD_STATUS_CODES),
     canonicalMessengerLeadRows: () => rows, canonicalLeadRow: (id: string) => rows.find(row => row.id === id),
     fetchCanonicalLeads: async () => {}, callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
@@ -26,9 +26,26 @@ function fixture() {
     fmtDateTime: () => "fixture date", render: () => {}, alert: () => {}, prompt: () => "Outside service area",
     fetch: async (url: string, options: any) => { calls.push({ url, options }); return { ok: true, json: async () => ({ data: { lead_id: "active" } }) }; },
   });
-  vm.runInContext(["leadStageControlsHtml", "renderLeadsView", "changeCanonicalLeadStage", "setCanonicalLeadStatus"].map(fn).join("\n"), context);
+  vm.runInContext(["leadDeliveryHtml", "leadStageControlsHtml", "renderLeadsView", "changeCanonicalLeadStage", "setCanonicalLeadStatus"].map(fn).join("\n"), context);
   return { context, calls, rows };
 }
+
+test("inbox shows each provider's recorded state and distinguishes validation, live receipts, and missing data", () => {
+  const { context, rows } = fixture();
+  const row = (event_name: string, processing_status: string) => ({ event_name, processing_status, updated_at: "2026-11-17T12:00:00Z" });
+  Object.assign(rows[0], { delivery: {
+    facebook: [row("<Lead>", "test_accepted"), row("QualifiedLead", "queued")],
+    google: [row("qualified_lead", "submitted"), row("converted_lead", "confirmed"), row("RESTATEMENT", "validated")],
+  } });
+  const html = context.renderLeadsView();
+  for (const label of ["Facebook CAPI", "&lt;Lead>", "Только тест · принято Facebook", "В очереди", "Google Ads", "Отправлено", "Обработка подтверждена Google", "Только тест · проверено Google"]) assert.ok(html.includes(label), label);
+  assert.doesNotMatch(html, /<Lead>/);
+  assert.match(context.leadDeliveryHtml({ facebook: [], google: [] }), /Нет записи об отправке/);
+  assert.match(context.leadDeliveryHtml(undefined), /Нет данных CRM/);
+  assert.match(context.leadDeliveryHtml({ facebook: [row("Lead", "new_state")] }), /Статус неизвестен/);
+  context.canonicalLeadsRefreshFailed = true;
+  assert.match(context.renderLeadsView(), /Не удалось обновить/);
+});
 
 test("lead inbox filters retain closed enquiries and open an existing project", () => {
   const { context, rows } = fixture();

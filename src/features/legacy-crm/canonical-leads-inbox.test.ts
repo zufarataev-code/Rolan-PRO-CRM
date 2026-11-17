@@ -30,10 +30,10 @@ test("incoming Meta forms expose project and dismiss actions while Messenger kee
   const render = source.slice(start, source.indexOf("\n}\n", start) + 2);
   function html(leadSource: string, consultation: object | null = null) {
     const context: any = vm.createContext({
-      db: { settings: {} }, state: {}, canonicalLeadsRefreshedAt: Date.now(),
+      db: { settings: {} }, state: {}, canonicalLeadsRefreshedAt: Date.now(), canonicalLeadsRefreshFailed: false,
       canonicalMessengerLeadRows: () => [{ id: "fixture", source: leadSource, canonical: true, name: "Test enquiry", phone: "+12025550123", consultation }],
       fetchCanonicalLeads: () => {}, callrailRecentCallsHtml: () => "", LEAD_SOURCES: {},
-      canonicalLeadStages: [], leadStageControlsHtml: () => "",
+      canonicalLeadStages: [], leadStageControlsHtml: () => "", leadDeliveryHtml: () => "",
       existingClientByContact: () => null, academyEsc: String, jsQuote: String, fmtDateTime: () => "fixture date",
     });
     vm.runInContext(render, context);
