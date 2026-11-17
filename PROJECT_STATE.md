@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Lead lifecycle and advertising outcome stages (Codex, in progress)
+
+- Owner requested qualified, disqualified, converted and the remaining lead stages needed for Google CPA and Facebook CAPI. Task branch: `codex/lead-lifecycle-stages-20261117`, based on main `1cfd5a1`.
+- Scope: canonical PostgreSQL lead status reference data, authenticated stage changes and audit history, legacy lead inbox filters/actions, existing Google qualification hook, and documented Meta event mapping. Appointment/proposal/sale milestones retain their existing evidence gates; creating a project is not a sale. No customer records, ad goals or advertising credentials are changed.
+- Legacy functions claimed: `canonicalMessengerLeadRows`, `renderLeadsView`, `setCanonicalLeadStatus`, and lead-stage controls only. Other active project/measurement/notification PRs retain their ownership. Backup: `/tmp/rolanpro-lead-stages-20261117/rolanpro-crm-cloud.html.before`.
+- Existing Google delivery uses a durable conversion outbox. No CRM-to-Meta CAPI sender exists in this source; whether to add that transport is pending owner scope clarification. Next: implement and verify stages, publish the branch and cross-review the PR.
+
 ## 2026-11-17 — «Кабинет проекта»: пробный вид карточки Project у владельца (Claude)
 
 - Owner, 2026-11-17: после демо «Кабинет проекта» (этапы, кольца прогресса, услуги, тур по фото) — «делай всё в CRM», только модуль проекта, остальное не трогать, посмотреть на живых данных. Прямое поручение владельца на эту задачу; проверка Codex — после, в PR.
