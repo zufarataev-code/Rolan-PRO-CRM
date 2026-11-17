@@ -135,7 +135,7 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
     if (!stages.length && !changed) continue;
     const manager = owner || managerIds.includes(String(before.managerId));
     if (changed && !manager && !field) return 'Этапы может менять только ответственный менеджер проекта.';
-    if (changed && !['proposal_accepted', ...active].includes(String(before.status))) return 'Этапы планируют после принятия КП; закрытый проект сохраняет историю.';
+    if (changed && !['proposal_accepted', ...active].includes(String(before.status)) && stable({ ...order, productionStages: productionStages(order).map(({ payroll, ...rest }) => rest) }) !== stable({ ...before, productionStages: productionStages(before).map(({ payroll, ...rest }) => rest) })) return 'Этапы планируют после принятия КП; закрытый проект сохраняет историю.';
     if (order.productionStages !== undefined && !Array.isArray(order.productionStages)) return 'Некорректные этапы проекта.';
     const services = new Set(serviceGroupIds(order));
     const ids = new Set<string>();
@@ -163,7 +163,7 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
       // Neither client totals nor payout snapshots are accepted from browsers.
       delete stage.ownEarnings;
       stage.payroll = old?.payroll ? structuredClone(old.payroll) : [];
-      if (old?.status === 'done' && stable({ ...stage, payroll: undefined }) !== stable({ ...old, payroll: undefined })) return 'Выполненный этап сохраняет даты, состав бригады и начисления.';
+      if (old?.status === 'done' && stable({ ...stage, payroll: undefined }) !== stable({ ...old, payroll: undefined, payroll: undefined })) return 'Выполненный этап сохраняет даты, состав бригады и начисления.';
       if (stage.status !== 'planned' && old?.status !== 'done') {
         if (!active.includes(String(before.status)) || !stagePlanComplete(stage)) return 'Сначала подтвердите полный план монтажа.';
         if (stage.dependsOn && stages.find(item => item.id === stage.dependsOn)?.status !== 'done') return 'Сначала завершите предыдущий этап.';
