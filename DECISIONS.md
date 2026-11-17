@@ -2,6 +2,13 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-17 — Field measurement input is local-first; an unchanged commercial exception cannot block it
+
+- Width, height and identical-element quantity must update the active window and visible area immediately. They must not serialize the whole workspace or rebuild the Project card / measurement DOM before the measurer can reach the next field.
+- Measurement changes may be batched briefly in the browser, but a pending batch must flush when the measurement closes, the page hides or the app goes to the background. Cloud synchronization remains canonical after the pause.
+- Structural measurement changes may replace the measurement overlay only. The application shell and underlying Project card stay mounted, and the modal's actual scroll position is restored without stealing focus from the next field.
+- The owner-defined manager price corridor is enforced when a service price is created or changed. A Project price saved before the current corridor is historical data: if that price is unchanged, it must not reject an unrelated workspace write such as sizes, notes, photos, schedules or assignments.
+
 ## 2026-11-15 — Full legacy renders preserve the real viewport; transient saves retry
 
 - The responsive application has two canonical scroll owners: `.app-content` on desktop/tablet and the document viewport on narrow mobile. Any full `render()` must capture and restore those owners through the shared render-continuity layer; feature buttons must not implement their own scroll patches.

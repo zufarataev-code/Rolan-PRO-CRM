@@ -585,6 +585,21 @@ test('owner price corridor lets a manager override the project price only inside
   assert.match(prepareServiceSolutions(current, above, true) || '', /выше разрешённого максимума/);
 });
 
+test('an unchanged legacy price below the current corridor does not block a measurement save', () => {
+  const current: Row = {
+    settings: { serviceOfferings: [{ id: 'svc', direction: 'solar', name: 'Magnetron', unit: 'zone', pricePerSqft: 10, installerRatePerSqft: 2, minPricePerUnit: 10, maxPricePerUnit: 30, active: true }], catalog: [] },
+    users: [],
+    orders: [{ id: 'o', extraServices: [{ id: 'l', type: 'offering', offeringId: 'svc', serviceType: 'solar_film', unit: 'zone', unitPrice: 8.07, qty: 1, price: 8.07 }], measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 1000, height: 1000 }] }] }, offeringUnits: { svc: 'zone' } }],
+  };
+  const measured = structuredClone(current);
+  measured.orders[0].measurements.rooms[0].windows[0].width = 1200;
+  assert.equal(prepareServiceSolutions(current, measured, true), null, 'the surveyor can save dimensions while the old price stays untouched');
+
+  const repriced = structuredClone(current);
+  repriced.orders[0].extraServices[0].unitPrice = 8.5;
+  assert.match(prepareServiceSolutions(current, repriced, true) || '', /ниже разрешённого минимума/, 'a new below-corridor price is still rejected');
+});
+
 test('the server accepts a size-free service shared into other directions and a line sold under one of them', () => {
   const shared: Row = structuredClone(base);
   shared.settings.serviceOfferings.push({ id: 'sil', name: 'Силикон', direction: 'protective', unit: 'lft', pricePerSqft: 3, installerRatePerSqft: 1, active: true, directions: ['solar', 'smart'] });

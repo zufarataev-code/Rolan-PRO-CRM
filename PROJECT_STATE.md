@@ -2,6 +2,20 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Замерщик: мгновенный ввод без полной перерисовки (Codex, stacked PR pending)
+
+- Owner reported that the field workspace freezes, moves the screen and reacts slowly on a tablet while a measurer enters window data.
+- Production browser evidence identified two independent causes:
+  - every measurement field ran the complete workspace `save()` and rebuilt the whole application DOM;
+  - the server rejected every workspace write because an unchanged legacy `Magnetron` price (`$8.07`) is below the directory's current `$10` floor, so unrelated measurement edits could never reach the server.
+- Branch `codex/surveyor-measurement-performance-20261117` is stacked on the tablet/Project-card branch `codex/project-card-balance-layout-20261115`:
+  - width, height and identical-window quantity update the Project and visible sqft/room totals in place without rebuilding the modal or application;
+  - measurement persistence is debounced until a 1.2-second pause and is flushed on close, page hide and app backgrounding, so field input remains immediate without risking an abandoned local draft;
+  - structural measurement changes replace only the measurement overlay and preserve its scroll position; they do not recreate the Project card and application shell;
+  - the server applies the owner price corridor only when a service price is new or actually changed. An unchanged older price can no longer block sizes, photos, notes or other field facts; a new price below the corridor remains rejected.
+- Verification: focused measurement + service corridor suite **50/50**; full unit suite **1203/1203**; legacy inline scripts parse; `pnpm typecheck`, production build (139 pages) and `git diff --check` pass.
+- No production Project or directory price was changed. Publication requires review/merge of the stacked branches and the owner's explicit authorization.
+
 ## 2026-11-16 — Measurement entry continues downward inside each room (Codex, PR #539)
 
 - Owner clarified the field workflow: after entering one window, the next action must be below the completed window rather than above the room.

@@ -32814,7 +32814,7 @@ function renderManagerMeasureModal(oid) {
   const activeRoom = managerActiveRoom(o);
   const roomTerms = roomTermsForOrder(o);
   return `
-  <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeModal()">
+  <div class="modal-backdrop manager-measure-backdrop" onclick="if(event.target===this) closeManagerMeasureModal()">
     <div class="modal-content workspace-modal manager-measure-modal ${typeof measureHiddenClasses === 'function' ? measureHiddenClasses() : ''}" data-scroll-key="measure-modal" data-measure-order-id="${academyEsc(oid)}" role="dialog" aria-modal="true" aria-label="Замер объекта" onclick="event.stopPropagation()">
       <div class="manager-measure-header">
         <div class="manager-measure-titlebar">
@@ -32823,7 +32823,7 @@ function renderManagerMeasureModal(oid) {
             <div class="manager-measure-title text-2xl font-black text-slate-900">${academyEsc(o.number)}<span class="manager-measure-title-suffix"> · замер проекта</span></div>
             <div class="manager-measure-address text-sm text-gray-500 mt-1">${academyEsc(c?.name || 'Без клиента')} · ${academyEsc(orderAddress(o, c) || 'адрес не указан')}</div>
           </div>
-          <div class="flex gap-2">${state._directionWindow?.oid === oid ? `<button class="workspace-back" onclick="returnToProjectDirectionWindow()">← К направлению</button>` : ''}<button class="btn-ghost" onclick="closeModal()">Закрыть</button></div>
+          <div class="flex gap-2">${state._directionWindow?.oid === oid ? `<button class="workspace-back" onclick="returnToProjectDirectionWindow()">← К направлению</button>` : ''}<button class="btn-ghost" onclick="closeManagerMeasureModal()">Закрыть</button></div>
         </div>
         <details class="manager-measure-overview" ${state._managerMeasureDetails?.[oid]?.overview ? 'open' : ''} ontoggle="managerMeasureDetailsToggle('${oid}','overview',this.open)"><summary>Сводка · ${rooms.length} ${academyEsc(roomTerms.plural.toLowerCase())} · ${allWindows.length} окон / дверей · ${orderActualAreaSqft(o).toFixed(1)} sqft</summary><div class="manager-measure-kpis mt-3">
           <div class="manager-measure-kpi"><div>${academyEsc(roomTerms.plural)}</div><div>${rooms.length}</div></div>
@@ -32846,7 +32846,7 @@ function renderManagerMeasureModal(oid) {
             <div class="rounded-lg border bg-white p-3">
               <div class="font-black text-sm text-slate-900">1. ${academyEsc(roomTerms.choose)}</div>
               <div class="manager-room-list mt-3" data-scroll-key="measure-rooms">
-                ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); const roomCatalog = getCatalogItem(managerRoomCatalogId(room, activeScopeKey)); const roomFilm = roomCatalog ? catalogShortLabel(roomCatalog) : 'плёнка не выбрана'; return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" onclick="managerSelectRoom('${oid}','${room.id}')">
+                ${rooms.map((room, index) => { const serviceWindows = (room.windows || []).filter(w => (w.measureScope || orderMeasureScope(o)) === activeScopeKey); const roomCatalog = getCatalogItem(managerRoomCatalogId(room, activeScopeKey)); const roomFilm = roomCatalog ? catalogShortLabel(roomCatalog) : 'плёнка не выбрана'; return `<button type="button" class="manager-room-tab ${activeRoom?.id === room.id ? 'active' : ''}" data-mm-room-tab="${academyEsc(room.id)}" onclick="managerSelectRoom('${oid}','${room.id}')">
                   <span><span class="manager-room-tab-name">${index + 1}. ${academyEsc(room.name || (roomTerms.defaultName + ' ' + (index + 1)))}</span><span class="manager-room-tab-meta">${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(1)} sqft · ${academyEsc(roomFilm)}</span></span>
                   <span class="manager-room-tab-count">${serviceWindows.length}</span>
                 </button>`; }).join('') || `<div class="text-xs text-gray-500">${academyEsc(roomTerms.empty)}</div>`}
@@ -32901,13 +32901,13 @@ function renderManagerMeasureModal(oid) {
                     const cat = windowCatalog(w);
                     const scopeKey = w.measureScope || (cat ? measureScopeByCatalog(cat) : orderMeasureScope(o));
                     const needsSolar = showSolarFields && managerWindowNeedsSolarFields(o, w, roomScopeKey);
-                    return `<article class="manager-window-card">
+                    return `<article class="manager-window-card" data-mm-window-id="${academyEsc(w.id)}">
                       <div class="manager-window-card-head">
                         <div class="manager-window-card-title">
                           <span class="manager-room-tab-count">${wi + 1}</span>
                           <input id="mm-window-name-${w.id}" aria-label="Название элемента" value="${academyEsc(w.name || ('Окно ' + (wi + 1)))}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','name',this.value)">
                         </div>
-                        <div class="manager-window-card-area">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
+                        <div class="manager-window-card-area" id="mm-area-label-${w.id}">${windowActualAreaSqft(w).toFixed(2)} sqft</div>
                         <button class="btn-ghost text-xs ${windowMeasurementIsVerified(w) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}" aria-pressed="${windowMeasurementIsVerified(w) ? 'true' : 'false'}" onclick="${windowMeasurementIsVerified(w) ? `managerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')` : `openManagerConfirmWindowMeasurement('${oid}','${r.id}','${w.id}')`}">${windowMeasurementIsVerified(w) ? '✓ Точные размеры' : 'От клиента · подтвердить точные'}</button>
                         <button class="btn-ghost text-red-600 text-xs" aria-label="Удалить элемент" onclick="managerDeleteWin('${oid}','${r.id}','${w.id}')">Удалить окно</button>
                       </div>
@@ -32920,7 +32920,7 @@ function renderManagerMeasureModal(oid) {
                           <div class="manager-window-field"><label>Одинаковых элементов</label><input id="mm-qty-${w.id}" aria-label="Количество одинаковых элементов" type="number" min="1" step="1" value="${w.qty || 1}" onchange="managerUpdateWin('${oid}','${r.id}','${w.id}','qty',parseFloat(this.value)||1)"><small class="text-gray-500">Один тип и один размер</small></div>
                           <div class="manager-window-field"><label>Ширина (${inUnits ? 'in' : 'мм'})</label><input id="mm-width-${w.id}" aria-label="Ширина" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.width ? `value="" placeholder="${measureMmToInput(w.width || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.width || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','width',this.value)"></div>
                           <div class="manager-window-field"><label>Высота (${inUnits ? 'in' : 'мм'})</label><input id="mm-height-${w.id}" aria-label="Высота" type="number" inputmode="decimal" step="${inUnits ? '0.25' : '1'}" ${w.sizePlaceholder?.height ? `value="" placeholder="${measureMmToInput(w.height || 0)}" class="manager-size-placeholder"` : `value="${measureMmToInput(w.height || 0)}"`} onchange="managerUpdateWinDim('${oid}','${r.id}','${w.id}','height',this.value)"></div>
-                          <div class="manager-window-field readonly"><label>Площадь, sqft</label><input aria-label="Площадь" value="${windowSizeEntered(w) ? windowActualAreaSqft(w).toFixed(2) : '—'}" readonly></div>
+                          <div class="manager-window-field readonly"><label>Площадь, sqft</label><input id="mm-area-${w.id}" aria-label="Площадь" value="${windowSizeEntered(w) ? windowActualAreaSqft(w).toFixed(2) : '—'}" readonly></div>
                           ${managerWindowServiceChipsHtml(oid, r.id, w, o)}
                           <details class="manager-window-technical">
                             <summary>Стекло, доступ и технические характеристики${windowRemovalRequired(w) ? ' · требуется демонтаж' : ''}</summary>
@@ -32942,7 +32942,7 @@ function renderManagerMeasureModal(oid) {
                 </div>
                 ${managerRoomAddChooserHtml(oid, r, roomScopeKey)}
                 ${activeScopeKey === 'smart_film' && serviceWindows.length ? managerSmartRoomFieldsHtml(oid, r) : ''}
-                <div class="manager-room-summary">
+                <div class="manager-room-summary" data-mm-room-summary="${academyEsc(r.id)}">
                   <span>${scope.icon} ${academyEsc(scope.short)}: <b>${serviceWindows.length} элементов · ${serviceWindows.reduce((sum,w)=>sum+windowActualAreaSqft(w),0).toFixed(2)} sqft</b></span>
                   <span>Все изменения сохраняются автоматически.</span>
                 </div>
@@ -32968,14 +32968,60 @@ function managerMeasureDetailsToggle(oid, key, open) {
   state._managerMeasureDetails[oid] = state._managerMeasureDetails[oid] || {};
   state._managerMeasureDetails[oid][key] = open;
 }
+
+// Field work must feel local even with weak mobile coverage. The old path ran
+// the complete workspace save (salary sync + a full JSON snapshot) and rebuilt
+// the whole application after every width, height or quantity change. On a
+// tablet that blocked the main thread and visibly moved the form. Measurement
+// drafts now update the in-memory Project immediately and persist after the
+// person pauses; leaving the page flushes the pending snapshot synchronously.
+let __measurementDraftSaveTimer = null;
+function flushMeasurementDraftSave() {
+  if (!__measurementDraftSaveTimer) return;
+  clearTimeout(__measurementDraftSaveTimer);
+  __measurementDraftSaveTimer = null;
+  save();
+}
+function saveMeasurementDraft() {
+  clearTimeout(__measurementDraftSaveTimer);
+  __measurementDraftSaveTimer = setTimeout(flushMeasurementDraftSave, 1200);
+}
+
+function managerMeasureModalElement(html) {
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '').trim();
+  return template.content.firstElementChild;
+}
+function mountManagerMeasureModal(oid, { replace = false } = {}) {
+  const html = renderManagerMeasureModal(oid);
+  state.modal = html;
+  const next = managerMeasureModalElement(html);
+  if (!next) return false;
+  const current = document.querySelector(replace ? '.modal-backdrop' : '.manager-measure-backdrop');
+  if (current && replace) current.replaceWith(next);
+  else if (current) current.replaceWith(next);
+  else document.getElementById('app')?.appendChild(next);
+  attachGlobalListeners();
+  return true;
+}
+function closeManagerMeasureModal() {
+  flushMeasurementDraftSave();
+  state.modal = null;
+  document.querySelector('.manager-measure-backdrop')?.remove();
+  // A later application render must compare against the real (modal-free) DOM.
+  __lastRenderedHtml = '';
+}
+
 function openManagerMeasureModal(oid) {
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
   const o = getOrder(oid);
   if (orderIsHistoricalDraft(o)) { alert('Замер не назначается из черновика переноса. Продолжите перенос старого проекта.'); openQuickProjectEntry(oid); return; }
-  state.modal = renderManagerMeasureModal(oid);
-  render();
+  if (!mountManagerMeasureModal(oid)) {
+    state.modal = renderManagerMeasureModal(oid);
+    render();
+  }
   if (typeof measureVisitStartTicker === 'function') measureVisitStartTicker(oid);
 }
 function managerSolarMeasurementIssues(order) {
@@ -33078,29 +33124,53 @@ function managerMeasureFooterActionHtml(o) {
 }
 /** Every field is saved as it changes; the button says so and leaves (Owner, 2026-10-24). */
 function managerMeasureSaveAndExit(oid) {
-  save();
-  closeModal();
+  if (__measurementDraftSaveTimer) flushMeasurementDraftSave();
+  else save();
+  closeManagerMeasureModal();
   if (typeof crmNotice === 'function') crmNotice('Замер сохранён. Вернуться можно в любой момент — кнопка «Замер» в проекте.');
 }
 function refreshManagerMeasureModal(oid) {
   projectSyncServicesFromWindows(oid);
-  preservePositionForNextRender();
-  state.modal = renderManagerMeasureModal(oid);
-  render();
+  const snapshot = captureRenderPosition();
+  // A native `change` event may run while the browser is moving focus to the
+  // next control. Re-focusing the removed old field would pull the tablet
+  // viewport backwards. Structural refreshes keep scroll, but never steal the
+  // next field's focus.
+  if (snapshot.focusId && /^mm-/.test(snapshot.focusId)) {
+    snapshot.focusId = null;
+    snapshot.selectionStart = null;
+    snapshot.selectionEnd = null;
+  }
+  if (!mountManagerMeasureModal(oid, { replace: true })) {
+    preservePositionForNextRender(snapshot);
+    state.modal = renderManagerMeasureModal(oid);
+    render();
+    return;
+  }
+  restoreRenderPositionStable(snapshot);
 }
-let __managerMeasureFieldRefreshTimer = null;
-function refreshManagerMeasureModalAfterFieldChange(oid) {
-  if (__managerMeasureFieldRefreshTimer) clearTimeout(__managerMeasureFieldRefreshTimer);
-  const orderId = String(oid || '');
-  __managerMeasureFieldRefreshTimer = setTimeout(() => {
-    __managerMeasureFieldRefreshTimer = null;
-    const modal = document.querySelector('.manager-measure-modal');
-    if (!modal || modal.dataset.measureOrderId !== orderId) return;
-    // `change` fires while focus is still leaving the previous input. Waiting
-    // one task lets the browser focus the next field before we capture and
-    // restore the measurement workspace, preventing the mobile viewport jump.
-    refreshManagerMeasureModal(orderId);
-  }, 0);
+function refreshManagerMeasureModalAfterFieldChange(oid, rid, wid) {
+  const o = getOrder(oid);
+  const room = o?.measurements?.rooms?.find(item => item.id === rid);
+  const win = room?.windows?.find(item => item.id === wid);
+  if (!o || !room || !win) return;
+  const area = windowActualAreaSqft(win);
+  const areaLabel = document.getElementById(`mm-area-label-${wid}`);
+  const areaInput = document.getElementById(`mm-area-${wid}`);
+  if (areaLabel) areaLabel.textContent = `${area.toFixed(2)} sqft`;
+  if (areaInput) areaInput.value = windowSizeEntered(win) ? area.toFixed(2) : '—';
+
+  const activeScope = managerActiveMeasureScope(o);
+  const serviceWindows = (room.windows || []).filter(item => (item.measureScope || orderMeasureScope(o)) === activeScope);
+  const roomArea = serviceWindows.reduce((sum, item) => sum + windowActualAreaSqft(item), 0);
+  const tab = document.querySelector(`[data-mm-room-tab="${rid}"]`);
+  const tabMeta = tab?.querySelector('.manager-room-tab-meta');
+  if (tabMeta) {
+    const catalog = getCatalogItem(managerRoomCatalogId(room, activeScope));
+    tabMeta.textContent = `${serviceWindows.length} элементов · ${roomArea.toFixed(1)} sqft · ${catalog ? catalogShortLabel(catalog) : 'плёнка не выбрана'}`;
+  }
+  const summary = document.querySelector(`[data-mm-room-summary="${rid}"] span:first-child`);
+  if (summary) summary.textContent = `${measureScopeInfo(activeScope).icon} ${measureScopeInfo(activeScope).short}: ${serviceWindows.length} элементов · ${roomArea.toFixed(2)} sqft`;
 }
 function managerAddRoomFromForm(oid) {
   const o = getOrder(oid);
@@ -33356,9 +33426,14 @@ function managerUpdateWin(oid, rid, wid, field, val) {
   syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены данные замера');
-  save();
-  if (field === 'qty') refreshManagerMeasureModalAfterFieldChange(oid);
-  else refreshManagerMeasureModal(oid);
+  if (field === 'qty') {
+    saveMeasurementDraft();
+    refreshManagerMeasureModalAfterFieldChange(oid, rid, wid);
+  }
+  else {
+    saveMeasurementDraft();
+    refreshManagerMeasureModal(oid);
+  }
 }
 function managerUpdateSmartWin(oid, rid, wid, field, val) {
   const o = getOrder(oid);
@@ -33378,7 +33453,7 @@ function managerUpdateSmartWin(oid, rid, wid, field, val) {
   win.smart.calculatedW = measureSmartLoad(win);
   syncSmartRoomPlan(room);
   invalidateProjectEstimate(o, 'Изменена Smart-комплектация и схема подключения');
-  save();
+  saveMeasurementDraft();
   refreshManagerMeasureModal(oid);
 }
 function managerUpdateSmartRoom(oid, rid, field, val) {
@@ -33395,7 +33470,7 @@ function managerUpdateSmartRoom(oid, rid, field, val) {
   room.smartSystem = system;
   syncSmartRoomPlan(room);
   invalidateProjectEstimate(o, 'Изменена Smart-система помещения');
-  save();
+  saveMeasurementDraft();
   refreshManagerMeasureModal(oid);
 }
 function managerSetWindowType(oid, rid, wid, typeKey) {
@@ -33408,7 +33483,7 @@ function managerSetWindowType(oid, rid, wid, typeKey) {
   syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип окна в замере');
-  save();
+  saveMeasurementDraft();
   refreshManagerMeasureModal(oid);
 }
 function managerSetExistingWindowType(oid, rid, wid, objectKind, typeKey) {
@@ -33424,7 +33499,7 @@ function managerSetExistingWindowType(oid, rid, wid, objectKind, typeKey) {
   syncSmartWindowPlan(w, r?.name || '');
   if (windowRemovalRequired(w)) syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменён тип элемента в замере');
-  save();
+  saveMeasurementDraft();
   refreshManagerMeasureModal(oid);
 }
 function managerUpdateWinDim(oid, rid, wid, field, val) {
@@ -33448,8 +33523,8 @@ function managerUpdateWinDim(oid, rid, wid, field, val) {
   syncSmartWindowPlan(w, r?.name || '');
   syncOrderWindowRemovalService(o);
   invalidateProjectEstimate(o, 'Изменены размеры окна');
-  save();
-  refreshManagerMeasureModalAfterFieldChange(oid);
+  saveMeasurementDraft();
+  refreshManagerMeasureModalAfterFieldChange(oid, rid, wid);
 }
 function managerSetWinCatalog(oid, rid, wid, catalogId) {
   const o = getOrder(oid);
@@ -33472,7 +33547,7 @@ function managerSetWinCatalog(oid, rid, wid, catalogId) {
     w.filmType = '';
   }
   invalidateProjectEstimate(o, 'Изменён материал окна');
-  save();
+  saveMeasurementDraft();
   refreshManagerMeasureModal(oid);
 }
 function managerApplyFilmToRoom(oid, rid, catalogId) {
@@ -44919,6 +44994,10 @@ function attachGlobalListeners() {
         render();
       }
     }, 120);
+  });
+  window.addEventListener('pagehide', flushMeasurementDraftSave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushMeasurementDraftSave();
   });
 }
 
