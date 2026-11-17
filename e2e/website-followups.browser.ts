@@ -52,6 +52,9 @@ async function main() {
       };
       await setStage("CONTACTING");
       await setStage("CONTACTED");
+      await fixtureCard.getByText("Отправка пропущена", { exact: true }).first().waitFor();
+      assert.match(await fixtureCard.innerText(), /Facebook CAPI[\s\S]*Contact[\s\S]*Отправка пропущена/);
+      assert.match(await fixtureCard.innerText(), /Google Ads/);
       await setStage("QUALIFIED");
       await setStage("DISQUALIFIED", "Browser fixture outside service area");
       await fixtureCard.waitFor({ state: "hidden" });

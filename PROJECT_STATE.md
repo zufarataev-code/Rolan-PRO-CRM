@@ -2,6 +2,11 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Per-lead Facebook and Google delivery receipts (Codex)
+
+- PR #559, branch `codex/lead-delivery-status`, extends the lead inbox shipped in #557. The change reads existing delivery records for each visible lead. Inbox ownership covers `canonicalMessengerLeadRows`, `renderLeadsView` and the delivery display. Google and Meta senders keep their existing configuration.
+- Verification on this branch: 1,233 offline tests, TypeScript and the production build passed. The response exposes event name, status and update time per platform. The disposable E2E gate checks the manager response and the real inbox at 390 and 1440 px. Exact review, CI and production results belong to PR #559. CallRail integration owns credentials and runtime wiring in #560.
+
 ## 2026-11-17 — Lead lifecycle and advertising outcome stages (Codex, PR #557)
 
 - Owner requested qualified, disqualified, converted and the remaining lead stages needed for Google CPA and Facebook CAPI. Task branch: `codex/lead-lifecycle-stages-20261117`, based on main `1cfd5a1`.
