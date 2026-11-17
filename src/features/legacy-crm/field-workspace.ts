@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { projectServicesFinished, projectServicesStarted, serviceGroupIds, serviceGroupName, serviceGroupScope } from "@/features/legacy-crm/service-solutions";
 import { mergeFieldProductionStages } from "@/features/legacy-crm/production-stages";
@@ -441,6 +442,10 @@ export function mergeFieldWorkspace(
   const orderIds = new Set(assignedOrders.map((order) => String(order.id || "")));
   const clientIds = new Set(assignedOrders.map((order) => String(order.clientId || "")).filter(Boolean));
 
+  // A field browser cannot write staff notices (only orders and tasks are kept
+  // from its save), so the manager never learned that the sizes had arrived.
+  // The server announces a finished measurement itself (Owner, 2026-11-17).
+  const measurementNotices: JsonObject[] = [];
   const mergedOrders = currentOrders.map((currentOrder) => {
     if (!orderAssignedTo(currentOrder, identityIds, roles)) return currentOrder;
     const submitted = submittedOrders.get(String(currentOrder.id || ""));
@@ -535,6 +540,26 @@ export function mergeFieldWorkspace(
         .sort();
       if (doneTimes.length) next.installationDoneAt = doneTimes[doneTimes.length - 1];
     }
+    if (next.status === "measurement_done" && currentOrder.status !== "measurement_done") {
+      const owners = (Array.isArray(currentPayload.users) ? currentPayload.users : [])
+        .filter(isObject)
+        .filter((user) => user.role === "owner" && user.active !== false)
+        .map((user) => String(user.id || ""));
+      const recipients = new Set([String(next.managerId || ""), ...owners].filter((id) => id && !identityIds.has(id)));
+      const createdAt = new Date().toISOString();
+      for (const userId of recipients) {
+        measurementNotices.push({
+          id: randomUUID(),
+          userId,
+          title: `Проект ${String(next.number || next.id || "")}`.trim(),
+          body: "Замер выполнен — проверьте размеры и подготовьте КП",
+          link: `#/order/${String(next.id || "")}`,
+          readAt: null,
+          createdAt,
+          source: "measurement_done",
+        });
+      }
+    }
     return next;
   });
 
@@ -580,7 +605,11 @@ export function mergeFieldWorkspace(
     mergedTasks.push(clone(redactFinancialData(submitted)) as JsonObject);
   }
 
-  return { ...clone(currentPayload), orders: mergedOrders, tasks: mergedTasks };
+  const merged: JsonObject = { ...clone(currentPayload), orders: mergedOrders, tasks: mergedTasks };
+  if (measurementNotices.length) {
+    merged.notifications = [...(Array.isArray(merged.notifications) ? merged.notifications : []), ...measurementNotices];
+  }
+  return merged;
 }
 
 export function hasFieldWorkspaceRole(roles: readonly string[]) {

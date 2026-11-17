@@ -197,3 +197,28 @@ test("an installer receives the owner's installer rate directory; a surveyor doe
   const surveyor = createFieldWorkspace(payload, [ROLE_CODES.CONSULTANT], ["u_z1"]);
   assert.equal("installerRates" in surveyor.settings, false);
 });
+
+test("a finished measurement is announced to the manager and the owner by the server", () => {
+  const base = structuredClone(workspace) as Record<string, any>;
+  base.users.push({ id: "manager", role: "manager", name: "Manager" });
+  base.orders[0].managerId = "manager";
+  base.orders[0].number = "R-1";
+  base.notifications = [{ id: "old", userId: "owner", title: "Old", body: "", readAt: null, createdAt: "2026-01-01T00:00:00.000Z" }];
+  const submitted = createFieldWorkspace(base, [ROLE_CODES.CONSULTANT], ["measure"]) as Record<string, any>;
+  submitted.orders[0].status = "measurement_done";
+  // A notice written in the field browser is never trusted or kept.
+  submitted.notifications = [{ id: "forged", userId: "manager", title: "Forged", body: "x", readAt: null, createdAt: "2026-01-01T00:00:00.000Z" }];
+
+  const merged = mergeFieldWorkspace(base, submitted, [ROLE_CODES.CONSULTANT], ["measure"]) as Record<string, any>;
+  assert.equal(merged.orders[0].status, "measurement_done");
+  const fresh = merged.notifications.filter((item: any) => item.source === "measurement_done");
+  assert.deepEqual(fresh.map((item: any) => item.userId).sort(), ["manager", "owner"]);
+  assert.equal(fresh[0].link, "#/order/order-a");
+  assert.match(fresh[0].title, /R-1/);
+  assert.equal(merged.notifications.some((item: any) => item.id === "forged"), false);
+  assert.equal(merged.notifications.some((item: any) => item.id === "old"), true);
+
+  // Saving the same finished measurement again does not repeat the notice.
+  const again = mergeFieldWorkspace(merged, submitted, [ROLE_CODES.CONSULTANT], ["measure"]) as Record<string, any>;
+  assert.equal(again.notifications.filter((item: any) => item.source === "measurement_done").length, 2);
+});
