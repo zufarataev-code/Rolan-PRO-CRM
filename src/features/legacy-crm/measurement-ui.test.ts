@@ -175,57 +175,42 @@ test("Smart room sizing selects one capacity from total room load with reserve",
   assert.equal(metrics.powerSupplyModel, "Rolan Control 100W");
 });
 
-test("measurement actions preserve the active scroll position across a full modal render", () => {
+test("measurement actions replace only the modal and preserve the active scroll position", () => {
   assert.match(legacyCrm, /<div class="app-content" data-scroll-key="app-content">/, "the actual desktop and tablet viewport is restored, not the non-scrolling app shell");
   assert.match(legacyCrm, /let __pendingRenderPosition = null/);
   assert.match(legacyCrm, /function preservePositionForNextRender\(snapshot = captureRenderPosition\(\)\)/);
   assert.match(
     legacyCrm,
-    /function refreshManagerMeasureModal\(oid\) \{[\s\S]*?preservePositionForNextRender\(\);[\s\S]*?render\(\);/,
+    /function refreshManagerMeasureModal\(oid\) \{[\s\S]*?const snapshot = captureRenderPosition\(\);[\s\S]*?mountManagerMeasureModal\(oid, \{ replace: true \}\)[\s\S]*?restoreRenderPositionStable\(snapshot\);/,
   );
+  assert.match(legacyCrm, /function mountManagerMeasureModal\(oid,[\s\S]*?current\.replaceWith\(next\)/);
   assert.match(legacyCrm, /const snapshot = __pendingRenderPosition \|\| captureRenderPosition\(\)/);
   assert.match(legacyCrm, /function restoreRenderPositionStable\(snapshot\)[\s\S]*?requestAnimationFrame\(\(\) => restoreRenderPosition\(snapshot\)\)/);
   assert.match(legacyCrm, /\.manager-measure-modal \{[\s\S]*?overflow-anchor: none/);
   assert.match(legacyCrm, /\.manager-measure-body \{[\s\S]*?overflow-anchor: none/);
 });
 
-test("dimension entry waits for focus transfer before rebuilding the measurement workspace", () => {
+test("dimension and quantity entry update facts in place without rebuilding the measurement workspace", () => {
   assert.match(legacyCrm, /data-measure-order-id="\$\{academyEsc\(oid\)\}"/);
   assert.match(
     legacyCrm,
-    /function refreshManagerMeasureModalAfterFieldChange\(oid\) \{[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?modal\.dataset\.measureOrderId !== orderId[\s\S]*?refreshManagerMeasureModal\(orderId\);[\s\S]*?\}, 0\);/,
+    /function refreshManagerMeasureModalAfterFieldChange\(oid, rid, wid\) \{[\s\S]*?mm-area-label-[\s\S]*?mm-area-[\s\S]*?data-mm-room-summary/,
   );
   assert.match(
     legacyCrm,
-    /function managerUpdateWinDim\(oid, rid, wid, field, val\) \{[\s\S]*?save\(\);\s*refreshManagerMeasureModalAfterFieldChange\(oid\);/,
+    /function managerUpdateWinDim\(oid, rid, wid, field, val\) \{[\s\S]*?saveMeasurementDraft\(\);\s*refreshManagerMeasureModalAfterFieldChange\(oid, rid, wid\);/,
   );
   assert.match(
     legacyCrm,
-    /function managerUpdateWin\(oid, rid, wid, field, val\) \{[\s\S]*?if \(field === 'qty'\) refreshManagerMeasureModalAfterFieldChange\(oid\);/,
+    /function managerUpdateWin\(oid, rid, wid, field, val\) \{[\s\S]*?if \(field === 'qty'\) \{[\s\S]*?saveMeasurementDraft\(\);[\s\S]*?refreshManagerMeasureModalAfterFieldChange\(oid, rid, wid\);/,
   );
-
-  const start = legacyCrm.indexOf("let __managerMeasureFieldRefreshTimer = null;");
-  const end = legacyCrm.indexOf("function managerAddRoomFromForm", start);
-  assert.ok(start >= 0 && end > start);
-  let scheduled: (() => void) | null = null;
-  let restoredFocus = "";
-  const document = {
-    activeElement: { id: "mm-width-w1" },
-    querySelector: () => ({ dataset: { measureOrderId: "o1" } }),
-  };
-  const context = vm.createContext({
-    document,
-    clearTimeout: () => undefined,
-    setTimeout: (callback: () => void) => { scheduled = callback; return 1; },
-    refreshManagerMeasureModal: () => { restoredFocus = document.activeElement.id; },
-  });
-  vm.runInContext(legacyCrm.slice(start, end), context);
-  context.refreshManagerMeasureModalAfterFieldChange("o1");
-  assert.equal(restoredFocus, "", "the old width field must not be restored synchronously");
-  document.activeElement = { id: "mm-height-w1" };
-  assert.ok(scheduled);
-  (scheduled as unknown as () => void)();
-  assert.equal(restoredFocus, "mm-height-w1", "the refresh captures the field focused after the transition");
+  assert.doesNotMatch(
+    legacyCrm.slice(legacyCrm.indexOf("function refreshManagerMeasureModalAfterFieldChange"), legacyCrm.indexOf("function managerAddRoomFromForm")),
+    /render\(|refreshManagerMeasureModal\(/,
+    "moving from width to height must not destroy and recreate the focused fields",
+  );
+  assert.match(legacyCrm, /function saveMeasurementDraft\(\)[\s\S]*?setTimeout\(flushMeasurementDraftSave, 1200\)/);
+  assert.match(legacyCrm, /window\.addEventListener\('pagehide', flushMeasurementDraftSave\)/);
 });
 
 test("dense desktop workspaces override the compact generic dialog width", () => {

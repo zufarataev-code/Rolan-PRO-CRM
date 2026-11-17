@@ -612,8 +612,16 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
           }
           if (included) item.unitPrice = 0;
           const unitPrice = Number(item.unitPrice) || 0;
-          if (!included && min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
-          if (!included && max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
+          // The corridor governs a price decision, not every unrelated save of
+          // the whole legacy workspace. Older projects may legitimately carry
+          // a price that predates today's corridor. A surveyor changing a
+          // window size must not be blocked by that unchanged historical price.
+          const oldUnitPrice = old?.unitPrice === undefined || old?.unitPrice === null || old?.unitPrice === ''
+            ? NaN
+            : Number(old.unitPrice);
+          const unitPriceChanged = newService || !Number.isFinite(oldUnitPrice) || unitPrice !== oldUnitPrice;
+          if (!included && unitPriceChanged && min > 0 && unitPrice < min) return `Цена «${offering?.name || 'услуги'}» ниже разрешённого минимума ${min.toFixed(2)}.`;
+          if (!included && unitPriceChanged && max > 0 && unitPrice > max) return `Цена «${offering?.name || 'услуги'}» выше разрешённого максимума ${max.toFixed(2)}.`;
           const qty = Number(item.qty);
           if (!Number.isFinite(qty) || qty < 0) return 'Количество услуги должно быть неотрицательным числом.';
           item.qty = qty;
