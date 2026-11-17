@@ -108,7 +108,15 @@ test("manager lead stages are audited, concurrent-safe and cannot forge a sale",
     const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
     try {
       assert.equal((await patch("CONTACTED", "QUALIFIED")).status, 200);
-      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200);
+      const claims = await Promise.all([1, 2].map(() => call(manager, "POST", `${path}/claim`, { action: "claim" })));
+      assert.deepEqual(claims.map(item => item.status).sort(), [200, 409], "two tabs of the same manager cannot both reserve a lead");
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 409, "a fresh reservation cannot be reacquired by its owner");
+      assert.equal((await patch("CONTACTING", "CONTACTED")).status, 200, "the claimant can still edit the lead stage");
+      assert.equal((await patch("CONTACTED", "CONTACTING")).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "release" })).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200, "a failed save can release and retry");
+      await prisma.lead.update({ where: { lead_id: id }, data: { claimed_at: new Date(Date.now() - 11 * 60 * 1000) } });
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200, "an abandoned reservation can be recovered");
       assert.equal((await call(manager, "POST", `${path}/claim`, { action: "complete" })).status, 409, "a stage label cannot substitute for a saved project");
       const originalPayload = (workspace?.payload ?? {}) as Record<string, any>;
       for (const key of ["orders", "archivedOrders"]) {

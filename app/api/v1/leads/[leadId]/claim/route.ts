@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 import { buildLeadAccessWhere, getRecordManagerScope } from "@/features/sales/access";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
-import { OPEN_LEAD_STATUS_CODES, claimableBy } from "@/features/sales/lead-claim";
+import { OPEN_LEAD_STATUS_CODES, claimAvailableAt } from "@/features/sales/lead-claim";
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let where: Prisma.LeadWhereInput;
   let data: Prisma.LeadUncheckedUpdateManyInput;
   if (action === "claim") {
-    where = { AND: [base, open, claimableBy(userId, now)] };
+    where = { AND: [base, open, claimAvailableAt(now)] };
     data = { claimed_by_user_id: userId, claimed_at: now };
   } else if (action === "complete") {
     const contacted = await getPipelineStatusId("PROJECT_CREATED");
