@@ -323,6 +323,11 @@ test('manual project total is allocated into the service rows instead of becomin
   assert.equal(form.manualTotal, '2000');
   assert.equal(lines.reduce((sum, line) => sum + Number(line.price), 0), 2000);
   assert.deepEqual(lines.map(line => Math.round(Number(line.price) / Number(line.qty) * 100) / 100), [13.33, 13.33]);
+
+  context.currentUser = () => ({ role: 'manager' });
+  vm.runInContext('result = quickEntryDistributeTotal(form, 1800);', context);
+  assert.equal(context.result, false, 'a manager cannot distribute a manual project total');
+  assert.equal(lines.reduce((sum, line) => sum + Number(line.price), 0), 2000);
 });
 
 test('the one-screen UI exposes automatic/manual totals and a real project date range', () => {
@@ -333,7 +338,7 @@ test('the one-screen UI exposes automatic/manual totals and a real project date 
   assert.match(renderer, /3\. Услуги проекта/);
   assert.match(renderer, /4\. Прямые расходы проекта/);
   assert.match(renderer, /Авто · сумма из услуг/);
-  assert.match(renderer, /Итог проекта вручную/);
+  assert.match(renderer, /owner \? `<button[^`]*Итог проекта вручную/, 'the manual-total control is owner-only');
   assert.match(renderer, /quickEntryApplyManualTotal\(\)/);
   assert.match(renderer, /Начало работ<input id="qe-l\$\{i\}-date"/);
   assert.match(renderer, /Окончание<input id="qe-l\$\{i\}-endDate"/);

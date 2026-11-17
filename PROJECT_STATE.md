@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-15 — Ручной итог владельца сохраняется на сервере
+
+- Branch: `codex/manual-project-total-save-20261115`, based on `origin/main` `6b3fa9cf`.
+- Root cause: the Project card deliberately let the Owner move a manual total outside the manager price corridor, but `prepareServiceSolutions()` applied that manager-only min/max rule to the Owner again during `PUT /api/v1/legacy-crm/state`. The browser therefore changed the total locally while the server rejected the same authorized prices.
+- Fix: only the authenticated Owner can use or persist the manual-project-total controls. Managers see the total but cannot edit it as one value; both the ordinary Project card and historical quick-entry screen enforce this in the UI, action functions and server validation. Manager line-price corridors remain enforced for ordinary per-service price edits. Non-negative price validation and every other service/project validation remain unchanged. Coverage includes quantity services and measured-window rates.
+- Production incident confirmed on Project `R-261115-117`: the Owner's saved total produced a `Magnetron` rate below the manager floor and the server returned the real rule «Цена “Magnetron” ниже разрешённого минимума 10.00». The generic red status hid that reason and looked like an outage. This branch now shows the exact rejected business rule while retaining the local snapshot; the Owner bypass above is the actual persistence fix.
+- Verification after the Owner-only follow-up: focused manual-total/service/quick-entry suite **73/73**, full suite **1198/1198**, `pnpm typecheck`, production build (139 static pages), and `git diff --check` pass. No production data or deployment changed.
+- Next action: independent review, then merge/release through the protected `main` workflow; production deployment remains a separate Owner-approved action.
+
 ## 2026-11-15 — Project card keeps its place and retries an interrupted save (Codex, PR #536)
 
 - Owner, iPad: adding another Project expense jumps the card to the top; during the same session CRM showed «Нет связи — изменения сохранены локально».
