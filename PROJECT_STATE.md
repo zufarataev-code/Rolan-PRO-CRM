@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Official shadcn/ui skill is project-scoped (Codex, PR pending)
+
+- Owner asked Codex to use the official `shadcn/ui` skill for Rolan PRO CRM interface work.
+- Branch `codex/add-shadcn-skill-20261117`, based on current `origin/main`, installs the upstream `shadcn-ui/ui` `shadcn` skill for Codex under `.agents/skills/shadcn` and pins its source commit/hash in `skills-lock.json`.
+- This is developer tooling only: it changes no CRM screen, calculation, API, production data or runtime dependency. Future shadcn work must still inspect the active architecture and must not layer React components over the legacy HTML workspace without an explicit migration boundary.
+- Verification: installer reports the upstream skill as installed for Codex; lock hash is present; repository diff contains only the project-scoped skill, lock file and this handoff entry.
+
 ## 2026-11-15 — Ручной итог владельца сохраняется на сервере
 
 - Branch: `codex/manual-project-total-save-20261115`, based on `origin/main` `6b3fa9cf`.
