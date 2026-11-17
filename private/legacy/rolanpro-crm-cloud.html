@@ -24692,6 +24692,16 @@ function settingsPanelAttrs(key) {
   return `class="card settings-section-panel" data-settings-section="${key}"${state.settingsSection === key ? '' : ' hidden'}`;
 }
 
+function toggleEmailTemplatePanel(button) {
+  const panel = button?.nextElementSibling;
+  if (!panel) return;
+  const willOpen = panel.hidden;
+  panel.hidden = !willOpen;
+  button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  const label = button.querySelector('[data-template-toggle-label]');
+  if (label) label.textContent = willOpen ? 'Закрыть' : 'Открыть';
+}
+
 function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
   const gmailConnected = gmailServerStatus?.connected === true;
   const marketingConnected = marketingEmailStatus?.configured === true;
@@ -24729,7 +24739,16 @@ function renderEmailChannelSettings(s, cardAttrs = 'class="card"') {
       </label>
       <div class="mt-4">
         <div class="text-sm font-medium mb-2">Шаблоны рабочих писем</div>
-        ${Object.keys(s.email.templates).map(k => `<details class="mb-2 border rounded-lg p-3 bg-gray-50"><summary class="text-sm font-medium cursor-pointer">${T(k)}</summary><label class="text-xs mt-3">${T('emailSubject')}</label><input value="${academyEsc(s.email.templates[k].subject)}" onchange="db.settings.email.templates['${k}'].subject=this.value; save();"><label class="text-xs mt-2">${T('emailBody')}</label><textarea rows="3" onchange="db.settings.email.templates['${k}'].body=this.value; save();">${academyEsc(s.email.templates[k].body)}</textarea></details>`).join('')}
+        ${Object.keys(s.email.templates).map(k => `<div class="mb-2 border rounded-lg bg-gray-50 overflow-hidden" data-email-template="${academyEsc(k)}">
+          <button type="button" class="w-full min-h-[48px] px-3 py-3 flex items-center justify-between gap-3 text-left bg-gray-50" aria-expanded="false" onclick="toggleEmailTemplatePanel(this)">
+            <span class="text-sm font-bold">${T(k)}</span>
+            <span class="text-xs font-bold text-blue-700 whitespace-nowrap" data-template-toggle-label>Открыть</span>
+          </button>
+          <div class="px-3 pb-3 border-t bg-white" hidden>
+            <label class="text-xs mt-3">${T('emailSubject')}</label><input value="${academyEsc(s.email.templates[k].subject)}" onchange="db.settings.email.templates['${k}'].subject=this.value; save();">
+            <label class="text-xs mt-2">${T('emailBody')}</label><textarea rows="3" onchange="db.settings.email.templates['${k}'].body=this.value; save();">${academyEsc(s.email.templates[k].body)}</textarea>
+          </div>
+        </div>`).join('')}
       </div>
     </div>`;
 }

@@ -2,6 +2,14 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-16 — Шаблоны писем открываются явной кнопкой на телефоне и планшете
+
+- Task owner: Codex, branch `codex/settings-template-accordion-20261116`, based on current `origin/main`.
+- Owner reports that email templates in Settings cannot be opened on their device. The current UI relies on compact native `<details>/<summary>` controls; desktop Chrome can expand them, but the hit area and native behavior are not reliable enough across tablet/mobile browsers.
+- Scope: replace the native summary with one explicit full-width `Открыть / Закрыть` button per template, keep the same stored template fields and save path, and add focused mobile-safe regression coverage. No message is sent and no production setting is changed by development.
+- Implemented: every work-email template now has a full-width 48 px button with explicit `Открыть / Закрыть` state and `aria-expanded`; its editor is shown/hidden in place without a full CRM render, so typed text, scroll and the surrounding Settings page stay stable.
+- Verification: focused template tests **2/2**, full unit suite **1201/1201**, `pnpm typecheck`, production build (139 static pages) and `git diff --check` pass. Next action: independent review and owner-approved main-only publication; production remains unchanged.
+
 ## 2026-11-15 — Ручной итог владельца сохраняется на сервере
 
 - Branch: `codex/manual-project-total-save-20261115`, based on `origin/main` `6b3fa9cf`.
