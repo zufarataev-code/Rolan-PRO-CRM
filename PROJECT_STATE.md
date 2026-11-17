@@ -2,6 +2,19 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — «Кабинет проекта»: пробный вид карточки Project у владельца (Claude)
+
+- Owner, 2026-11-17: после демо «Кабинет проекта» (этапы, кольца прогресса, услуги, тур по фото) — «делай всё в CRM», только модуль проекта, остальное не трогать, посмотреть на живых данных. Прямое поручение владельца на эту задачу; проверка Codex — после, в PR.
+- Branch `claude/project-cabinet-20261117`, based on `origin/main` `5f7b3f6b`.
+- Новый модуль `private/legacy/project-cabinet.js` (только функции, собирается тем же `composeProductionHtml()` вторым проходом в `app/legacy-crm/route.ts`). В `rolanpro-crm-cloud.html` изменено одно место — `renderOrderDetails()`: кнопка входа над обычной карточкой и ветка в кабинет.
+- Вид включает сам владелец кнопкой «Кабинет проекта (проба)»; выбор хранится на устройстве (`localStorage rp_project_cabinet`), в рабочую область не пишется. Остальные роли вид не видят, обычная карточка не менялась.
+- Кабинет не считает сам: услуги — `projectLines()` и `projectServiceProgress()`, сумма и оплата — `orderRevenue()` / `orderPaidTotal()`, следующий шаг — `orderPrimaryNextAction()`, отметка услуги — существующий `projectSetServiceProgress()` с его правами и проверками.
+- Тур по объекту: фото проекта (`order.photos`), список окон, точки на фото. Точка — новое необязательное поле `photo.marks[] = { id, roomId, windowId, x, y }` (проценты); ставит владелец или менеджер, одна точка на окно на фото. Это единственная запись, которую делает кабинет сам.
+- Verification: `project-cabinet.test.ts` 4/4 (вид только у владельца; этапы, услуги, окна и деньги из рабочих функций; без доступа к деньгам сумм нет; точка на фото), вместе с `production-ui.test.ts` и `html-shell.test.ts` 25/25; собранный inline-скрипт legacy проходит `node --check`; вёрстка проверена на подставных данных на 1280 и 390 px. Полный набор, typecheck и production build в среде Claude не запускались (нет зависимостей) — их проверяет CI.
+- Не проверено: на реальных данных production кабинет не открывался.
+- Пересечение: `rolanpro-crm-cloud.html` правят #550, #544, #539 — здесь три строки в `renderOrderDetails()`.
+- Next action: проверка Codex, затем владелец включает вид на своём проекте и говорит, что переносить дальше (замерщик, касса, КП).
+
 ## 2026-11-15 — Ручной итог владельца сохраняется на сервере
 
 - Branch: `codex/manual-project-total-save-20261115`, based on `origin/main` `6b3fa9cf`.

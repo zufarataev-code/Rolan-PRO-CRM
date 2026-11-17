@@ -31169,8 +31169,10 @@ function renderOrderDetails(id) {
   if (u.role === 'installer') {
     return renderInstallerTechnicalWorkspace(o, c, u);
   }
+  // «Кабинет проекта» — пробный вид владельца (private/legacy/project-cabinet.js).
+  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u)) return projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
   if (!state.orderClassicMode || u.role !== 'owner') {
-    return renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
+    return (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 
   return `
