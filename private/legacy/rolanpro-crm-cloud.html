@@ -1790,6 +1790,30 @@
   .project-more-menu { position:relative; }
   .project-more-menu > summary { list-style:none; cursor:pointer; min-width:44px; text-align:center; }
   .project-more-menu > summary::-webkit-details-marker { display:none; }
+  /* Owner, 2026-11-17: компактная карточка проекта — пробный вид только у владельца
+     (переключатель в «⋯»). Шапка в одну строку: клиент, деньги с полосой оплаты и одна
+     кнопка следующего шага обычного размера; ширина карточки ограничена. */
+  .project-card-compact { width:100%; max-width:1400px; margin-inline:auto; gap:.6rem; }
+  .project-card-compact .pcc-hero { padding:.7rem .9rem; }
+  .pcc-row { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem 1.25rem; }
+  .pcc-id { flex:1 1 300px; min-width:0; }
+  .pcc-hero .project-command-title { font-size:1.35rem; }
+  .pcc-hero .project-command-meta { margin-top:.15rem; }
+  .pcc-money { flex:0 1 280px; min-width:200px; display:grid; gap:.3rem; }
+  .pcc-money-line { display:flex; align-items:baseline; justify-content:space-between; gap:.5rem; }
+  .pcc-money-line strong { font-size:1rem; color:#10213b; }
+  .pcc-money-line span { font-size:.74rem; color:#5A6577; white-space:nowrap; }
+  .pcc-bar { height:8px; border-radius:999px; background:#EEF1F5; overflow:hidden; }
+  .pcc-bar i { display:block; height:100%; border-radius:999px; background:#15803D; }
+  .pcc-next { flex:0 1 auto; max-width:340px; }
+  .pcc-next .order-action-card { width:auto; min-height:44px; padding:.45rem .8rem; grid-template-columns:26px minmax(0,1fr); align-items:center; gap:.5rem; }
+  .pcc-next .order-action-card .order-action-sub { display:none; }
+  .project-card-compact .project-command-hero .order-clean-progress { margin-top:.6rem; padding-top:.6rem; }
+  .project-card-compact .project-feed { margin-top:0; }
+  .project-card-compact .project-feed-next { display:none; }
+  .project-card-compact .project-feed-top { grid-template-columns:1fr; }
+  .project-card-compact .project-feed-top:not(:has(.project-feed-gate)) { display:none; }
+  .project-card-compact .project-feed-top > .project-feed-gate { max-width:none; }
   .project-more-menu-body { position:absolute; right:0; top:110%; z-index:30; display:grid; gap:4px; min-width:220px; padding:6px; background:#fff; border:1px solid #dbe4ef; border-radius:6px; box-shadow:0 14px 32px rgba(15,35,61,.16); }
   @media (max-width: 980px) {
     .project-command-grid { grid-template-columns:1fr; }
@@ -29585,9 +29609,33 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
   </aside>`;
 }
 
+/** Owner-only trial of the compact Project card; kept per device, never in the workspace. */
+function projectCardCompactEnabled() {
+  if (currentUser()?.role !== 'owner') return false;
+  try { return localStorage.getItem('rp_project_card_compact') === '1'; } catch (_) { return false; }
+}
+function projectCardToggleCompact() {
+  try { localStorage.setItem('rp_project_card_compact', projectCardCompactEnabled() ? '0' : '1'); } catch (_) {}
+  render();
+}
 function renderProjectCommandHeader(o, c, primary, { money = false, pendingRequests = [], nextEvent = null } = {}) {
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
+  if (projectCardCompactEnabled()) {
+    // One row instead of a hero + three fact tiles + a full-width next-step block.
+    // No status text here: the stage bar below is the one status of the project.
+    const revenue = orderRevenue(o);
+    const paid = Math.max(orderPaidTotal(o), Number(o.paid) || 0);
+    const paidPct = revenue > 0 ? Math.max(0, Math.min(100, Math.round(paid / revenue * 100))) : 0;
+    return `<section class="project-command-hero pcc-hero">
+    <div class="pcc-row">
+      <div class="pcc-id"><div class="project-command-kicker">Проект ${academyEsc(o.number)}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div>
+      ${money ? `<div class="pcc-money"><div class="pcc-money-line"><strong>${fmtMoney(revenue)}</strong><span>оплачено ${fmtMoney(paid)} · остаток ${fmtMoney(orderDebt(o))}</span></div><div class="pcc-bar" role="img" aria-label="Оплачено ${paidPct}%"><i style="width:${paidPct}%"></i></div></div>` : ''}
+      ${primary ? `<div class="pcc-next">${renderOrderActionCard(primary)}</div>` : ''}
+    </div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
+    ${renderOrderCleanProgress(o)}
+  </section>`;
+  }
   return `<section class="project-command-hero">
     <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
     <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
@@ -31078,9 +31126,9 @@ function renderOrderCleanDetails(o, c, u, opts = {}) {
   return `
     <div class="order-clean-topbar">
       <button class="btn-ghost" onclick="state.view='${isInstaller ? 'installations' : u?.role === 'measurer' ? 'measurements' : 'orders'}'; location.hash=''; render();">← ${isInstaller ? 'Мои задачи' : u?.role === 'measurer' ? 'Мои замеры' : T('orders')}</button>
-      ${u?.role === 'owner' ? `<details class="project-more-menu"><summary class="btn-ghost text-sm" aria-label="Ещё действия">⋯</summary><div class="project-more-menu-body"><button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();">Все поля (старая форма)</button><button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')">🗑 Удалить в архив</button></div></details>` : ''}
+      ${u?.role === 'owner' ? `<details class="project-more-menu"><summary class="btn-ghost text-sm" aria-label="Ещё действия">⋯</summary><div class="project-more-menu-body"><button class="btn-ghost text-sm" onclick="projectCardToggleCompact()">${projectCardCompactEnabled() ? 'Обычная карточка' : 'Компактная карточка (проба)'}</button><button class="btn-ghost text-sm" onclick="state.orderClassicMode=true; render();">Все поля (старая форма)</button><button class="btn-ghost text-sm text-red-600" onclick="openArchiveProjectModal('${o.id}')">🗑 Удалить в архив</button></div></details>` : ''}
     </div>
-    <div class="order-clean-shell">
+    <div class="order-clean-shell${projectCardCompactEnabled() ? ' project-card-compact' : ''}">
       ${renderProjectCommandHeader(o, c, primary, { money: canSeeMoney, pendingRequests, nextEvent })}
       ${projectFeedHtml(o, c, u, { canManage, canSeeMoney, canSeeInternalEconomics, primary, measureAction, recentTimeline })}
       <!-- next step lives at the top of the feed (2026-10-24) -->
