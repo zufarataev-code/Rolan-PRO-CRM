@@ -17,7 +17,7 @@ CREATE TABLE "meta_capi_outbox" (
   "test_accepted_at" TIMESTAMPTZ(6),
   "accepted_at" TIMESTAMPTZ(6),
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL,
   CONSTRAINT "meta_capi_outbox_pkey" PRIMARY KEY ("meta_capi_outbox_id"),
   CONSTRAINT "meta_capi_outbox_lead_id_fkey" FOREIGN KEY ("lead_id") REFERENCES "leads"("lead_id") ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT "meta_capi_outbox_conversion_event_id_fkey" FOREIGN KEY ("conversion_event_id") REFERENCES "conversion_events"("conversion_event_id") ON DELETE SET NULL ON UPDATE CASCADE
