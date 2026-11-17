@@ -1,5 +1,6 @@
 import { findAcquisitionTouchpoint } from "./attribution";
 import { Prisma } from "@prisma/client";
+import { enqueueConvertedLead } from "@/features/meta-capi/events";
 
 export const GOOGLE_ADS_DEFAULT_SETTING_KEY = "default";
 export const GOOGLE_ADS_QUALIFIED_LEAD_EVENT = "qualified_lead";
@@ -59,6 +60,9 @@ export async function ensureQualifiedLeadConversion(
   tx: Prisma.TransactionClient,
   input: QualifiedLeadConversionInput,
 ) {
+  if (["DISQUALIFIED", "CLOSED_LOST", "SPAM"].includes(input.pipelineStatusCode.trim().toUpperCase())) {
+    return { event: null, outbox: null, deliveryState: "rule_not_matched" as const };
+  }
   const settings = await tx.googleAdsIntegrationSetting.findUnique({
     where: { setting_key: GOOGLE_ADS_DEFAULT_SETTING_KEY },
     select: {
@@ -224,6 +228,8 @@ export async function ensureClosedWonConversion(
       },
     },
   });
+
+  if (event.lead_id) await enqueueConvertedLead(tx, { conversionEventId: event.conversion_event_id });
 
   if (!settings?.conversion_owner_customer_id || !settings.converted_lead_action_id) {
     return {

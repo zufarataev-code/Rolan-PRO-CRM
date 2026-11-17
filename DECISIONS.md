@@ -2,6 +2,14 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-17 — Lead classification and advertising feedback use verified outcomes
+
+- Owner requested the lead lifecycle and explicitly included CRM-to-Meta CAPI delivery. Lead stages remain canonical PostgreSQL pipeline references. Managers may mark contact attempts, contact, qualification, disqualification, loss and spam; negative outcomes require a saved reason. Closed leads remain filterable with their history.
+- Creating a project records `PROJECT_CREATED`, not qualification or a sale. Appointments and proposals retain their workflow evidence; converted requires the existing positive-value verified sale event. Retraction displays the lost outcome without deleting sale history. Manual changes cannot fabricate those automatic milestones or overwrite a recorded sale.
+- Google keeps its existing configured qualification rule and separate upload/live gates; explicit `QUALIFIED` is an additional selectable rule. Meta captures stage history in its own durable outbox with stable IDs, original timestamps, consent checks and separate test/live acceptance. Negative stages never emit positive conversion events.
+- Native instant-form feedback uses Meta's CRM payload and existing native lead ID. Ordinary website/phone CRM stage changes use `system_generated` with recorded advertising consent and hashed matching, without claiming another website submission or phone call. No advertising consent, provider success, training eligibility or ad goal is inferred from a lead label.
+- This implementation is delivered through PR #557. Merge/release and Meta dataset/token activation remain separate reviewed steps; no production records or live advertising configuration are modified by this task.
+
 ## 2026-11-15 — Full legacy renders preserve the real viewport; transient saves retry
 
 - The responsive application has two canonical scroll owners: `.app-content` on desktop/tablet and the document viewport on narrow mobile. Any full `render()` must capture and restore those owners through the shared render-continuity layer; feature buttons must not implement their own scroll patches.

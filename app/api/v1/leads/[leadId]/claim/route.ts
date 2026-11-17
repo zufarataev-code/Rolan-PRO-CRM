@@ -3,10 +3,11 @@ import { NextRequest } from "next/server";
 
 import { buildLeadAccessWhere, getRecordManagerScope } from "@/features/sales/access";
 import { MANAGER_ROLES, getPipelineStatusId } from "@/features/sales/api";
-import { OPEN_LEAD_STATUS_CODES, claimableBy } from "@/features/sales/lead-claim";
+import { OPEN_LEAD_STATUS_CODES, claimAvailableAt } from "@/features/sales/lead-claim";
 import { requireRequestSession } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/http/api-response";
+import { enqueueLeadStage } from "@/features/meta-capi/events";
 
 type RouteContext = { params: Promise<{ leadId: string }> };
 
@@ -14,7 +15,7 @@ type RouteContext = { params: Promise<{ leadId: string }> };
  * «Создать проект» from a shared-queue lead in three steps, so a lead never
  * disappears without a saved project and is never converted twice:
  *   claim    — reserve an open lead (it stays open and visible);
- *   complete — after the project is saved, close it (CONTACTED) and assign it;
+ *   complete — after the project is saved, mark PROJECT_CREATED and assign it;
  *   release  — give the reservation back when the project could not be saved.
  * Only the claimant can complete or release; a stale claim can be taken over.
  */
@@ -40,11 +41,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   let where: Prisma.LeadWhereInput;
   let data: Prisma.LeadUncheckedUpdateManyInput;
   if (action === "claim") {
-    where = { AND: [base, open, claimableBy(userId, now)] };
+    where = { AND: [base, open, claimAvailableAt(now)] };
     data = { claimed_by_user_id: userId, claimed_at: now };
   } else if (action === "complete") {
-    const contacted = await getPipelineStatusId("CONTACTED");
-    if (!contacted) return apiError(500, "missing_pipeline_status", "CONTACTED pipeline status is not configured.");
+    const contacted = await getPipelineStatusId("PROJECT_CREATED");
+    if (!contacted) return apiError(500, "missing_pipeline_status", "PROJECT_CREATED pipeline status is not configured.");
     where = { AND: [base, open, { claimed_by_user_id: userId }] };
     data = {
       pipeline_status_id: contacted.pipeline_status_id,
@@ -57,7 +58,37 @@ export async function POST(request: NextRequest, context: RouteContext) {
     data = { claimed_by_user_id: null, claimed_at: null };
   }
 
-  const result = await prisma.lead.updateMany({ where, data });
+  const result = await prisma.$transaction(async tx => {
+    // Historical CONTACTED leads may already own a saved or archived project.
+    if (action !== "release" && await tx.lead.count({ where: base })) {
+      const linked = await tx.$queryRaw<Array<{ found: number }>>`
+        SELECT 1 AS found FROM legacy_workspaces,
+        LATERAL jsonb_array_elements(
+          (CASE WHEN jsonb_typeof(payload->'orders') = 'array' THEN payload->'orders' ELSE '[]'::jsonb END)
+          || (CASE WHEN jsonb_typeof(payload->'archivedOrders') = 'array' THEN payload->'archivedOrders' ELSE '[]'::jsonb END)
+        ) AS project
+        WHERE workspace_id = 'primary' AND project->>'canonicalLeadId' = ${leadId}
+        LIMIT 1`;
+      if (action === "claim" && linked.length) return { count: 0, projectExists: true };
+      if (action === "complete" && !linked.length) return { count: 0, projectMissing: true };
+    }
+    const changed = await tx.lead.updateMany({ where, data });
+    if (changed.count === 1 && action === "complete") {
+      const activity = await tx.activityLog.create({ data: {
+        actor_user_id: userId, entity_type: "lead", entity_id: leadId,
+        action_key: "lead.stage_changed", message: "По лиду создан проект. Это ещё не продажа.",
+        metadata: { pipeline_status_code: "PROJECT_CREATED" },
+      } });
+      await enqueueLeadStage(tx, { leadId, stageCode: "PROJECT_CREATED", occurredAt: activity.created_at, eventId: activity.activity_id });
+    }
+    return changed;
+  });
+  if ("projectExists" in result) {
+    return apiError(409, "lead_project_exists", "По этой заявке уже есть проект, в том числе он может быть в архиве. Откройте существующий проект.");
+  }
+  if ("projectMissing" in result) {
+    return apiError(409, "lead_project_missing", "Проект ещё не сохранён на сервере. Заявка остаётся открытой.");
+  }
   if (result.count !== 1) {
     const visible = await prisma.lead.count({ where: base });
     if (!visible) return apiError(404, "not_found", "Lead was not found.");

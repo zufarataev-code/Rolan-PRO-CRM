@@ -42,6 +42,25 @@ async function main() {
       await page.locator("[data-website-updates]").waitFor();
       assert.match(await page.locator("[data-website-updates]").innerText(), /Browser callback fixture <script>/);
       assert.equal(await page.locator("[data-website-updates] script").count(), 0);
+      const fixtureCard = page.locator(".card").filter({ hasText: "Website browser fixture" }).first();
+      const setStage = async (code: string, reason?: string) => {
+        if (reason) page.once("dialog", (dialog: any) => dialog.accept(reason));
+        const saved = page.waitForResponse((response: any) => response.url().endsWith(`/api/v1/leads/${leadId}`) && response.request().method() === "PATCH");
+        await fixtureCard.getByRole("combobox", { name: "Этап лида Website browser fixture", exact: true }).selectOption(code);
+        assert.equal((await saved).status(), 200);
+        await page.waitForFunction(({ id, stage }: { id: string; stage: string }) => (window as any).canonicalLeadRow(id)?.statusCode === stage, { id: leadId, stage: code });
+      };
+      await setStage("CONTACTING");
+      await setStage("CONTACTED");
+      await setStage("QUALIFIED");
+      await setStage("DISQUALIFIED", "Browser fixture outside service area");
+      await fixtureCard.waitFor({ state: "hidden" });
+      assert.equal(await fixtureCard.count(), 0, "closed lead leaves the active filter");
+      await page.getByRole("combobox", { name: "Фильтр по этапу лида", exact: true }).selectOption("all");
+      assert.match(await fixtureCard.innerText(), /Не квалифицирован/);
+      await fixtureCard.locator("summary").filter({ hasText: "История этапов" }).click();
+      assert.match(await fixtureCard.innerText(), /Browser fixture outside service area/);
+      await setStage("NEW_LEAD");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
       await page.screenshot({ path: `test-results/website-followups/inbox-${width}.png`, fullPage: true });
       // Explicit real CRM conversion on disposable data, preserving canonicalLeadId.
@@ -55,7 +74,7 @@ async function main() {
       await signed("PATCH", { submission_id: submission, event_id: randomUUID(), revision: nextRevision, occurred_at: new Date().toISOString(), contact: {}, follow_up: { kind: "quote_updated", message: laterMessage } });
       await page.waitForFunction((message: string) => Array.from(document.querySelectorAll(".project-feed [data-website-updates]")).some(node => node.textContent?.includes(message)), laterMessage, { timeout: 20000 });
       const lead = await db.lead.findUniqueOrThrow({ where: { lead_id: leadId }, include: { pipeline_status: true } });
-      assert.equal(lead.pipeline_status.status_code, "CONTACTED");
+      assert.equal(lead.pipeline_status.status_code, "PROJECT_CREATED");
       assert.equal(lead.notes, "Original website quote");
       assert.deepEqual(errors, []);
       await page.screenshot({ path: `test-results/website-followups/project-${width}.png`, fullPage: true });

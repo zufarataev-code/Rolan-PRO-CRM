@@ -389,6 +389,7 @@ model Lead {
   acquisition_touchpoints      AcquisitionTouchpoint[]
   consent_snapshots            ConsentSnapshot[]
   conversion_events            ConversionEvent[]
+  meta_capi_outboxes            MetaCapiOutbox[]
 
   @@index([assigned_manager_id])
   @@index([city_id])
@@ -570,6 +571,7 @@ model ConversionEvent {
   deal                        Deal?    @relation(fields: [deal_id], references: [deal_id], onDelete: SetNull)
   attribution_touchpoint      AcquisitionTouchpoint? @relation(fields: [attribution_touchpoint_id], references: [acquisition_touchpoint_id], onDelete: SetNull)
   upload_outboxes             ConversionUploadOutbox[]
+  meta_capi_outboxes          MetaCapiOutbox[]
 
   @@unique([business_object_type, business_object_id, event_type])
   @@index([lead_id])
@@ -580,6 +582,35 @@ model ConversionEvent {
   @@map("conversion_events")
 
   adjustments                   ConversionAdjustment[]
+}
+
+model MetaCapiOutbox {
+  meta_capi_outbox_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id            String?   @db.Uuid
+  conversion_event_id String?  @db.Uuid
+  event_id           String    @unique @db.VarChar(191)
+  event_name         String    @db.VarChar(60)
+  occurred_at        DateTime  @db.Timestamptz(6)
+  dataset_id         String?   @db.VarChar(64)
+  payload_snapshot   Json?
+  processing_status  String    @default("queued") @db.VarChar(40)
+  attempt_count      Int       @default(0)
+  first_attempt_at   DateTime? @db.Timestamptz(6)
+  next_attempt_at    DateTime  @default(now()) @db.Timestamptz(6)
+  lease_token        String?   @db.Uuid
+  lease_expires_at   DateTime? @db.Timestamptz(6)
+  last_error_code    String?   @db.VarChar(100)
+  test_event_code_hash String? @db.VarChar(64)
+  test_accepted_at   DateTime? @db.Timestamptz(6)
+  accepted_at        DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @updatedAt @db.Timestamptz(6)
+  lead               Lead?    @relation(fields: [lead_id], references: [lead_id], onDelete: SetNull)
+  conversion_event   ConversionEvent? @relation(fields: [conversion_event_id], references: [conversion_event_id], onDelete: SetNull)
+
+  @@index([processing_status, next_attempt_at])
+  @@index([lead_id])
+  @@map("meta_capi_outbox")
 }
 
 model ConversionAdjustment {
