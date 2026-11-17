@@ -22,6 +22,14 @@ test("closed-won conversion keeps a separate stable sale transaction id", () => 
   assert.equal(buildClosedWonTransactionId("deal-1"), "crm-deal-deal-1-sale");
 });
 
+test("negative lead outcomes never qualify even under a stale invalid advertising rule", async () => {
+  for (const pipelineStatusCode of ["DISQUALIFIED", "CLOSED_LOST", "SPAM"]) {
+    const result = await ensureQualifiedLeadConversion({} as any, { leadId: "lead", pipelineStatusCode, occurredAt: new Date() });
+    assert.equal(result.event, null);
+    assert.equal(result.outbox, null);
+  }
+});
+
 test("every synchronous outcome producer derives PHONE from acquisition before its immutable upsert", async () => {
   const events = new Map<string, any>();
   const tx: any = {

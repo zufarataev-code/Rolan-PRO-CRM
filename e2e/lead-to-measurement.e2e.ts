@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 
@@ -72,6 +72,72 @@ async function login(email: string): Promise<Session> {
 let manager: Session;
 let surveyor: Session;
 let surveyedConsultationId: string | undefined;
+
+test("manager lead stages are audited, concurrent-safe and cannot forge a sale", async () => {
+  const original = await prisma.googleAdsIntegrationSetting.findUnique({ where: { setting_key: "default" } });
+  await prisma.googleAdsIntegrationSetting.upsert({
+    where: { setting_key: "default" },
+    update: { qualification_rules: { pipeline_status_code: "QUALIFIED" } },
+    create: { setting_key: "default", qualification_rules: { pipeline_status_code: "QUALIFIED" } },
+  });
+  try {
+    const created = await call(manager, "POST", "/api/v1/leads", { name: `Stage-${runTag}`, source: "manual" });
+    assert.equal(created.status, 200);
+    const id = data<{ lead_id: string }>(created.json).lead_id;
+    const path = `/api/v1/leads/${id}`;
+    const patch = (code: string, previous: string, reason?: string) => call(manager, "PATCH", path, { pipeline_status_code: code, expected_status_codes: [previous], stage_reason: reason });
+    assert.equal((await call(surveyor, "PATCH", path, { pipeline_status_code: "QUALIFIED", expected_status_codes: ["NEW_LEAD"] })).status, 403);
+    assert.equal((await patch("CLOSED_WON", "NEW_LEAD")).status, 400);
+    assert.equal((await patch("CONSULTATION_SCHEDULED", "NEW_LEAD")).status, 400);
+    assert.equal((await patch("CONTACTING", "NEW_LEAD")).status, 200);
+    assert.equal((await patch("CONTACTED", "CONTACTING")).status, 200);
+    const concurrent = await Promise.all([patch("QUALIFIED", "CONTACTED"), patch("QUALIFIED", "CONTACTED")]);
+    assert.deepEqual(concurrent.map(item => item.status).sort(), [200, 409]);
+    assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "qualified_lead" } }), 1);
+    assert.equal((await patch("DISQUALIFIED", "QUALIFIED")).status, 400);
+    assert.equal((await patch("DISQUALIFIED", "QUALIFIED", "Outside service area")).status, 200);
+    assert.equal((await patch("NEW_LEAD", "QUALIFIED")).status, 409);
+    const inbox = data<{ items: Array<{ lead_id: string; pipeline_status: { status_code: string }; stage_history: Array<{ reason?: string }> }> }>((await call(manager, "GET", "/api/v1/leads")).json);
+    const row = inbox.items.find(item => item.lead_id === id);
+    assert.equal(row?.pipeline_status.status_code, "DISQUALIFIED");
+    assert.ok(row?.stage_history.some(item => item.reason === "Outside service area"));
+    assert.equal((await patch("NEW_LEAD", "DISQUALIFIED")).status, 200);
+    assert.equal((await patch("QUALIFIED", "NEW_LEAD")).status, 200);
+    assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "qualified_lead" } }), 1);
+    assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "converted_lead" } }), 0);
+    const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
+    try {
+      assert.equal((await patch("CONTACTED", "QUALIFIED")).status, 200);
+      const claims = await Promise.all([1, 2].map(() => call(manager, "POST", `${path}/claim`, { action: "claim" })));
+      assert.deepEqual(claims.map(item => item.status).sort(), [200, 409], "two tabs of the same manager cannot both reserve a lead");
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 409, "a fresh reservation cannot be reacquired by its owner");
+      assert.equal((await patch("CONTACTING", "CONTACTED")).status, 200, "the claimant can still edit the lead stage");
+      assert.equal((await patch("CONTACTED", "CONTACTING")).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "release" })).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200, "a failed save can release and retry");
+      await prisma.lead.update({ where: { lead_id: id }, data: { claimed_at: new Date(Date.now() - 11 * 60 * 1000) } });
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200, "an abandoned reservation can be recovered");
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "complete" })).status, 409, "a stage label cannot substitute for a saved project");
+      const originalPayload = (workspace?.payload ?? {}) as Record<string, any>;
+      for (const key of ["orders", "archivedOrders"]) {
+        const payload = structuredClone(originalPayload);
+        payload[key] = [...(Array.isArray(payload[key]) ? payload[key] : []), { id: `existing-${id}`, canonicalLeadId: id }];
+        await prisma.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, update: { payload }, create: { workspace_id: "primary", payload } });
+        const claim = await call(manager, "POST", `${path}/claim`, { action: "claim" });
+        assert.equal(claim.status, 409, `existing ${key} project must block a duplicate`);
+        assert.match(JSON.stringify(claim.json), /lead_project_exists/);
+      }
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "complete" })).status, 200, "the existing claimant can finish after the project is saved");
+      assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "converted_lead" } }), 0);
+    } finally {
+      if (workspace) await prisma.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: workspace.payload as Prisma.InputJsonValue, revision: { increment: 1 } } });
+      else await prisma.legacyWorkspace.deleteMany({ where: { workspace_id: "primary" } });
+    }
+  } finally {
+    if (original) await prisma.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { qualification_rules: original.qualification_rules ?? Prisma.DbNull } });
+    else await prisma.googleAdsIntegrationSetting.delete({ where: { setting_key: "default" } });
+  }
+});
 
 before(async () => {
   await assertServerUsesTestDatabase(BASE_URL, prisma);

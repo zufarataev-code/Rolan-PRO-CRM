@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { ensureQualifiedLeadConversion } from "@/features/google-ads/conversion-events";
+import { enqueueLeadStage } from "@/features/meta-capi/events";
 
 type DbClient = Prisma.TransactionClient;
 
@@ -78,7 +79,7 @@ async function logPipelineTransition(
     return;
   }
 
-  await tx.activityLog.create({
+  const activity = await tx.activityLog.create({
     data: {
       actor_user_id: input.actorUserId ?? null,
       entity_type: input.entityType,
@@ -93,6 +94,9 @@ async function logPipelineTransition(
       },
     },
   });
+  if (input.entityType === "lead") {
+    await enqueueLeadStage(tx, { leadId: input.entityId, stageCode: input.newStatus, occurredAt: activity.created_at, eventId: activity.activity_id });
+  }
 }
 
 async function syncPipelineStage(

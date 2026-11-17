@@ -51,6 +51,7 @@ export function serializeLead(lead: Lead & {
       name_ru: lead.pipeline_status.name_ru,
       name_en: lead.pipeline_status.name_en,
       color_token: lead.pipeline_status.color_token,
+      is_closed: lead.pipeline_status.is_closed,
     },
     created_at: lead.created_at,
     updated_at: lead.updated_at,

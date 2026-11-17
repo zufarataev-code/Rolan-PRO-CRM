@@ -8676,6 +8676,8 @@ let cloudAllowedLegacyIds = [];
 let cloudCurrentUser = null;
 let canonicalConsultations = [];
 let canonicalLeads = [];
+let canonicalLeadStages = [];
+let canonicalMetaCapiStatus = null;
 let canonicalLeadsRefreshedAt = 0;
 let canonicalLeadsPollTimer = null;
 const ROLANPRO_LOGO_SRC = 'data:image/webp;base64,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';
@@ -24140,7 +24142,7 @@ const LEAD_SOURCES = {
   callrail: { label: 'Звонок · CallRail', icon: '📞', cls: 'bg-emerald-50 text-emerald-700', crmSource: 'callrail' },
   'ai-chat':{ label: 'ИИ-чат',    icon: '🤖', cls: 'bg-purple-50 text-purple-700', crmSource: 'direct' },
 };
-const CANONICAL_OPEN_LEAD_STATUSES = new Set(['NEW_LEAD', 'LEAD', 'CONSULTATION_SCHEDULED']);
+const CANONICAL_OPEN_LEAD_STATUSES = new Set(['NEW_LEAD', 'LEAD', 'CONTACTING', 'CONTACTED', 'QUALIFIED', 'CONSULTATION_SCHEDULED']);
 function websiteLeadUpdatesHtml(leadId) {
   if (!['owner', 'manager'].includes(currentUser()?.role)) return '';
   const lead = canonicalLeads.find(item => item.lead_id === leadId);
@@ -24152,7 +24154,7 @@ function canonicalMessengerLeadRows() {
   return canonicalLeads
     // Website leads arrive in PostgreSQL (/api/v1/integrations/website/leads) and
     // must be visible here next to Messenger leads.
-    .filter(lead => ['facebook_messenger', 'website', 'callrail', 'meta_lead_ads'].includes(lead?.source) && CANONICAL_OPEN_LEAD_STATUSES.has(lead?.pipeline_status?.status_code))
+    .filter(lead => lead?.lead_id && lead?.pipeline_status)
     .map(lead => {
       const consultation = canonicalConsultations
         .filter(item => item?.lead?.lead_id === lead.lead_id && !['cancelled', 'canceled', 'deleted'].includes(item?.status))
@@ -24167,6 +24169,11 @@ function canonicalMessengerLeadRows() {
         companyType: lead.company_type || '',
         contactTitle: lead.contact_title || '',
         statusCode: lead.pipeline_status?.status_code || '',
+        stageCode: lead.outcome_stage || lead.pipeline_status?.status_code || '',
+        stageName: canonicalLeadStages.find(stage => stage.code === (lead.outcome_stage || lead.pipeline_status?.status_code))?.name || lead.pipeline_status?.name_ru || '',
+        stageClosed: Boolean(lead.outcome_stage || lead.pipeline_status?.is_closed),
+        stageLocked: Boolean(lead.outcome_stage),
+        stageHistory: lead.stage_history || [],
         claimedAt: lead.claimed_at || '',
         phone: lead.phone,
         email: lead.email,
@@ -24187,7 +24194,15 @@ async function fetchCanonicalLeads(options = {}) {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const result = await response.json();
     canonicalLeads = Array.isArray(result?.data?.items) ? result.data.items : [];
+    canonicalLeadStages = Array.isArray(result?.data?.stages) ? result.data.stages : [];
     canonicalLeadsRefreshedAt = Date.now();
+    if (currentUser()?.role === 'owner') {
+      try {
+        const metaResponse = await fetch('/api/v1/integrations/meta-capi/status', { cache: 'no-store' });
+        if (!metaResponse.ok) throw new Error('status_unavailable');
+        canonicalMetaCapiStatus = (await metaResponse.json()).data;
+      } catch (_) { canonicalMetaCapiStatus = { unavailable: true }; }
+    }
   } catch (error) {
     console.warn('[Cloud CRM] canonical leads unavailable', error);
   }
@@ -24220,11 +24235,15 @@ function renderLeadsView() {
   if (externalEnabled && externalLeads === null) fetchLeads();
   if (Date.now() - canonicalLeadsRefreshedAt > 5000) fetchCanonicalLeads({ renderIfVisible: true });
   const canonicalRows = canonicalMessengerLeadRows();
-  const leads = externalLeads === null ? canonicalRows : [...canonicalRows, ...externalLeads];
+  const allLeads = externalLeads === null ? canonicalRows : [...canonicalRows, ...externalLeads];
+  const filter = state.leadStageFilter || 'active';
+  const leads = allLeads.filter(lead => filter === 'all' || (filter === 'active' ? !lead.stageClosed : (lead.stageCode || 'NEW_LEAD') === filter));
   return `
   ${callrailRecentCallsHtml()}
-  <div class="flex items-center justify-between mb-4">
-    <div class="text-sm text-gray-500">${externalLeads === null && !canonicalLeadsRefreshedAt ? 'Загружаем заявки…' : `Активных лидов: <b>${leads.length}</b>`}</div>
+  ${typeof canonicalMetaCapiStatus !== 'undefined' && canonicalMetaCapiStatus ? `<div class="card mb-3 text-sm" style="overflow-wrap:anywhere"><b>Meta CAPI</b> · ${canonicalMetaCapiStatus.unavailable ? 'Статус отправки недоступен' : !canonicalMetaCapiStatus.configured ? 'Требуется настройка отправки' : canonicalMetaCapiStatus.paused_until ? 'Отправка приостановлена до ' + academyEsc(fmtDateTime(canonicalMetaCapiStatus.paused_until)) + ' · проверьте доступ Meta, очередь сохранена' : canonicalMetaCapiStatus.mode === 'disabled' ? 'Отправка выключена' : canonicalMetaCapiStatus.mode === 'test' ? 'Тестовый режим' : 'Отправка включена'}${canonicalMetaCapiStatus.queue ? ` · В очереди: ${Number(canonicalMetaCapiStatus.queue.queued || 0) + Number(canonicalMetaCapiStatus.queue.retry || 0)} · Принято: ${Number(canonicalMetaCapiStatus.queue.accepted || 0)} · Тест: ${Number(canonicalMetaCapiStatus.queue.test_accepted || 0)} · Пропущено: ${Number(canonicalMetaCapiStatus.queue.suppressed || 0)} · Требует проверки: ${Number(canonicalMetaCapiStatus.queue.needs_operator_action || 0)}` : ''}</div>` : ''}
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="text-sm text-gray-500">${externalLeads === null && !canonicalLeadsRefreshedAt ? 'Загружаем заявки…' : `Лидов: <b>${leads.length}</b> / ${allLeads.length}`}</div>
+    <label class="text-sm">Этап <select aria-label="Фильтр по этапу лида" style="min-height:44px;max-width:100%" onchange="state.leadStageFilter=this.value;render()"><option value="active" ${filter === 'active' ? 'selected' : ''}>Активные</option><option value="all" ${filter === 'all' ? 'selected' : ''}>Все, включая закрытые</option>${canonicalLeadStages.map(stage => `<option value="${academyEsc(stage.code)}" ${filter === stage.code ? 'selected' : ''}>${academyEsc(stage.name)}</option>`).join('')}</select></label>
     <button class="btn-ghost text-sm" onclick="fetchCanonicalLeads({renderIfVisible:true});${externalEnabled ? 'fetchLeads(true);' : ''}">🔄 Обновить</button>
   </div>
   ${externalLeads === null && !canonicalLeadsRefreshedAt ? `<div class="card text-center text-gray-400 py-8">⏳ Загрузка…</div>`
@@ -24232,13 +24251,15 @@ function renderLeadsView() {
     : `<div class="space-y-3">${leads.map(l => {
         const src = LEAD_SOURCES[l.source] || { label: l.source, icon: '📩', cls: 'bg-gray-100 text-gray-600' };
         const existing = existingClientByContact(l.phone, l.email);
+        const archivedProject = (db.archivedOrders || []).find(order => order.canonicalLeadId === l.id);
         return `
         <div class="card">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-start justify-between gap-3" style="display:flex;flex-wrap:wrap;gap:12px">
+            <div class="flex-1 min-w-0" style="flex:1 1 320px;min-width:0">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="tag ${src.cls}">${src.icon} ${academyEsc(src.label)}</span>
                 <span class="font-semibold">${academyEsc(l.name || 'Без имени')}</span>
+                ${l.canonical ? `<span class="tag ${l.stageClosed ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-700'}">${academyEsc(l.stageName)}</span>` : ''}
                 ${existing ? `<span class="tag bg-amber-50 text-amber-700">↻ Уже есть в базе: ${academyEsc(existing.name)}</span>` : ''}
                 <span class="text-xs text-gray-400">${fmtDateTime(l.receivedAt)}</span>
               </div>
@@ -24250,15 +24271,21 @@ function renderLeadsView() {
               ${l.companyName ? `<div class="text-sm text-gray-700 mt-1">🏢 ${academyEsc([clientCompanyTypeLabel(l.companyType), [l.firstName, l.lastName].filter(Boolean).join(' '), l.contactTitle].filter(Boolean).join(' · '))}</div>` : ''}
               ${l.message ? `<div class="text-sm text-gray-600 mt-1 bg-gray-50 rounded p-2">${academyEsc(l.message)}</div>` : ''}
               ${l.websiteUpdatesHtml || ''}
+              ${l.stageHistory?.length ? `<details class="text-xs text-gray-500 mt-2"><summary>История этапов · ${l.stageHistory.length}</summary>${l.stageHistory.map(change => `<div style="overflow-wrap:anywhere">${academyEsc(fmtDateTime(change.occurred_at))} · ${academyEsc(canonicalLeadStages.find(stage => stage.code === change.pipeline_status_code)?.name || change.pipeline_status_code)}${change.reason ? ' · ' + academyEsc(change.reason) : ''}</div>`).join('')}</details>` : ''}
               ${l.consultation ? `<div class="text-xs text-gray-500 mt-2">📅 ${fmtDateTime(l.consultation.scheduled_start_at)} · ${academyEsc(l.consultation.assigned_consultant?.full_name || 'Не назначен')}</div>` : ''}
             </div>
-            <div class="flex flex-col gap-2">
-              ${l.canonical && l.consultation
+            <div class="flex flex-col gap-2" style="display:flex;flex-direction:column;gap:8px;flex:0 1 260px;max-width:100%">
+              ${l.canonical ? leadStageControlsHtml(l) : ''}
+              ${l.canonical && archivedProject ? '<span class="text-sm text-gray-500">Проект в архиве</span>'
+                : l.canonical && (db.orders || []).find(order => order.canonicalLeadId === l.id)
+                ? `<button class="btn-primary text-sm" onclick="${CANONICAL_OPEN_LEAD_STATUSES.has(l.statusCode) ? `convertLead('${academyEsc(jsQuote(l.id))}')` : `openOrder('${academyEsc(jsQuote(db.orders.find(order => order.canonicalLeadId === l.id).id))}')`}">Открыть проект</button>`
+                : l.stageClosed ? ''
+                : l.canonical && l.consultation
                 ? `<button class="btn-primary text-sm" onclick="openCanonicalConsultationCard('${academyEsc(jsQuote(l.consultation.consultation_id))}')">Открыть запись</button>`
                 : l.canonical && ['website', 'callrail', 'meta_lead_ads'].includes(l.source)
                   ? `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
                      ${l.phone ? `<a class="btn-ghost text-sm text-center" href="tel:${academyEsc(l.phone)}">📞 Позвонить</a>` : ''}
-                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / отклонить</button>`
+                     <button class="btn-ghost text-xs text-gray-400" onclick="dismissLead('${academyEsc(jsQuote(l.id))}')">Спам / дубль</button>`
                 : l.canonical
                   ? `<a class="btn-primary text-sm text-center" href="tel:${academyEsc(l.phone || '')}">📞 Позвонить</a>`
                   : `<button class="btn-primary text-sm" onclick="convertLead('${academyEsc(jsQuote(l.id))}')">➕ Создать проект</button>
@@ -24268,6 +24295,23 @@ function renderLeadsView() {
         </div>`;
       }).join('')}</div>`}
   `;
+}
+function leadStageControlsHtml(lead) {
+  const stages = canonicalLeadStages.filter(stage => stage.manual || stage.code === lead.stageCode);
+  if (!stages.some(stage => stage.code === lead.stageCode)) stages.unshift({ code: lead.stageCode, name: lead.stageName, manual: false });
+  return `<label class="text-xs text-gray-600">Этап лида<select aria-label="Этап лида ${academyEsc(lead.name || '')}" style="width:100%;min-height:44px;max-width:260px" ${lead.stageLocked ? 'disabled' : ''} onchange="changeCanonicalLeadStage('${academyEsc(jsQuote(lead.id))}',this.value)">${stages.map(stage => `<option value="${academyEsc(stage.code)}" ${stage.code === lead.stageCode ? 'selected' : ''} ${stage.manual ? '' : 'disabled'}>${academyEsc(stage.name)}</option>`).join('')}</select></label>${lead.stageLocked ? '<span class="text-xs text-gray-500">Подтверждено продажей в проекте</span>' : ''}`;
+}
+async function changeCanonicalLeadStage(leadId, code) {
+  const lead = canonicalLeadRow(leadId);
+  if (!lead || code === lead.stageCode) return;
+  let reason;
+  if (['DISQUALIFIED', 'CLOSED_LOST', 'SPAM'].includes(code)) {
+    reason = prompt('Причина (до 500 символов):');
+    if (!reason?.trim()) { render(); return; }
+    if (reason.length > 500) { alert('Причина должна быть не длиннее 500 символов.'); render(); return; }
+  }
+  await setCanonicalLeadStatus(leadId, code, [lead.statusCode], { reason });
+  render();
 }
 async function fetchLeads(force) {
   const i = db.settings.integrations || {};
@@ -24285,8 +24329,8 @@ function canonicalLeadRow(leadId) {
   return canonicalMessengerLeadRows().find(row => row.id === leadId) || null;
 }
 /**
- * A handled website lead leaves «Новые лиды»: CONTACTED after a project,
- * CLOSED_LOST when dismissed. The change applies only while the lead is still in
+ * Lead stages stay in PostgreSQL, including rejected and processed leads.
+ * The change applies only while the lead is still in
  * one of `expectedStatusCodes` (compare-and-set on the server), so a second click
  * or a second manager cannot process the same lead twice.
  */
@@ -24295,7 +24339,7 @@ async function setCanonicalLeadStatus(leadId, statusCode, expectedStatusCodes = 
     const response = await fetch('/api/v1/leads/' + encodeURIComponent(leadId), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipeline_status_code: statusCode, expected_status_codes: expectedStatusCodes }),
+      body: JSON.stringify({ pipeline_status_code: statusCode, expected_status_codes: expectedStatusCodes, stage_reason: options.reason }),
     });
     const result = await response.json().catch(() => null);
     if (!response.ok) {
@@ -24304,7 +24348,7 @@ async function setCanonicalLeadStatus(leadId, statusCode, expectedStatusCodes = 
       fetchCanonicalLeads({ renderIfVisible: true });
       return false;
     }
-    canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
+    await fetchCanonicalLeads();
     return true;
   } catch (error) {
     console.warn('[Leads] status update failed', error);
@@ -24342,8 +24386,7 @@ async function claimCanonicalLead(leadId, action) {
   }
 }
 async function closeCanonicalLead(leadId) {
-  const claim = await claimCanonicalLead(leadId, 'claim');
-  const done = claim.ok ? await claimCanonicalLead(leadId, 'complete') : claim;
+  const done = await claimCanonicalLead(leadId, 'complete');
   if (done.ok) canonicalLeads = canonicalLeads.filter(lead => lead?.lead_id !== leadId);
   fetchCanonicalLeads({ renderIfVisible: true });
   return done;
@@ -24430,18 +24473,12 @@ async function convertLeadOnce(leadId, options = {}) {
   const l = (state.leadsCache || []).find(x => x.id === leadId) || canonicalLeadRow(leadId);
   if (!l) return;
   const src = LEAD_SOURCES[l.source] || { crmSource: 'other' };
-  // Клиент: всегда переиспользуем существующую карточку по телефону или email.
-  const matches = clientsMatchingContact(l.phone, l.email);
-  if (silent && matches.length > 1) return;
-  let client = matches.length > 1
-    ? await chooseLegacyClient(matches, 'Для кого создать проект?')
-    : (matches[0] || null);
-  if (client === false) return;
-  // A PostgreSQL lead is claimed on the server BEFORE anything is written here:
-  // if the claim fails (network, or another manager took it) no client or order
-  // is created, so a retry or a second manager can never produce a duplicate.
   const canonical = Boolean(canonicalLeadRow(leadId));
   if (canonical) {
+    if ((db.archivedOrders || []).some(order => order.canonicalLeadId === leadId)) {
+      if (!silent) alert('Проект по этой заявке уже находится в архиве. Откройте существующий проект в архиве.');
+      return;
+    }
     // A project already saved for this lead (its closing was interrupted last
     // time): only close the lead, never create a second project.
     const existingOrder = db.orders.find(order => order.canonicalLeadId === leadId);
@@ -24450,6 +24487,16 @@ async function convertLeadOnce(leadId, options = {}) {
       if (!silent) openOrder(existingOrder.id);
       return;
     }
+  }
+  // Клиент: всегда переиспользуем существующую карточку по телефону или email.
+  const matches = clientsMatchingContact(l.phone, l.email);
+  if (silent && matches.length > 1) return;
+  let client = matches.length > 1
+    ? await chooseLegacyClient(matches, 'Для кого создать проект?')
+    : (matches[0] || null);
+  if (client === false) return;
+  // Reserve before creating records; saved-project recovery needs no new claim.
+  if (canonical) {
     // Reserve the lead; it stays open and visible until the project is saved.
     const claim = await claimCanonicalLead(leadId, 'claim');
     if (!claim.ok) {
@@ -24521,6 +24568,7 @@ async function convertLeadOnce(leadId, options = {}) {
   openOrder(o.id);
 }
 async function dismissLead(leadId) {
+  if (canonicalLeadRow(leadId)) return changeCanonicalLeadStage(leadId, 'SPAM');
   if (!confirm('Отклонить эту заявку (спам/нецелевая)?')) return;
   await markLeadProcessed(leadId, 'CLOSED_LOST');
   render();
@@ -45081,6 +45129,7 @@ async function cloudBoot() {
     if (leadsResponse?.ok) {
       const leadsResult = await leadsResponse.json().catch(() => ({}));
       canonicalLeads = Array.isArray(leadsResult?.data?.items) ? leadsResult.data.items : [];
+      canonicalLeadStages = Array.isArray(leadsResult?.data?.stages) ? leadsResult.data.stages : [];
       canonicalLeadsRefreshedAt = Date.now();
     } else {
       canonicalLeads = [];

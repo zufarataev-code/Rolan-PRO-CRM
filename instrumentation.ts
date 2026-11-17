@@ -8,5 +8,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startGoogleAdsSyncScheduler } = await import("./src/features/google-ads/sync-cycle");
     startGoogleAdsSyncScheduler();
+    const { startMetaCapiSyncScheduler } = await import("./src/features/meta-capi/processor");
+    startMetaCapiSyncScheduler();
   }
 }

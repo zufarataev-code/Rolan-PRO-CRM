@@ -198,7 +198,7 @@ test("cost import → website attribution → paid job → owner ROI review → 
   const phonePoint = await db.acquisitionTouchpoint.findUniqueOrThrow({ where: { legacy_order_id: tag + "-phone" }, include: { lead: { include: { pipeline_status: true } } } });
   assert.ok(phonePoint.lead_id);
   leadIds.push(phonePoint.lead_id!);
-  assert.equal(phonePoint.lead?.pipeline_status.status_code, "CONTACTED", "binding does not create another claimable lead");
+  assert.equal(phonePoint.lead?.pipeline_status.status_code, "PROJECT_CREATED", "binding does not create another claimable lead");
   const afterPhone: any = (await db.legacyWorkspace.findUniqueOrThrow({ where: { workspace_id: "primary" } })).payload;
   assert.equal(afterPhone.orders.find((item: any) => item.id === tag + "-phone").canonicalLeadId, phonePoint.lead_id);
   assert.equal((await call("POST", `/api/v1/leads/${phonePoint.lead_id}/claim`, { action: "claim" })).status, 409);

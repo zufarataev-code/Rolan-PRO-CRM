@@ -4,6 +4,21 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { reconcileLegacyGoogleAdsOutcomes } from "./legacy-outcomes";
 
+test("a missing lead link never borrows another project's attribution", async t => {
+  const originals = { workspace: prisma.legacyWorkspace.findUnique, points: prisma.acquisitionTouchpoint.findMany, transaction: prisma.$transaction };
+  t.after(() => { prisma.legacyWorkspace.findUnique = originals.workspace; prisma.acquisitionTouchpoint.findMany = originals.points; prisma.$transaction = originals.transaction; });
+  for (const leadId of [null, "11111111-1111-4111-8111-111111111111"]) {
+    (prisma.legacyWorkspace as any).findUnique = async () => ({ payload: { orders: [{ id: "unlinked-order", canonicalLeadId: leadId, timeline: [{ key: "proposal_sent", at: new Date().toISOString() }] }] } });
+    (prisma.acquisitionTouchpoint as any).findMany = async () => [{ legacy_order_id: "different-order", lead_id: leadId, acquisition_touchpoint_id: "unrelated-click" }];
+    (prisma as any).$transaction = async (callback: any) => callback({
+      $executeRaw: async () => 1,
+      deal: { findFirst: async () => { throw new Error("An unrelated touchpoint must not produce an outcome"); } },
+      conversionEvent: { findFirst: async () => null },
+    });
+    assert.deepEqual(await reconcileLegacyGoogleAdsOutcomes(), { recorded: 0, failed: 0 });
+  }
+});
+
 test("actual proposal sharing qualifies once, while publishing its link does not", async t => {
   const replace = (model: any, method: string, implementation: any) => {
     const original = model[method];
@@ -15,6 +30,7 @@ test("actual proposal sharing qualifies once, while publishing its link does not
   const events: any[] = [], outboxes: any[] = [];
   const tx = {
     $executeRaw: async () => 1,
+    lead: { findUnique: async () => null },
     deal: { findFirst: async () => null },
     acquisitionTouchpoint: { findUnique: async () => point },
     googleAdsIntegrationSetting: { findUnique: async () => ({

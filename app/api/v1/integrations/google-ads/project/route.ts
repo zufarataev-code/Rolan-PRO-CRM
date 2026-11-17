@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
   const existing = await prisma.acquisitionTouchpoint.findUnique({ where: { legacy_order_id: order.id } });
   if (existing) return apiError(409, "attribution_already_recorded", "Original acquisition is already recorded and cannot be silently reassigned.");
   const client = (payload.clients || []).find((item: Record<string, any>) => item.id === order.clientId);
-  const status = await prisma.pipelineStatus.findUnique({ where: { status_code: "CONTACTED" } });
-  if (!status) return apiError(503, "pipeline_not_configured", "CONTACTED is not configured.");
+  const status = await prisma.pipelineStatus.findUnique({ where: { status_code: "PROJECT_CREATED" } });
+  if (!status) return apiError(503, "pipeline_not_configured", "PROJECT_CREATED is not configured.");
   const capturedAt = new Date(order.createdAt);
   if (Number.isNaN(capturedAt.getTime())) return apiError(400, "acquisition_date_missing", "The original project creation date is required.");
   try {

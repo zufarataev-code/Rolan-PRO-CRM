@@ -78,7 +78,7 @@ test("all client forms use the shared identity block, and website leads show in 
     assert.match(html, new RegExp(`readClientIdentityFields\\('${prefix}'\\)`));
   }
   assert.doesNotMatch(html, /id="nc-name"|id="oc-name"|id="client-contact-name"/);
-  assert.match(html, /\['facebook_messenger', 'website', 'callrail', 'meta_lead_ads'\]\.includes\(lead\?\.source\)/);
+  assert.match(html, /\.filter\(lead => lead\?\.lead_id && lead\?\.pipeline_status\)/);
   assert.match(html, /markLeadProcessed\(leadId, 'CLOSED_LOST'\)/);
   assert.match(html, /pipeline_status_code: statusCode/);
 });
@@ -149,7 +149,7 @@ test("a website lead is reserved, the project saved, and only then the lead is c
   assert.match(convert, /\.\.\.\(canonical \? \{ canonicalLeadId: leadId \} : \{\}\)/);
 
   const route = readFileSync("app/api/v1/leads/[leadId]/claim/route.ts", "utf8");
-  assert.match(route, /where = \{ AND: \[base, open, claimableBy\(userId, now\)\] \};/);
+  assert.match(route, /where = \{ AND: \[base, open, claimAvailableAt\(now\)\] \};/);
   assert.match(route, /where = \{ AND: \[base, open, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant closes");
   assert.match(route, /where = \{ AND: \[base, \{ claimed_by_user_id: userId \}\] \};/, "only the claimant releases");
   assert.match(readFileSync("src/features/sales/lead-claim.ts", "utf8"), /LEAD_CLAIM_TTL_MS = 10 \* 60 \* 1000/);

@@ -110,15 +110,16 @@ test("webhook verification, disabled configuration, raw signatures and streamed 
     assert.equal((await POST(new Request("http://localhost", { method: "POST", headers: { "x-hub-signature-256": signature }, body: ignored }))).status, 200);
   } finally { keys.forEach((key, i) => { if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i]; }); }
 });
-test("canonical Meta enquiries appear in the existing inbox and closed leads stay out", () => {
+test("canonical Meta enquiries retain closed leads for stage filtering", () => {
   const source = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   const start = source.indexOf("function canonicalMessengerLeadRows(");
   const body = source.slice(start, source.indexOf("\n}", start) + 2);
   const context: any = vm.createContext({ canonicalLeads: [
     { lead_id: "open", source: "meta_lead_ads", name: "Fixture", notes: "which_service: Solar", pipeline_status: { status_code: "NEW_LEAD" } },
     { lead_id: "closed", source: "meta_lead_ads", pipeline_status: { status_code: "CLOSED_LOST" } },
-  ], canonicalConsultations: [], CANONICAL_OPEN_LEAD_STATUSES: new Set(["NEW_LEAD"]), websiteLeadUpdatesHtml: () => "" });
+  ], canonicalConsultations: [], canonicalLeadStages: [], websiteLeadUpdatesHtml: () => "" });
   vm.runInContext(body, context);
   const rows = context.canonicalMessengerLeadRows();
-  assert.equal(rows.length, 1); assert.equal(rows[0].id, "open"); assert.equal(rows[0].message, "which_service: Solar");
+  assert.equal(rows.length, 2); assert.equal(rows[0].id, "open"); assert.equal(rows[0].message, "which_service: Solar");
+  assert.equal(rows[1].stageCode, "CLOSED_LOST");
 });

@@ -9,6 +9,7 @@ import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere, buildLeadScopeWhere } from "@/features/sales/access";
 import { websiteUpdateHistory } from "@/features/integrations/website-lead-updates";
 import { callrailHistory } from "@/features/integrations/callrail";
+import { leadOutcomeStage } from "./lead-stages";
 
 function toNumber(value: { toString(): string } | null | undefined) {
   return value ? Number(value.toString()) : 0;
@@ -571,6 +572,10 @@ export async function listLeads(managerId?: string) {
     where: managerId ? buildLeadScopeWhere(managerId) : undefined,
     include: {
       pipeline_status: true,
+      conversion_events: {
+        where: { event_type: "converted_lead" },
+        select: { conversion_value: true, adjustments: { select: { adjustment_type: true } } },
+      },
       city: {
         select: {
           name_ru: true,
@@ -591,7 +596,13 @@ export async function listLeads(managerId?: string) {
 
   const history = await websiteUpdateHistory(leads.filter(lead => lead.source === "website").map(lead => lead.lead_id));
   const calls = await callrailHistory(leads.map(lead => lead.lead_id));
-  return leads.map(lead => ({ ...serializeLead(lead), website_updates: history.get(lead.lead_id) || [], callrail_calls: calls.get(lead.lead_id) || [] }));
+  const changes = await prisma.activityLog.findMany({
+    where: { entity_type: "lead", entity_id: { in: leads.map(lead => lead.lead_id) }, action_key: "lead.stage_changed" },
+    orderBy: { created_at: "desc" },
+    take: 200,
+    select: { entity_id: true, created_at: true, metadata: true },
+  });
+  return leads.map(lead => ({ ...serializeLead(lead), outcome_stage: leadOutcomeStage(lead.conversion_events), stage_history: changes.filter(change => change.entity_id === lead.lead_id).slice(0, 10).map(change => ({ occurred_at: change.created_at, ...change.metadata as Record<string, unknown> })), website_updates: history.get(lead.lead_id) || [], callrail_calls: calls.get(lead.lead_id) || [] }));
 }
 
 export async function listClients(managerId?: string) {
