@@ -102,6 +102,7 @@ test("manager lead stages are audited, concurrent-safe and cannot forge a sale",
     const row = inbox.items.find(item => item.lead_id === id);
     assert.equal(row?.pipeline_status.status_code, "DISQUALIFIED");
     assert.equal(row.outcome_stage, null, "Google qualification must not count as a sale");
+    assert.ok(!("conversion_events" in row || "meta_capi_outboxes" in row));
     assert.ok(row.delivery.facebook.some(receipt => receipt.event_name === "DisqualifiedLead" && receipt.processing_status === "suppressed"));
     assert.ok(row.delivery.google.some(receipt => receipt.event_name === "qualified_lead"));
     for (const receipt of [...row.delivery.facebook, ...row.delivery.google]) {
