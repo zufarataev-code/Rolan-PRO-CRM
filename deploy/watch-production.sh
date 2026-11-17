@@ -59,6 +59,7 @@ start_next() {
   local release_dir="$1"
 
   log "Starting Next.js from $release_dir"
+  NODE_OPTIONS=--max-old-space-size=1024
   (
     cd "$release_dir" || exit 1
     # Secrets can be rotated independently of a code release. Always load the
