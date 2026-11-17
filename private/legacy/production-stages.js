@@ -794,7 +794,8 @@ async function cloudPersist(options = {}) {
       cloudScheduleRetry();
       cloudStatus('Связь прервалась — сохранено на устройстве, повторяем автоматически', 'red');
     } else {
-      cloudStatus('Сервер отклонил сохранение — данные оставлены на устройстве', 'red');
+      const reason = String(error?.message || '').trim();
+      cloudStatus(`${reason ? `Не сохранено: ${reason}. ` : 'Сервер отклонил сохранение. '}Данные остались на устройстве`, 'red');
     }
     if (options.throwOnFailure) throw error;
     return false;

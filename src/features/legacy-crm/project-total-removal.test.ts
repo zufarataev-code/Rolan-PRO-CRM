@@ -138,6 +138,13 @@ test('the card footer carries the editable total; lines show the rate their sum 
   assert.match(fn(stages, 'projectLineRateText'), /fmtSqftPrice\(projectLineUnitPrice\(o, line\)\)/, 'cents are shown: $2.50, not $3');
 });
 
+test('a rejected save shows the exact business rule instead of pretending the server is offline', () => {
+  const persist = fn(stages, 'cloudPersist');
+  assert.match(persist, /const reason = String\(error\?\.message \|\| ''\)\.trim\(\)/);
+  assert.match(persist, /Не сохранено: \$\{reason\}/);
+  assert.doesNotMatch(persist, /Сервер отклонил сохранение — данные оставлены на устройстве/);
+});
+
 function loadBackground() {
   const fields: Row[] = [];
   let renders = 0;
