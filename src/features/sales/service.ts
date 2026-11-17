@@ -568,13 +568,24 @@ export async function listConsultantOptions() {
 }
 
 export async function listLeads(managerId?: string) {
+  const uploadFields = { processing_status: true, updated_at: true, request_id: true } as const;
   const leads = await prisma.lead.findMany({
     where: managerId ? buildLeadScopeWhere(managerId) : undefined,
     include: {
       pipeline_status: true,
       conversion_events: {
-        where: { event_type: "converted_lead" },
-        select: { conversion_value: true, adjustments: { select: { adjustment_type: true } } },
+        where: { event_type: { in: ["qualified_lead", "converted_lead"] } },
+        select: {
+          event_type: true, created_at: true, conversion_value: true,
+          upload_outboxes: { select: uploadFields },
+          adjustments: { select: {
+            adjustment_type: true, created_at: true, upload_outboxes: { select: uploadFields },
+          } },
+        },
+      },
+      meta_capi_outboxes: {
+        select: { event_name: true, processing_status: true, updated_at: true },
+        orderBy: [{ updated_at: "desc" }, { event_id: "asc" }],
       },
       city: {
         select: {
@@ -602,7 +613,29 @@ export async function listLeads(managerId?: string) {
     take: 200,
     select: { entity_id: true, created_at: true, metadata: true },
   });
-  return leads.map(lead => ({ ...serializeLead(lead), outcome_stage: leadOutcomeStage(lead.conversion_events), stage_history: changes.filter(change => change.entity_id === lead.lead_id).slice(0, 10).map(change => ({ occurred_at: change.created_at, ...change.metadata as Record<string, unknown> })), website_updates: history.get(lead.lead_id) || [], callrail_calls: calls.get(lead.lead_id) || [] }));
+  return leads.map(lead => {
+    const google = lead.conversion_events.flatMap(event => [
+      ...googleLeadDeliveryRows(event.event_type, event.created_at, event.upload_outboxes),
+      ...event.adjustments.flatMap(adjustment => googleLeadDeliveryRows(adjustment.adjustment_type, adjustment.created_at, adjustment.upload_outboxes)),
+    ]).sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime() || a.event_name.localeCompare(b.event_name));
+    return {
+      ...serializeLead(lead),
+      delivery: { google, facebook: lead.meta_capi_outboxes },
+      outcome_stage: leadOutcomeStage(lead.conversion_events.filter(event => event.event_type === "converted_lead")),
+      stage_history: changes.filter(change => change.entity_id === lead.lead_id).slice(0, 10).map(change => ({ occurred_at: change.created_at, ...change.metadata as Record<string, unknown> })),
+      website_updates: history.get(lead.lead_id) || [],
+      callrail_calls: calls.get(lead.lead_id) || [],
+    };
+  });
+}
+
+function googleLeadDeliveryRows(event_name: string, createdAt: Date, uploads: { processing_status: string; updated_at: Date; request_id: string | null }[]) {
+  if (!uploads.length) return [{ event_name, processing_status: "not_queued", updated_at: createdAt }];
+  return uploads.map(({ processing_status, updated_at, request_id }) => ({
+    event_name, updated_at,
+    processing_status: processing_status === "submitted" && !request_id && (event_name === "qualified_lead" || event_name === "converted_lead")
+      ? "submitted_without_request_id" : processing_status,
+  }));
 }
 
 export async function listClients(managerId?: string) {
