@@ -1988,8 +1988,12 @@ function premiumApplyServerProposalState(oid, server) {
 // Owner, 2026-10-24: «и снова не могу назначить монтаж». R-261025-057 was paid in
 // full by Zelle; the CRM still asked to make and send a KP before installation.
 // Money received is the client's yes: the project goes on to installation.
+// Audit, 2026-11-17: a quick project (one total area, no windows) never reads its
+// measurement as finished, so it stayed «Новый» with the KP published and the
+// deposit paid. Money received is the client's yes before the measurement too.
+function projectPaidShortcutStatuses() { return ['new', 'consultation_scheduled', 'measurement_scheduled', 'measurement_done', 'proposal_sent']; }
 function projectPaidWithoutProposal(o) {
-  if (!o || !['measurement_done', 'proposal_sent'].includes(o.status) || o.paymentTerms === 'after_completion') return false;
+  if (!o || !projectPaidShortcutStatuses().includes(o.status) || o.paymentTerms === 'after_completion') return false;
   const revenue = orderRevenue(o);
   const paid = orderPaidTotal(o);
   if (!(revenue > 0) || !(paid > 0)) return false;
@@ -2019,6 +2023,34 @@ function projectAcceptPaidWithoutProposal(oid) {
   save();
   changeStatus(oid, 'proposal_accepted', state.currentUserId, { skipWorkflowGuard: true, openWorkspace: false, openMeasurement: false, openPayment: false });
   render();
+}
+
+// ---------- «НАЗНАЧИТЬ МОНТАЖ» ВСЕГДА НА КАРТОЧКЕ (Owner, 2026-11-17) ----------
+// Audit: «Назначить монтаж» appeared only on «КП принято», and the offline accept
+// was hidden in step 3 of the KP wizard. Until the crew is booked the card keeps
+// one button: it records the client's yes the way the project allows (payment
+// received, or the published KP agreed directly) and opens the installation window.
+function projectInstallShortcutStatuses() { return [...projectPaidShortcutStatuses(), 'proposal_accepted']; }
+function projectInstallShortcutVisible(o, primary) {
+  if (!o || !projectInstallShortcutStatuses().includes(o.status)) return false;
+  if (!orderUserCanSeeMoney(o, currentUser()) || !projectLines(o).length) return false;
+  const next = String(primary?.onclick || '');
+  return !/scheduleInstallationPrompt|projectAcceptPaidWithoutProposal|projectStartInstallation/.test(next);
+}
+function projectInstallShortcutHtml(o, primary) {
+  if (!projectInstallShortcutVisible(o, primary)) return '';
+  return `<button type="button" class="btn-ghost project-feed-btn project-feed-install" data-project-install-shortcut onclick="projectStartInstallation('${o.id}')">👷 Назначить монтаж</button>`;
+}
+function projectStartInstallation(oid) {
+  const o = getOrder(oid);
+  if (!o || !projectInstallShortcutStatuses().includes(o.status) || !orderUserCanSeeMoney(o, currentUser())) return;
+  if (o.status !== 'proposal_accepted') {
+    if (projectPaidWithoutProposal(o)) projectAcceptPaidWithoutProposal(oid);
+    else if (getPremiumProposalByOrder(oid)?.publishedAt) projectAcceptProposalOffline(oid);
+    else { alert('Монтаж назначают после согласия клиента: сформируйте КП или отметьте оплату.'); return; }
+    if (getOrder(oid)?.status !== 'proposal_accepted') return;
+  }
+  scheduleInstallationPrompt(oid);
 }
 
 /** The estimate the client signed for is approved again — without reopening the KP. */
@@ -2126,7 +2158,7 @@ function projectFeedHtml(o, c, u, ctx) {
 
   return `<div class="project-feed">
     ${o.canonicalLeadId ? `<div data-project-website-updates="${academyEsc(o.canonicalLeadId)}">${websiteLeadUpdatesHtml(o.canonicalLeadId)}</div>` : ''}
-    ${primary || money ? `<div class="project-feed-top">${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}</div>` : ''}${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}</div>` : ''}
+    ${primary || money ? `<div class="project-feed-top">${primary ? `<div class="project-feed-next"><div class="project-feed-next-kicker">Следующий шаг</div>${renderOrderActionCard(primary)}${projectInstallShortcutHtml(o, primary)}</div>` : ''}${money ? projectCardGateChecklist(o, { canManage, owner: u?.role === 'owner' }) : ''}</div>` : ''}
     ${lines.length || projectPendingSizedServices(o).length || canManage ? `<div class="project-feed-services" data-project-feed="services"><div class="project-feed-head"><h3>Состав проекта</h3>${money ? `<b>${fmtMoney(orderRevenue(o))}</b>` : ''}</div>${renderProjectCardServices(o, { money, economics: ctx.canSeeInternalEconomics, manage: canManage })}</div>` : ''}
     <!-- Owner, 2026-11-06: секции «Замер / Материалы / КП и оплата / Монтаж / Документы» убраны — кнопки этапов сверху открывают каждый шаг и несут его сводку. -->
     <div class="project-feed-docs">${docs}</div>
