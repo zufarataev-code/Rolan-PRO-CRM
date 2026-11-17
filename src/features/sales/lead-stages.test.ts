@@ -22,5 +22,6 @@ test("converted requires a positive recorded sale and respects retraction", () =
   assert.equal(leadOutcomeStage([{ conversion_value: "250.00", adjustments: [] }]), "CLOSED_WON");
   assert.equal(leadOutcomeStage([{ conversion_value: "250.00", adjustments: [{ adjustment_type: "RESTATEMENT" }] }]), "CLOSED_WON");
   assert.equal(leadOutcomeStage([{ conversion_value: "250.00", adjustments: [{ adjustment_type: "RETRACTION" }] }]), "CLOSED_LOST");
-  assert.equal(leadOutcomeStage([{ conversion_value: null, adjustments: [] }]), "CLOSED_LOST");
+  assert.equal(leadOutcomeStage([{ conversion_value: null, adjustments: [] }]), null);
+  assert.equal(leadOutcomeStage([{ conversion_value: "0.00", adjustments: [] }]), null);
 });

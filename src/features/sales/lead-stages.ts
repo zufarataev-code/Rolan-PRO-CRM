@@ -31,6 +31,8 @@ export function validateManualLeadStage(code: unknown, reason: unknown) {
 
 export function leadOutcomeStage(events: Array<{ conversion_value: unknown; adjustments: Array<{ adjustment_type: string }> }>) {
   if (!events.length) return null;
-  return events.some(event => Number(event.conversion_value) > 0 && !event.adjustments.some(item => item.adjustment_type === "RETRACTION"))
-    ? "CLOSED_WON" : "CLOSED_LOST";
+  const active = events.filter(event => !event.adjustments.some(item => item.adjustment_type === "RETRACTION"));
+  if (active.some(event => Number(event.conversion_value) > 0)) return "CLOSED_WON";
+  if (!active.length) return "CLOSED_LOST";
+  return null;
 }

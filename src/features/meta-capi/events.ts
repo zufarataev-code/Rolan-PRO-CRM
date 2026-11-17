@@ -4,12 +4,16 @@ import { buildMetaCrmPayload, META_STAGE_EVENTS } from "./payload";
 type StageInput = { leadId: string; stageCode: string; occurredAt: Date; eventId?: string };
 
 export async function enqueueLeadStage(tx: Prisma.TransactionClient, input: StageInput) {
-  const eventName = META_STAGE_EVENTS[input.stageCode];
+  const eventName = ["NEW_LEAD", "LEAD"].includes(input.stageCode) ? "LeadReopened" : META_STAGE_EVENTS[input.stageCode];
   if (!eventName || input.stageCode === "CLOSED_WON") return null;
   const eventId = ["Lead", "QualifiedLead"].includes(eventName)
     ? `crm-lead-${input.leadId}-${eventName}`
     : `crm-stage-${input.eventId ?? `${input.leadId}-${input.stageCode}-${input.occurredAt.getTime()}`}`;
   return enqueue(tx, { ...input, eventName, eventId });
+}
+
+export function enqueueLeadReceived(tx: Prisma.TransactionClient, input: { leadId: string; occurredAt: Date }) {
+  return enqueue(tx, { ...input, eventName: "Lead", eventId: `crm-lead-${input.leadId}-Lead` });
 }
 
 export function enqueueQualifiedLead(tx: Prisma.TransactionClient, input: { leadId: string; occurredAt: Date }) {
@@ -34,8 +38,10 @@ async function enqueue(tx: Prisma.TransactionClient, input: { leadId: string; ev
     if (receipt) await enqueue(tx, { leadId: lead.lead_id, eventName: "Lead", eventId: `crm-lead-${lead.lead_id}-Lead`, occurredAt: receipt.created_at });
   }
   const consent = lead.consent_snapshots[0];
+  const source = lead.external_source === "rolanpro.com" && lead.source === "website"
+    ? "website" : lead.external_source || (lead.source === "meta_lead_ads" ? null : lead.source);
   const { payload, reason } = buildMetaCrmPayload({
-    source: lead.external_source || (lead.source === "meta_lead_ads" ? null : lead.source), nativeLeadId: lead.external_submission_id, email: lead.email, phone: lead.phone,
+    source, nativeLeadId: lead.external_submission_id, email: lead.email, phone: lead.phone,
     consent: consent?.ad_personalization === "DENIED" ? "DENIED" : consent?.ad_user_data ?? "UNKNOWN", eventName: input.eventName,
     eventId: input.eventId, occurredAt: input.occurredAt, generatedAt: lead.created_at, value: input.value, currency: input.currency,
   });

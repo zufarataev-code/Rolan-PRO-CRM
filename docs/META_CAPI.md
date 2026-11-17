@@ -8,6 +8,8 @@ loss and spam are separate events. `QualifiedLead` is one milestone per lead;
 `converted_lead` business event. Creating a project or changing a label cannot
 produce a sale. Stage-history events use their persisted activity ID, so retries
 reuse the same event. Re-entering qualification does not count it again.
+Returning to New records a neutral `LeadReopened` history event. Standard `Lead`
+is produced only by the accepted native intake receipt, with its original time.
 
 ## Supported source and matching
 
@@ -74,6 +76,8 @@ the claim. Expired leases may retry with the original `event_id`; the 8-second
 HTTP deadline is well inside the lease. Network/timeout/429/transient/5xx failures
 retry with exponential delay from one minute to six hours, at most eight
 attempts. Authentication and permanent provider errors need operator action.
+An account authentication/permission failure stops the current batch instead
+of marking the next 24 events failed under the same broken credential.
 Graph bodies and exception messages are never returned or logged; status shows
 only fixed error codes, queue totals and pending age, without lead identifiers.
 
@@ -90,6 +94,10 @@ not erase previously accepted Meta events or claim that a Google refund adjustme
 retracts a Meta event. Subsequent loss/spam/disqualification stages remain their
 own negative/custom stage events. Meta's funnel configuration determines how
 those stage names are used; no positive event is sent for them.
+Before the first HTTP attempt, an existing positive restatement supplies the
+current sale value. The actual outgoing snapshot is persisted under the lease
+before sending. A changed financial value after any prior attempt or test receipt
+requires operator review; retries never silently replace an uncertain payload.
 
 ## Owning documentation
 

@@ -52,6 +52,20 @@ test("ordinary web and phone stage feedback requires consent and does not invent
   assert.equal(web.custom_data.event_source, undefined);
 });
 
+test("signed website importer provenance reaches ordinary CAPI after recorded consent", async () => {
+  let queued: any;
+  const tx: any = {
+    lead: { findUnique: async () => ({ lead_id: "website", source: "website", external_source: "rolanpro.com", external_submission_id: "submission-not-a-meta-id", created_at: input.generatedAt, consent_snapshots: [{ ad_user_data: "GRANTED", ad_personalization: "UNKNOWN" }], phone: input.phone, email: input.email }) },
+    metaCapiOutbox: { upsert: async ({ create }: any) => { queued = create; return create; } },
+  };
+  await enqueueLeadStage(tx, { leadId: "website", stageCode: "QUALIFIED", occurredAt });
+  assert.equal(queued.processing_status, "queued");
+  assert.equal(queued.payload_snapshot.event_name, "QualifiedLead");
+  assert.equal(queued.payload_snapshot.user_data.lead_id, undefined);
+  assert.ok(queued.payload_snapshot.user_data.ph?.length);
+  assert.deepEqual(queued.payload_snapshot.custom_data, {});
+});
+
 test("one qualified milestone per lead survives re-entry; sale requires the verified producer", async () => {
   const saved = new Map<string, any>();
   const tx: any = {
@@ -91,8 +105,10 @@ test("existing native leads recover raw receipt with its persisted original time
     activityLog: { findFirst: async () => ({ created_at: receiptAt }) },
     metaCapiOutbox: { upsert: async ({ where, create }: any) => { if (!saved.has(where.event_id)) saved.set(where.event_id, create); return saved.get(where.event_id); } },
   };
+  await enqueueLeadStage(tx, { leadId: "existing-lead", stageCode: "NEW_LEAD", occurredAt, eventId: "reopened" });
+  assert.equal(saved.get("crm-stage-reopened").event_name, "LeadReopened");
   await enqueueLeadStage(tx, { leadId: "existing-lead", stageCode: "QUALIFIED", occurredAt });
-  assert.equal(saved.size, 2);
+  assert.equal(saved.size, 3);
   const raw = saved.get("crm-lead-existing-lead-Lead");
   assert.equal(raw.occurred_at, receiptAt);
   assert.equal(raw.payload_snapshot.event_time, Math.floor(receiptAt.getTime() / 1000));

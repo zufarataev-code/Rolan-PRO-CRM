@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       include: { pipeline_status: true },
     });
     if (!previous) return null;
-    if (data.pipeline_status_id && await tx.conversionEvent.count({ where: { lead_id: leadId, event_type: "converted_lead" } })) {
+    if (data.pipeline_status_id && await tx.conversionEvent.count({ where: { lead_id: leadId, event_type: "converted_lead", OR: [{ conversion_value: { gt: 0 } }, { adjustments: { some: { adjustment_type: "RETRACTION" } } }] } })) {
       return "converted" as const;
     }
     const result = await tx.lead.updateMany({
@@ -149,11 +149,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   if (!lead) {
-    if (expectedStatusCodes.length) {
-      const stillVisible = await prisma.lead.count({ where: buildLeadAccessWhere(leadId, managerId) });
-      if (stillVisible) {
-        return apiError(409, "lead_status_changed", "Заявку уже обработали — обновите список.");
-      }
+    const stillVisible = await prisma.lead.count({ where: buildLeadAccessWhere(leadId, managerId) });
+    if (stillVisible) {
+      return apiError(409, "lead_status_changed", "Заявку уже обработали — обновите список.");
     }
     return apiError(404, "not_found", "Lead was not found.");
   }

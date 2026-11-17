@@ -38,6 +38,10 @@ test("lead inbox filters retain closed enquiries and open an existing project", 
   assert.match(html, /Rejected fixture/);
   context.db.orders.push({ id: "project-1", canonicalLeadId: "active" });
   assert.match(context.renderLeadsView(), /openOrder\('project-1'\)/);
+  context.db.orders = [];
+  context.db.archivedOrders = [{ id: "archived-1", canonicalLeadId: "active" }];
+  assert.match(context.renderLeadsView(), /Проект в архиве/);
+  assert.doesNotMatch(context.renderLeadsView(), /convertLead\('active'\)/);
   context.state.leadStageFilter = "DISQUALIFIED";
   assert.doesNotMatch(context.renderLeadsView(), /Active fixture/);
 });
@@ -51,4 +55,15 @@ test("stage control persists expected status and reason, while a cancelled reaso
   await context.changeCanonicalLeadStage("active", "SPAM");
   assert.equal(calls.length, 1);
   assert.match(context.leadStageControlsHtml({ id: "sale", name: "Sale", stageCode: "CLOSED_WON", stageName: "Converted", stageLocked: true }), /disabled/);
+});
+
+test("an interrupted saved-project conversion completes its reservation without creating another claim", async () => {
+  const { context } = fixture();
+  const actions: string[] = [];
+  context.canonicalLeads = [{ lead_id: "active" }];
+  context.claimCanonicalLead = async (_: string, action: string) => { actions.push(action); return { ok: true }; };
+  vm.runInContext(fn("closeCanonicalLead"), context);
+  assert.equal((await context.closeCanonicalLead("active")).ok, true);
+  assert.deepEqual(actions, ["complete"]);
+  assert.equal(context.canonicalLeads.length, 0);
 });

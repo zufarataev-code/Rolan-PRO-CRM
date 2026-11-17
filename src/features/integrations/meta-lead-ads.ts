@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { persistLeadAttribution } from "@/features/google-ads/attribution";
 import { sendLeadFirstTouch } from "@/features/sales/lead-first-touch";
-import { enqueueLeadStage } from "@/features/meta-capi/events";
+import { enqueueLeadReceived } from "@/features/meta-capi/events";
 import { MetaLeadError, normalizeMetaLead, type MetaLeadNotification } from "./meta-lead-ads-core";
 
 const SOURCE = "meta_lead_ads";
@@ -33,7 +33,7 @@ export async function importMetaLead(notification: MetaLeadNotification, token: 
       consent: { adUserData: "UNKNOWN", adPersonalization: "UNKNOWN", audienceMarketingEligible: false, source: SOURCE },
     });
     const receipt = await tx.activityLog.create({ data: { entity_type: "lead", entity_id: created.lead_id, action_key: "integration.meta_lead_ads.received", message: "Meta instant form enquiry received.", metadata } });
-    await enqueueLeadStage(tx, { leadId: created.lead_id, stageCode: "NEW_LEAD", occurredAt: receipt.created_at, eventId: receipt.activity_id });
+    await enqueueLeadReceived(tx, { leadId: created.lead_id, occurredAt: receipt.created_at });
     return { lead_id: created.lead_id, duplicate: false };
   });
   // First touch happens after commit; it never throws, so a failed SMS cannot make Meta retry.

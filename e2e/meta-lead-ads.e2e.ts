@@ -101,6 +101,8 @@ for (const [index, emailCase] of emailCases.entries()) {
     const consent = await prisma.consentSnapshot.findMany({ where: { lead_id: canonicalId } });
     assert.equal(consent.length, 1); assert.equal(consent[0].ad_user_data, "UNKNOWN"); assert.equal(consent[0].ad_personalization, "UNKNOWN"); assert.equal(consent[0].audience_marketing_eligible, false);
     assert.equal(await prisma.conversionEvent.count({ where: { lead_id: canonicalId } }), 0);
+    assert.equal(await prisma.metaCapiOutbox.count({ where: { lead_id: canonicalId, event_name: "Lead" } }), 1, "the accepted receipt records one raw Meta event");
+    assert.equal(await prisma.metaCapiOutbox.count({ where: { lead_id: canonicalId, event_name: { in: ["QualifiedLead", "ConvertedLead"] } } }), 0);
     assert.equal(await prisma.consultation.count({ where: { lead_id: canonicalId } }), 0);
     await prisma.lead.update({ where: { lead_id: canonicalId }, data: { notes: "Staff notes stay intact" } });
     const reads = provider.mock.callCount();

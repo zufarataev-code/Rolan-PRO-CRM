@@ -59,6 +59,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const result = await prisma.$transaction(async tx => {
+    // Historical CONTACTED leads may already own a saved or archived project.
+    if (action !== "release" && await tx.lead.count({ where: base })) {
+      const linked = await tx.$queryRaw<Array<{ found: number }>>`
+        SELECT 1 AS found FROM legacy_workspaces,
+        LATERAL jsonb_array_elements(
+          (CASE WHEN jsonb_typeof(payload->'orders') = 'array' THEN payload->'orders' ELSE '[]'::jsonb END)
+          || (CASE WHEN jsonb_typeof(payload->'archivedOrders') = 'array' THEN payload->'archivedOrders' ELSE '[]'::jsonb END)
+        ) AS project
+        WHERE workspace_id = 'primary' AND project->>'canonicalLeadId' = ${leadId}
+        LIMIT 1`;
+      if (action === "claim" && linked.length) return { count: 0, projectExists: true };
+      if (action === "complete" && !linked.length) return { count: 0, projectMissing: true };
+    }
     const changed = await tx.lead.updateMany({ where, data });
     if (changed.count === 1 && action === "complete") {
       const activity = await tx.activityLog.create({ data: {
@@ -70,6 +83,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     return changed;
   });
+  if ("projectExists" in result) {
+    return apiError(409, "lead_project_exists", "По этой заявке уже есть проект, в том числе он может быть в архиве. Откройте существующий проект.");
+  }
+  if ("projectMissing" in result) {
+    return apiError(409, "lead_project_missing", "Проект ещё не сохранён на сервере. Заявка остаётся открытой.");
+  }
   if (result.count !== 1) {
     const visible = await prisma.lead.count({ where: base });
     if (!visible) return apiError(404, "not_found", "Lead was not found.");

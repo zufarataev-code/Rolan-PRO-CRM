@@ -29,7 +29,7 @@ export async function reconcileLegacyGoogleAdsOutcomes() {
   let recorded = 0, failed = 0;
   for (const order of orders) {
     const point = points.find(item => item.legacy_order_id === order.id)
-      ?? points.find(item => item.lead_id === order.canonicalLeadId);
+      ?? points.find(item => typeof order.canonicalLeadId === "string" && item.lead_id === order.canonicalLeadId && (!item.legacy_order_id || item.legacy_order_id === order.id));
     try {
       await prisma.$transaction(async tx => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`google-ads:legacy:${order.id}`}))`;

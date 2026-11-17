@@ -105,6 +105,26 @@ test("manager lead stages are audited, concurrent-safe and cannot forge a sale",
     assert.equal((await patch("QUALIFIED", "NEW_LEAD")).status, 200);
     assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "qualified_lead" } }), 1);
     assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "converted_lead" } }), 0);
+    const workspace = await prisma.legacyWorkspace.findUnique({ where: { workspace_id: "primary" } });
+    try {
+      assert.equal((await patch("CONTACTED", "QUALIFIED")).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "claim" })).status, 200);
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "complete" })).status, 409, "a stage label cannot substitute for a saved project");
+      const originalPayload = (workspace?.payload ?? {}) as Record<string, any>;
+      for (const key of ["orders", "archivedOrders"]) {
+        const payload = structuredClone(originalPayload);
+        payload[key] = [...(Array.isArray(payload[key]) ? payload[key] : []), { id: `existing-${id}`, canonicalLeadId: id }];
+        await prisma.legacyWorkspace.upsert({ where: { workspace_id: "primary" }, update: { payload }, create: { workspace_id: "primary", payload } });
+        const claim = await call(manager, "POST", `${path}/claim`, { action: "claim" });
+        assert.equal(claim.status, 409, `existing ${key} project must block a duplicate`);
+        assert.match(JSON.stringify(claim.json), /lead_project_exists/);
+      }
+      assert.equal((await call(manager, "POST", `${path}/claim`, { action: "complete" })).status, 200, "the existing claimant can finish after the project is saved");
+      assert.equal(await prisma.conversionEvent.count({ where: { lead_id: id, event_type: "converted_lead" } }), 0);
+    } finally {
+      if (workspace) await prisma.legacyWorkspace.update({ where: { workspace_id: "primary" }, data: { payload: workspace.payload as Prisma.InputJsonValue, revision: { increment: 1 } } });
+      else await prisma.legacyWorkspace.deleteMany({ where: { workspace_id: "primary" } });
+    }
   } finally {
     if (original) await prisma.googleAdsIntegrationSetting.update({ where: { setting_key: "default" }, data: { qualification_rules: original.qualification_rules ?? Prisma.DbNull } });
     else await prisma.googleAdsIntegrationSetting.delete({ where: { setting_key: "default" } });
