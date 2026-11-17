@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-16 — Многосервисная архитектура Project: аудит и закрытие разрывов
+
+- Task owner: Codex, branch `codex/project-multi-direction-architecture-20261116`, stacked on `codex/project-card-balance-layout-20261115` / PR #539 so the active tablet/card work is extended instead of duplicated.
+- Owner supplied the acceptance model: one client and object, many configurable directions, many service rows per direction, service-owned material/date/executor/status, measurements only when a selected service requires them, expenses scoped to service/direction/project, and one backend-authoritative Project economy feeding Proposal, stock and payroll.
+- Current code already implements most of the structural foundation (`projectLines`, direction grouping/exclusion/order, per-service schedules/progress, scoped planned/actual expenses, context recommendations, approved estimate → Proposal). This task audits the complete acceptance list and implements only the missing vertical gaps while preserving existing Projects and the later approved `privacy_film` direction.
+- No production data, deployment, migration or customer notification is authorized by this branch. Next action: focused gap implementation, tests, local desktop/tablet/mobile demonstration and real-interface screenshots.
+
 ## 2026-11-16 — Measurement entry continues downward inside each room (Codex, PR #539)
 
 - Owner clarified the field workflow: after entering one window, the next action must be below the completed window rather than above the room.
