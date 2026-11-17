@@ -2,6 +2,20 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Первый React-экран на shadcn/ui: «Замеры» для замерщика, только просмотр (Claude)
+
+- Owner: интерфейс CRM должен стать простым и быстрым; после трёх примеров вне CRM владелец сказал «делай модуль». Первый модуль — экран замерщика, отдельной страницей, без правок legacy.
+- Branch `claude/field-measure-screen-20261117`, based on `origin/main` `5f7b3f6`. Legacy HTML, Prisma schema and the state endpoint are not edited.
+  - `/field/measure` — список проектов вокруг замера (назначенный визит первым), `/field/measure/[orderId]` — клиент, адрес, маршрут, звонок, помещения и окна, площадь по услугам, что ещё без размеров. Кнопка открывает тот же проект в рабочей CRM (`/legacy-crm#/order/<id>`).
+  - **Только чтение.** Ввод размеров и «Сдать замер» остаются в legacy: там панели, типы окон, привязка к услуге и `changeStatus()` с уведомлениями — их перенос идёт следующим шагом с тестами, а не вслепую.
+  - `GET /api/v1/field/measure` и `/api/v1/field/measure/[orderId]` читают рабочее пространство через существующий `GET /api/v1/legacy-crm/state` (те же роли, назначения и скрытие денег), а телефону отдают несколько килобайт вместо всего workspace.
+  - Площадь повторяет legacy `windowActualAreaSqft()` (фактические размеры → сохранённые панели → количество); правило закреплено тестом.
+  - Основа для следующих экранов: Tailwind v4 + компоненты shadcn/ui (`src/components/ui`, `components.json`, `postcss.config.mjs`). Стили подключены только в `app/field/field.css` с `important` и переменными внутри `.rp-field`, поэтому остальные страницы CRM не меняются. Компоненты взяты из репозитория shadcn-ui/ui (`new-york-v4`): CLI недоступен из среды Claude.
+  - Доступ: владелец, менеджер, замерщик (`/field`, `/api/v1/field` в `rbac.ts`).
+- Verification: `src/features/field-measure/view.test.ts` 3/3; экраны проверены в `next dev` на ширине телефона 390 px с подставными данными — без ошибок в консоли и без горизонтальной прокрутки, страница входа выглядит как раньше. Локально полный набор: 1026 pass / 33 fail, все 33 — `@prisma/client did not initialize` (движок Prisma недоступен в среде Claude); typecheck и production build по той же причине проверяет CI.
+- Not verified: на реальных данных production экран не открывался. Пересечение: `package.json`/`package-lock.json` (hot files); #554 (skill shadcn для Codex) и #553 (legacy-замер) этих файлов не трогают.
+- Next action: владелец открывает `/field/measure` на телефоне после merge и решает, переносить ли ввод размеров; затем узкий `POST` для размеров одного окна вместо записи всего workspace (#542, #549).
+
 ## 2026-11-15 — Ручной итог владельца сохраняется на сервере
 
 - Branch: `codex/manual-project-total-save-20261115`, based on `origin/main` `6b3fa9cf`.
