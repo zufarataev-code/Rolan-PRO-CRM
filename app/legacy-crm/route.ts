@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
   const productionUi = await readFile(path.join(process.cwd(), "private", "legacy", "production-stages.js"), "utf8");
   // «Кабинет проекта»: a separate module so the trial view never grows the legacy file.
   const cabinetUi = await readFile(path.join(process.cwd(), "private", "legacy", "project-cabinet.js"), "utf8");
-  const cloudHtml = replaceLegacyBootstrapLogin(composeProductionHtml(composeProductionHtml(html, productionUi), cabinetUi));
+  // «Пульт владельца»: the trial main screen, same rule — its own module.
+  const boardUi = await readFile(path.join(process.cwd(), "private", "legacy", "owner-board.js"), "utf8");
+  const cloudHtml = replaceLegacyBootstrapLogin(composeProductionHtml(composeProductionHtml(composeProductionHtml(html, productionUi), cabinetUi), boardUi));
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
   const googleMapsBootstrapPatch = `
     <script>
