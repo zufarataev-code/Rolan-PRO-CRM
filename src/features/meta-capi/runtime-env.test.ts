@@ -13,23 +13,23 @@ test("CAPI runtime sync validates before output, preserves secrets and clears pr
   const env = { NODE_ENV: "test" as const, PATH: process.env.PATH, META_CAPI_DATASET_ID: "865337699151965", META_CAPI_UPLOAD_ENABLED: "false", META_CAPI_ACCESS_TOKEN: "offline-token-".repeat(4) + "'-$-`chars`", META_CAPI_TEST_EVENT_CODE: "TEST12345" };
   env.PATH = dir + ":" + env.PATH;
   try {
-  for (const invalid of [{ META_CAPI_DATASET_ID: "100" }, { META_CAPI_UPLOAD_ENABLED: "yes" }, { META_CAPI_ACCESS_TOKEN: "" }]) {
-    const result = spawnSync("bash", [script, "offline-target"], { env: { ...env, ...invalid, META_TEST_CAPTURE: capture }, encoding: "utf8" });
-    assert.notEqual(result.status, 0);
-    assert.equal(existsSync(capture), false, "invalid settings must not reach SSH");
-    assert.equal(result.stdout, "");
-    assert.ok(!result.stderr.includes(env.META_CAPI_ACCESS_TOKEN));
-  }
-  assert.equal(execFileSync("bash", [script, "offline-target"], { env: { ...env, META_TEST_CAPTURE: capture }, encoding: "utf8" }), "");
-  const remote = readFileSync(capture, "utf8");
-  rmSync(capture);
-  assert.ok(!remote.includes(env.META_CAPI_TEST_EVENT_CODE));
-  execFileSync("bash", ["-n"], { input: remote });
-  const file = join(dir, "production.env");
-  const original = "UNRELATED_SETTING=preserved\nMETA_CAPI_ACCESS_TOKEN=old\nexport META_CAPI_TEST_EVENT_CODE=TEST999\n";
-  writeFileSync(file, original, { mode: 0o600 });
-  // Execute the actual generated script, replacing only the host's path/user guard.
-  const fixture = remote.replaceAll("/home/runcloud/.rolanpro-crm.env.production.local", file).replace('test "$(id -un)" = runcloud', "true");
+    for (const invalid of [{ META_CAPI_DATASET_ID: "100" }, { META_CAPI_UPLOAD_ENABLED: "yes" }, { META_CAPI_ACCESS_TOKEN: "" }]) {
+      const result = spawnSync("bash", [script, "offline-target"], { env: { ...env, ...invalid, META_TEST_CAPTURE: capture }, encoding: "utf8" });
+      assert.notEqual(result.status, 0);
+      assert.equal(existsSync(capture), false, "invalid settings must not reach SSH");
+      assert.equal(result.stdout, "");
+      assert.ok(!result.stderr.includes(env.META_CAPI_ACCESS_TOKEN));
+    }
+    assert.equal(execFileSync("bash", [script, "offline-target"], { env: { ...env, META_TEST_CAPTURE: capture }, encoding: "utf8" }), "");
+    const remote = readFileSync(capture, "utf8");
+    rmSync(capture);
+    assert.ok(!remote.includes(env.META_CAPI_TEST_EVENT_CODE));
+    execFileSync("bash", ["-n"], { input: remote });
+    const file = join(dir, "production.env");
+    const original = "UNRELATED_SETTING=preserved\nMETA_CAPI_ACCESS_TOKEN=old\nexport META_CAPI_TEST_EVENT_CODE=TEST999\n";
+    writeFileSync(file, original, { mode: 0o600 });
+    // Execute the actual generated script, replacing only the host's path/user guard.
+    const fixture = remote.replaceAll("/home/runcloud/.rolanpro-crm.env.production.local", file).replace('test "$(id -un)" = runcloud', "true");
     for (const enabled of ["false", "true"]) {
       const run = spawnSync("bash", [], { input: fixture.replace("META_CAPI_UPLOAD_ENABLED=false", "META_CAPI_UPLOAD_ENABLED=" + enabled), encoding: "utf8" });
       assert.equal(run.status, 0, run.stderr);

@@ -2,9 +2,9 @@
 # Run under the CRM's Infisical prod /meta-capi scope with the existing SSH options.
 set -euo pipefail
 
-[[ "${META_CAPI_DATASET_ID:-}" = 865337699151965 ]]
-[[ "${META_CAPI_UPLOAD_ENABLED:-}" = true || "${META_CAPI_UPLOAD_ENABLED:-}" = false ]]
-[[ ${#META_CAPI_ACCESS_TOKEN} -ge 40 && ${#META_CAPI_ACCESS_TOKEN} -le 10000 ]]
+[[ "${META_CAPI_DATASET_ID:-}" = 865337699151965 ]] || exit 1
+[[ "${META_CAPI_UPLOAD_ENABLED:-}" = true || "${META_CAPI_UPLOAD_ENABLED:-}" = false ]] || exit 1
+[[ ${#META_CAPI_ACCESS_TOKEN} -ge 40 && ${#META_CAPI_ACCESS_TOKEN} -le 10000 ]] || exit 1
 
 [ "$#" -gt 0 ]
 {
