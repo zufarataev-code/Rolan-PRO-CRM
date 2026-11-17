@@ -52,6 +52,7 @@ function duplicateClientError(duplicate: {
   });
 }
 
+// Adjust GET to obtain changes since a particular revision
 export async function GET(request: NextRequest) {
   const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
 
@@ -97,7 +98,8 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function PUT(request: NextRequest) {
+// Implement PATCH to support partial update of CRM records
+export async function PATCH(request: NextRequest) {
   const auth = await requireRequestSession(request, LEGACY_WORKSPACE_VIEW_ROLES);
 
   if (!auth.ok) {
