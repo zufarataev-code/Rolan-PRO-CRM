@@ -2,6 +2,18 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 (вечер) — Кольца и тур кабинета на рабочей карточке проекта владельца (Claude)
+
+- Owner, 2026-11-17 вечер: открыл проект в production и не увидел кабинета и тура — ждал, что карточка проекта уже выглядит как пример, а не прячется за кнопкой «проба». Прямое поручение владельца; проверка Codex — после, в PR.
+- Branch `claude/cabinet-default-20261117`, based on `origin/main` `f6709f2`.
+- Первая попытка — открывать кабинет вместо карточки по умолчанию — провалила «Clean database build and end-to-end gate» («Project card did not render the selected service»): кабинет не умеет того, что умеет рабочая карточка (состав, замер, КП). Вывод: кабинет не заменяет карточку, а встаёт над ней.
+- `private/legacy/project-cabinet.js`: `projectCabinetEntryBar()` у владельца теперь рисует над рабочей карточкой четыре кольца кабинета и тур по объекту (раскрыт, если в проекте есть фото; иначе свёрнут под кнопкой). Рабочая карточка ниже не тронута. «Весь кабинет» открывает полный вид на устройстве, как раньше «проба».
+- В полном кабинете появилась «← Проекты»; в туре без фото — «Добавить фото» (существующий `addOrderPhoto()`), с фото — «+ Фото».
+- Legacy HTML не менялся. У остальных ролей без изменений.
+- Verification: `project-cabinet.test.ts` 4/4; глазами внутри локально поднятой legacy-страницы на демо-данных (1280 и 390 px).
+- Не проверено: на реальных данных production. Показа плёнки на стекле и сгенерированных комнат из демо в CRM нет.
+- Next action: владелец открывает проект; дальше — показ плёнки на фото (нужна разметка стекла) и те же блоки для менеджера.
+
 ## 2026-11-17 — Production CAPI activation receipt (Codex)
 
 - Follow-up PR #564, branch `codex/capi-activation-receipt-20261117`, reuses `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`. Documentation only; runtime delivery remains the existing scheduler and protected operator sync. Final PR receipts record review, CI and worktree cleanup.
