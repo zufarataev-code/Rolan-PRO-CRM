@@ -20526,7 +20526,8 @@ function renderView() {
   if (state.view === 'orderDetails') return renderOrderDetails(state.openOrderId);
   if (u.role === 'manager' || u.role === 'owner') {
     switch (state.view) {
-      case 'dashboard': return renderManagerDashboard();
+      // «Пульт владельца» — пробный вид владельца (private/legacy/owner-board.js).
+      case 'dashboard': return typeof ownerBoardScreen === 'function' ? ownerBoardScreen(u) : renderManagerDashboard();
       case 'orders': return renderOrders();
       case 'quickEntry': return renderQuickEntry();
       case 'canonicalProjects': return renderCanonicalProjects();

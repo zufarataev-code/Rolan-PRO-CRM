@@ -2,6 +2,16 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — «Пульт владельца»: пробный главный экран на живых данных (Claude)
+
+- Owner, 2026-11-17: «заливай в нашу CRM эту админку» — пульт из демо «Кабинет проекта» (кольца, выручка, направления, воронка). Прямое поручение владельца; проверка Codex — после, в PR.
+- Branch `claude/owner-board-20261117`, based on `origin/main` `6317cf2`.
+- Новый модуль `private/legacy/owner-board.js` (только функции, третий проход `composeProductionHtml()` в `app/legacy-crm/route.ts`). В `rolanpro-crm-cloud.html` изменена одна строка — ветка `case 'dashboard'` в `renderView()`; `renderManagerDashboard()` и «Пульс бизнеса» не тронуты.
+- Вид включает сам владелец кнопкой «Пульт владельца (проба)» над «Пульсом бизнеса»; выбор хранится на устройстве (`localStorage rp_owner_board`). Остальные роли вид не видят.
+- Пульт только читает: `visibleOrdersForUser()`, `orderKanbanRevenue()`, `orderPaidTotal()`, `projectLines()`, `projectServiceProgress()`, `pulseBusinessSnapshot()`, `ORDER_KANBAN_FUNNEL`. Записей нет; карточка воронки открывает проект, перенос между этапами остаётся в «Проектах».
+- Verification: `owner-board.test.ts` 2/2 (вид только у владельца и «Пульс» без изменений; суммы, этапы и направления из рабочих функций, записей нет), вместе с `project-cabinet`, `visual-architecture`, `pulse-dashboard`, `order-visibility`, `production-ui` 34/34; собранный inline-скрипт legacy проходит `node --check`; вёрстка на подставных данных на 1280 и 390 px.
+- Не проверено: на реальных данных production пульт не открывался. Выкладка #558 закончилась ошибкой внешней проверки при здоровом сервере (см. запись «Зелёный стиль»); доступность снаружи подтверждает владелец.
+- Next action: проверка Codex; владелец включает пульт и сверяет цифры с «Пульсом бизнеса» и канбаном.
 ## 2026-11-17 — CRM CAPI vault, protected runtime sync and isolated provider QA (Codex, PR #560)
 
 - Branch `codex/capi-vault-runtime-20261117`, task worktree `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`; current main #559 is merged into this branch. No lead-inbox/UI functions are changed here.
