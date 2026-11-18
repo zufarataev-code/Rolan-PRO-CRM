@@ -4,29 +4,50 @@
 // functions live here. The cabinet reads the same Project and calls the same
 // helpers as the working card (projectLines, orderRevenue, orderPaidTotal,
 // orderPrimaryNextAction, projectSetServiceProgress): no second calculation.
-// Owner, 2026-11-17 (evening): the cabinet IS the project card for the owner —
-// it opens by default. «Обычная карточка» switches back on that device; the
-// choice is kept on the device, not in the workspace. Other roles are unchanged.
+// Owner, 2026-11-17 (evening): the cabinet must be visible on the project
+// card itself, not behind a trial button. So the owner's working card now
+// opens with the cabinet's rings and the tour above it; every function of the
+// working card stays below, untouched. «Весь кабинет» opens the full view on
+// that device (kept in localStorage, not in the workspace).
 
 function projectCabinetEnabled(u) {
   if (!u || u.role !== 'owner') return false;
-  try { return localStorage.getItem('rp_project_cabinet') !== '0'; } catch (error) { return true; }
+  try { return localStorage.getItem('rp_project_cabinet') === '1'; } catch (error) { return false; }
 }
 
 function projectCabinetToggle(on) {
   try {
-    if (on) localStorage.removeItem('rp_project_cabinet');
-    else localStorage.setItem('rp_project_cabinet', '0');
-  } catch (error) { /* private mode: the cabinet simply stays on */ }
+    if (on) localStorage.setItem('rp_project_cabinet', '1');
+    else localStorage.removeItem('rp_project_cabinet');
+  } catch (error) { /* private mode: the full view simply stays off */ }
   render();
 }
 
-/** One line above the working card: the way back into the cabinet. */
+/** Above the owner's working card: the cabinet's rings and the tour. The card below is untouched. */
 function projectCabinetEntryBar(o, u) {
   if (!o || !u || u.role !== 'owner') return '';
-  return `<div style="display:flex;justify-content:flex-end;margin:0 0 8px">
-    <button type="button" onclick="projectCabinetToggle(true)" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid #cfe3d7;background:#f2f8f4;color:#17794a">Кабинет проекта</button>
+  let model = null;
+  try { model = projectCabinetModel(o, null, u, { canSeeMoney: true }); } catch (error) { model = null; }
+  if (!model) return '';
+  const open = projectCabinetUi().tourOpen === true || (projectCabinetUi().tourOpen !== false && model.photos.length > 0);
+  return `${projectCabinetCss()}<div class="rpc" style="margin-bottom:12px">
+    <section class="rpc-g4">
+      ${projectCabinetRing(model.stagePct, `${model.stages.filter(stage => stage.done).length} из ${model.stages.length}`, 'этапов пройдено', '#178a52')}
+      ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
+      ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
+      ${projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4')}
+    </section>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end">
+      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggleTour(${open ? 'false' : 'true'})">${open ? 'Свернуть тур' : `Тур по объекту · фото: ${model.photos.length}`}</button>
+      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(true)">Весь кабинет</button>
+    </div>
+    ${open ? projectCabinetTourHtml(o, model, true) : ''}
   </div>`;
+}
+
+function projectCabinetToggleTour(open) {
+  projectCabinetUi().tourOpen = open;
+  preservePositionForNextRender(); render();
 }
 
 /** Everything the cabinet shows, taken from the working CRM functions. */

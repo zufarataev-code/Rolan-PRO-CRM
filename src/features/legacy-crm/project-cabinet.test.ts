@@ -73,14 +73,21 @@ function order(): Row {
   };
 }
 
-test('the cabinet is the owner\'s project card by default; other roles keep the working card', () => {
-  assert.equal(load(order(), 'owner', '').context.projectCabinetEnabled({ role: 'owner' }), true);
-  assert.equal(load(order(), 'owner', '0').context.projectCabinetEnabled({ role: 'owner' }), false, '«Обычная карточка» is remembered on the device');
-  assert.equal(load(order(), 'manager', '').context.projectCabinetEnabled({ role: 'manager' }), false);
-  assert.equal(load(order(), 'manager', '').context.projectCabinetEntryBar(order(), { role: 'manager' }), '');
+test('the owner\'s working card opens with the rings and the tour above it; other roles are unchanged', () => {
+  const o = order();
+  const { context } = load(o, 'owner', '');
+  assert.equal(context.projectCabinetEnabled({ role: 'owner' }), false, 'the full view replaces the card only by the owner\'s choice');
+  assert.equal(load(o, 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
+  assert.equal(context.projectCabinetEntryBar(o, { role: 'manager' }), '');
+  const strip = context.projectCabinetEntryBar(o, { role: 'owner' });
+  assert.ok(strip.includes('этапов пройдено') && strip.includes('$400'), 'rings from the working functions');
+  assert.ok(strip.includes('Фото объекта'), 'a project with photos shows the tour straight away');
+  assert.ok(strip.includes('Весь кабинет'));
   const empty = order(); empty.photos = [];
-  const page = load(empty).context.projectCabinetHtml(empty, { name: 'Michael' }, { role: 'owner' }, { canSeeMoney: true, canManage: true });
-  assert.ok(page.includes("addOrderPhoto('o1')"), 'a project without photos offers to add one right in the tour');
+  const emptyContext = load(empty, 'owner', '').context;
+  assert.ok(!emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes('Фото объекта пока нет'), 'no photos: the tour stays folded');
+  emptyContext.projectCabinetToggleTour(true);
+  assert.ok(emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes("addOrderPhoto('o1')"), 'opened by hand, it offers to add a photo');
 });
 
 test('stages, services, windows and money come from the working CRM functions', () => {
