@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type Ref } from "react";
+import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -44,17 +44,27 @@ export function WorkingFrame({ src, title, className, ref, onLoad }: { src: stri
 }
 
 /**
- * The sections not redrawn yet share ONE working CRM for the whole visit: it
- * is opened on the first such section, shown or hidden as the person moves
- * around, and never torn down — so a section opens at once and an edit made a
- * second before leaving it is still saved.
+ * ONE working CRM lives in the frame for the whole visit. It shows the
+ * sections not redrawn yet (shown or hidden as the person moves around, never
+ * torn down — a section opens at once and an edit made a second before
+ * leaving it is still saved). And it is there even while only the new screens
+ * are on display: the working CRM's background duties — projects created
+ * automatically from advertising leads, follow-ups of closed projects, live
+ * updates — run because the CRM is open, and must keep running here.
  */
 export function WorkingSections({ src, title, visible }: { src: string | null; title: string; visible: boolean }) {
   const frame = useRef<HTMLIFrameElement>(null);
-  const first = useRef<string | null>(null);
+  const [first, setFirst] = useState<string | null>(src);
   const wanted = useRef<string | null>(null);
-  if (src && !first.current) first.current = src;
+  if (src && !first) setFirst(src);
   if (src) wanted.current = src;
+
+  // On a new screen the working CRM starts a moment later, so it never delays the screen itself.
+  useEffect(() => {
+    if (first) return;
+    const timer = window.setTimeout(() => setFirst((current) => current ?? "/legacy-crm"), 2500);
+    return () => window.clearTimeout(timer);
+  }, [first]);
 
   // Same page, another section: only the address after # changes, nothing reloads.
   const show = useCallback(() => {
@@ -78,10 +88,10 @@ export function WorkingSections({ src, title, visible }: { src: string | null; t
     if (src && visible) show();
   }, [src, visible, show]);
 
-  if (!first.current) return null;
+  if (!first) return null;
   return (
     <div className={cn("fixed inset-x-0 top-14 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 lg:top-0 lg:bottom-0 lg:left-64", !visible && "hidden")}>
-      <WorkingFrame ref={frame} src={first.current} title={title} onLoad={show} />
+      <WorkingFrame ref={frame} src={first} title={title} onLoad={show} />
     </div>
   );
 }

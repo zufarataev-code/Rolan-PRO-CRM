@@ -170,8 +170,8 @@ function LeadCard({ row, stages, link, onChanged, onConvert }: { row: LeadRow; s
 type WorkingWindow = Window & { canonicalLeadRow?: (id: string) => unknown; convertLead?: (id: string) => Promise<void> };
 
 export default function CrmLeadsPage() {
-  const leads = useCrmData<LeadsData>("/api/v1/leads");
-  const links = useCrmData<CrmLeadLinks>("/api/v1/crm-ui/lead-links");
+  const leads = useCrmData<LeadsData>("/api/v1/leads", { pollMs: 10000 });
+  const links = useCrmData<CrmLeadLinks>("/api/v1/crm-ui/lead-links", { pollMs: 60000 });
   const [filter, setFilter] = useState("active");
   const [query, setQuery] = useState("");
   const [converting, setConverting] = useState<LeadRow | null>(null);
