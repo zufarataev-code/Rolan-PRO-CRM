@@ -248,7 +248,8 @@ jobs:
               # failure while the requested SHA is already active.
               for health in $(seq 1 20); do
                 if curl --fail --silent --show-error --head --max-time 20 \
-                  https://rolanpro-crm.143-110-136-211.sslip.io/login >/dev/null 2>&1; then
+                  --output /dev/null --write-out 'External health http=%{http_code} ip=%{remote_ip} dns=%{time_namelookup} tcp=%{time_connect} tls=%{time_appconnect} first=%{time_starttransfer} total=%{time_total}\n' \
+                  https://rolanpro-crm.143-110-136-211.sslip.io/login; then
                   echo "Production is serving $EXPECTED_SHA"
                   exit 0
                 fi

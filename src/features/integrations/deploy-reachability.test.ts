@@ -19,6 +19,7 @@ test("external diagnostics retain failing curl evidence and continue isolated TL
     assert.equal(requests.length, 5, "a failed default probe must not hide the comparison probes");
     assert.equal((output.match(/curl_exit=28/g) ?? []).length, 5);
     assert.ok(requests.every(request => request.endsWith("https://rolanpro-crm.143-110-136-211.sslip.io/login")));
+    assert.ok(requests.every(request => request.includes("--connect-timeout 5 --max-time 10")));
     assert.ok(requests.every(request => !/(?:^|\s)(?:-k|--insecure)(?:\s|$)/.test(request)));
     assert.ok(requests.some(request => request.includes("--http1.1")));
     assert.ok(requests.some(request => request.includes("--resolve rolanpro-crm.143-110-136-211.sslip.io:443:143.110.136.211")));
