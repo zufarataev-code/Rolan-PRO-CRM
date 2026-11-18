@@ -76,4 +76,23 @@ jobs:
           PYTHON
           REMOTE
       - name: From the internet
-        run: curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 20 https://rolanpro-crm.143-110-136-211.sslip.io/ || echo "external fail"
+        run: |
+          # Diagnostic only; the deployment's external gate remains mandatory.
+          set +e
+          host=rolanpro-crm.143-110-136-211.sslip.io
+          curl --version | head -n 1
+          getent ahostsv4 "$host" | awk '{print $1}' | sort -u
+          probe() {
+            local name="$1"
+            shift
+            printf 'probe=%s\n' "$name"
+            curl --silent --show-error --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out 'http=%{http_code} ip=%{remote_ip} protocol=%{http_version} dns=%{time_namelookup} tcp=%{time_connect} tls=%{time_appconnect} first=%{time_starttransfer} total=%{time_total}\n' \
+              "$@" "https://$host/login"
+            printf 'curl_exit=%s\n' "$?"
+          }
+          probe default-head --head
+          probe ipv4-head --head --ipv4
+          probe pinned-head --head --ipv4 --resolve "$host:443:143.110.136.211"
+          probe pinned-http1-head --head --http1.1 --ipv4 --resolve "$host:443:143.110.136.211"
+          probe pinned-get --ipv4 --resolve "$host:443:143.110.136.211"

@@ -57,6 +57,14 @@ verify its exact event ID/name in Meta Events Manager. The owner process action 
 `POST /api/v1/integrations/meta-capi/process` with optional `{ "limit": 10 }` (1–25).
 The same endpoint accepts the existing scheduled conversion bearer credential.
 
+For the initial activation after PR #560, the owner explicitly accepted the
+existing single synthetic event's successful API receipt and persisted
+`test_accepted` if its Events Manager row remains absent. Deployment checks must
+pass first. The normal scheduler may then send the two existing, never-attempted
+native-Meta entries and future eligible stage changes. No second synthetic event,
+manual flush or live fixture replay is authorized; IDs, times and consent gates
+stay unchanged. See the dated activation decision in `DECISIONS.md`.
+
 The ten-minute Node scheduler runs independently of the Google scheduler and
 Google upload pause. Each pass reconciles verified legacy project outcomes into
 the existing business-event ledger before processing Meta's queue. Existing native

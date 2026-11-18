@@ -2,6 +2,12 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-17 — Approved CRM CAPI activation after deployment acceptance
+
+- The owner accepted the existing one-event Meta API receipt and persisted fixture `test_accepted` as sufficient provider validation for this activation if the exact row remains absent in Events Manager. Deployment checks must pass first; no additional synthetic event or live fixture replay is authorized.
+- Normal delivery explicitly includes the two existing, never-attempted native-Meta queue entries and future eligible stage events. Preserve original event IDs/timestamps and all consent/source/value checks; no manual flush, historical replay, advertising-goal change or customer contact is implied.
+- These later owner approvals govern the initial activation following PR #560. API acceptance still does not establish Meta matching, attribution, training eligibility or a counted ad conversion.
+
 ## 2026-11-17 — Lead classification and advertising feedback use verified outcomes
 
 - Owner requested the lead lifecycle and explicitly included CRM-to-Meta CAPI delivery. Lead stages remain canonical PostgreSQL pipeline references. Managers may mark contact attempts, contact, qualification, disqualification, loss and spam; negative outcomes require a saved reason. Closed leads remain filterable with their history.
