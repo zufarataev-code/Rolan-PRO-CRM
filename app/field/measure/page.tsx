@@ -18,7 +18,9 @@ export default function FieldMeasureListPage() {
   const { data, error, loading, reload } = useFieldData<{ projects: FieldMeasureProject[] }>("/api/v1/field/measure");
   const [scope, setScope] = useState("mine");
   const all = data?.projects ?? [];
-  const hasOthers = all.some((project) => !project.mine);
+  // «Мои / Все» only makes sense for someone who has projects of their own;
+  // an owner or manager without a measurer card sees every project at once.
+  const hasOthers = all.some((project) => !project.mine) && all.some((project) => project.mine);
   const projects = scope === "mine" && hasOthers ? all.filter((project) => project.mine) : all;
 
   return (
