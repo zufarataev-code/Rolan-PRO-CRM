@@ -19839,6 +19839,17 @@ function parseHash() {
   else if (/^#\/projects\/?$/.test(h)) { state.view = 'canonicalProjects'; state.canonicalProjectId = null; }
   if (/^#\/service-pricing\/?$/.test(h)) { state.view = 'servicePricing'; }
   if (/^#\/installer-operations\/?$/.test(h)) { state.view = 'installerOps'; }
+  // The new interface (/crm) has one menu for every section; a section it has
+  // not redrawn yet opens here by its address: #/section/<key>.
+  const section = h.match(/^#\/section\/([A-Za-z]+)\/?$/);
+  if (section && crmSectionOpenAllowed(section[1])) { state.view = section[1]; state.openOrderId = null; state.modal = null; }
+}
+/** Sections the /crm menu may open by address: office roles only, owner-only ones for the owner. */
+function crmSectionOpenAllowed(key) {
+  const role = currentUser()?.role;
+  if (!['owner', 'manager'].includes(role)) return false;
+  if (['ratesCosts', 'paymentsdue', 'accounting', 'settings'].includes(key)) return role === 'owner';
+  return ['leads', 'coldcalls', 'orders', 'quickEntry', 'proposals', 'calendar', 'tasks', 'academy', 'clients', 'inventory', 'payroll', 'reports', 'team', 'referrals', 'reviews'].includes(key);
 }
 window.addEventListener('hashchange', () => { parseHash(); render(); });
 

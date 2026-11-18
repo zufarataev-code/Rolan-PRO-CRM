@@ -19,6 +19,8 @@ export const ROUTE_ROLE_RULES: Array<{
     prefix: "/crm",
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER],
   },
+  // Read models of the new interface under /crm (one admin template for every screen).
+  { prefix: "/api/v1/crm-ui", roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] },
   {
     prefix: "/legacy-crm",
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT, ROLE_CODES.INSTALLER],

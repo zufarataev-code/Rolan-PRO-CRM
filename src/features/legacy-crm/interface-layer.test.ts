@@ -41,7 +41,12 @@ test("the switch lives in the menu, keeps the choice on the device and is not du
   const attrs: Record<string, string> = {};
   const store: Record<string, string> = {};
   const buttons: any[] = [];
-  const host = { querySelector: () => buttons[0] || null, appendChild: (button: any) => { buttons.push(button); } };
+  const links: any[] = [];
+  const host = {
+    querySelector: (selector: string) => (selector.includes("crm-next") ? links[0] : buttons[0]) || null,
+    appendChild: (button: any) => { buttons.push(button); },
+    insertBefore: (link: any) => { links.push(link); },
+  };
   const context = vm.createContext({
     window: { requestAnimationFrame: (callback: () => void) => callback() } as any,
     queueMicrotask: (callback: () => void) => callback(),
@@ -50,13 +55,18 @@ test("the switch lives in the menu, keeps the choice on the device and is not du
     document: {
       documentElement: { setAttribute: (key: string, value: string) => { attrs[key] = value; }, removeAttribute: (key: string) => { delete attrs[key]; } },
       querySelector: (selector: string) => (selector === ".app-sidebar .sidebar-logout-label" ? { closest: () => ({ parentElement: host }) } : null),
-      createElement: () => ({ textContent: "", setAttribute() {}, addEventListener() {} }),
+      createElement: () => ({ textContent: "", style: {}, setAttribute() {}, addEventListener() {} }),
     },
+    // The entry to the new interface (/crm) is shown to the office roles only.
+    currentUser: () => ({ role: "owner" }),
   });
   vm.runInContext(code, context);
   assert.equal(attrs["data-rp-style"], undefined, "the new look is on by default");
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].textContent, "Прежний стиль");
+  assert.equal(links.length, 1);
+  assert.equal(links[0].href, "/crm");
+  assert.equal(links[0].textContent, "Новый интерфейс");
   (context as any).window.rolanproToggleStyle();
   assert.equal(attrs["data-rp-style"], "classic");
   assert.equal(store.rp_style, "classic");
@@ -65,4 +75,5 @@ test("the switch lives in the menu, keeps the choice on the device and is not du
   (context as any).window.rolanproToggleStyle();
   assert.equal(attrs["data-rp-style"], undefined);
   assert.equal(store.rp_style, undefined);
+  assert.equal(links.length, 1, "the entry is not duplicated");
 });
