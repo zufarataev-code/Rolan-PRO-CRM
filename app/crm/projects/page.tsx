@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SearchIcon } from "lucide-react";
 
@@ -33,7 +34,7 @@ function ColumnCards({ column }: { column: Column }) {
       ))}
       {column.hidden > 0 ? (
         <Button asChild variant="ghost" size="sm">
-          <a href="/legacy-crm#/section/orders">Ещё {column.hidden} — в рабочей CRM</a>
+          <Link href="/crm/section/orders">Ещё {column.hidden} — все проекты</Link>
         </Button>
       ) : null}
     </div>
@@ -68,7 +69,7 @@ export default function CrmProjectsPage() {
     <>
       <PageHeader title="Проекты" sub={data ? `В работе: ${activeCount}` : "Воронка проектов"} loading={loading} onReload={() => void reload()}>
         <Button asChild>
-          <a href="/legacy-crm#/section/orders">Новый проект</a>
+          <Link href="/crm/section/orders">Новый проект</Link>
         </Button>
       </PageHeader>
       <LoadError message={error} />

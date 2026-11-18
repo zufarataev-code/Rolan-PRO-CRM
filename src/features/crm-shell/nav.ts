@@ -28,71 +28,83 @@ export type CrmNavItem = {
   title: string;
   href: string;
   icon: LucideIcon;
-  /** Already drawn by the new template; the rest still open in the working CRM. */
-  ready?: boolean;
+  /** A section of the working CRM shown inside the new frame until it is redrawn. */
+  section?: string;
   ownerOnly?: boolean;
 };
 
 export type CrmNavGroup = { title: string; items: CrmNavItem[] };
 
-/** A section of the working CRM, opened by its address (see parseHash in the CRM). */
-const section = (key: string) => `/legacy-crm#/section/${key}`;
+/** A working section inside the new frame: /crm/section/<key>. */
+const section = (title: string, key: string, icon: LucideIcon, ownerOnly = false): CrmNavItem => ({ title, href: `/crm/section/${key}`, icon, section: key, ownerOnly });
+
+/** Sections the working CRM opens by an address of their own rather than #/section/<key>. */
+const OWN_ADDRESS: Record<string, string> = { servicePricing: "#/service-pricing", installerOps: "#/installer-operations" };
 
 /** One menu for every screen — the same sections the working CRM has, in the same order. */
 export const CRM_NAV: CrmNavGroup[] = [
   {
     title: "Главное",
     items: [
-      { title: "Главная", href: "/crm", icon: LayoutDashboardIcon, ready: true },
-      { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon, ready: true },
+      { title: "Главная", href: "/crm", icon: LayoutDashboardIcon },
+      { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon },
     ],
   },
   {
     title: "Продажи",
     items: [
-      { title: "Новые лиды", href: section("leads"), icon: InboxIcon },
-      { title: "Холодные звонки", href: section("coldcalls"), icon: PhoneCallIcon },
-      { title: "КП", href: section("proposals"), icon: FileTextIcon },
-      { title: "Клиенты", href: section("clients"), icon: UsersIcon },
-      { title: "Выполненные проекты", href: section("quickEntry"), icon: ZapIcon },
+      section("Новые лиды", "leads", InboxIcon),
+      section("Холодные звонки", "coldcalls", PhoneCallIcon),
+      section("КП", "proposals", FileTextIcon),
+      section("Клиенты", "clients", UsersIcon),
+      section("Выполненные проекты", "quickEntry", ZapIcon),
     ],
   },
   {
     title: "Работа",
     items: [
-      { title: "Календарь", href: section("calendar"), icon: CalendarDaysIcon },
-      { title: "Задачи", href: section("tasks"), icon: CheckSquareIcon },
-      { title: "Монтажники сейчас", href: "/legacy-crm#/installer-operations", icon: MapPinIcon },
-      { title: "Склад", href: section("inventory"), icon: BoxesIcon },
+      section("Календарь", "calendar", CalendarDaysIcon),
+      section("Задачи", "tasks", CheckSquareIcon),
+      section("Монтажники сейчас", "installerOps", MapPinIcon),
+      section("Склад", "inventory", BoxesIcon),
     ],
   },
   {
     title: "Деньги",
     items: [
-      { title: "Услуги и цены", href: "/legacy-crm#/service-pricing", icon: TagsIcon },
-      { title: "Ставки и расходы", href: section("ratesCosts"), icon: ReceiptTextIcon, ownerOnly: true },
-      { title: "Ожидают оплаты", href: section("paymentsdue"), icon: HandCoinsIcon, ownerOnly: true },
-      { title: "Деньги", href: section("accounting"), icon: CircleDollarSignIcon, ownerOnly: true },
-      { title: "Зарплата", href: section("payroll"), icon: BanknoteIcon },
-      { title: "Отчёты", href: section("reports"), icon: BarChart3Icon },
+      section("Услуги и цены", "servicePricing", TagsIcon),
+      section("Ставки и расходы", "ratesCosts", ReceiptTextIcon, true),
+      section("Ожидают оплаты", "paymentsdue", HandCoinsIcon, true),
+      section("Деньги", "accounting", CircleDollarSignIcon, true),
+      section("Зарплата", "payroll", BanknoteIcon),
+      section("Отчёты", "reports", BarChart3Icon),
     ],
   },
   {
     title: "Компания",
     items: [
-      { title: "Команда", href: section("team"), icon: UsersRoundIcon },
-      { title: "Академия", href: section("academy"), icon: GraduationCapIcon },
-      { title: "Рефералы", href: section("referrals"), icon: GiftIcon },
-      { title: "Отзывы", href: section("reviews"), icon: StarIcon },
-      { title: "Настройки", href: section("settings"), icon: SettingsIcon, ownerOnly: true },
+      section("Команда", "team", UsersRoundIcon),
+      section("Академия", "academy", GraduationCapIcon),
+      section("Рефералы", "referrals", GiftIcon),
+      section("Отзывы", "reviews", StarIcon),
+      section("Настройки", "settings", SettingsIcon, true),
     ],
   },
 ];
 
-/** Sections the new menu may open in the working CRM, and who may open them. */
-export const CRM_LEGACY_SECTIONS = CRM_NAV.flatMap((group) => group.items)
-  .map((item) => ({ key: item.href.match(/#\/section\/(\w+)$/)?.[1] ?? "", ownerOnly: Boolean(item.ownerOnly) }))
-  .filter((item) => item.key);
+const ALL_ITEMS = CRM_NAV.flatMap((group) => group.items);
+
+/** Sections the new menu asks the working CRM to open by #/section/<key>, and who may open them. */
+export const CRM_LEGACY_SECTIONS = [...ALL_ITEMS.filter((item) => item.section), { section: "orders", ownerOnly: false }]
+  .filter((item) => !OWN_ADDRESS[item.section ?? ""])
+  .map((item) => ({ key: item.section ?? "", ownerOnly: Boolean(item.ownerOnly) }));
+
+/** The working CRM address for a section of the new menu; null when this role may not open it. */
+export function crmSectionSrc(key: string, role: "owner" | "manager") {
+  const item = key === "orders" ? { title: "Проекты", ownerOnly: false } : ALL_ITEMS.find((entry) => entry.section === key);
+  if (!item || (item.ownerOnly && role !== "owner")) return null;
+  return { title: item.title, src: `/legacy-crm${OWN_ADDRESS[key] ?? `#/section/${key}`}` };
+}
 
 export function crmNavFor(role: "owner" | "manager" | undefined): CrmNavGroup[] {
   return CRM_NAV.map((group) => ({ ...group, items: group.items.filter((item) => !item.ownerOnly || role === "owner") })).filter(

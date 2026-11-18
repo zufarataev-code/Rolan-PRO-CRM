@@ -2,38 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRightIcon, CalendarDaysIcon, KanbanSquareIcon, LayoutDashboardIcon, MenuIcon } from "lucide-react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { CalendarDaysIcon, KanbanSquareIcon, LayoutDashboardIcon, MenuIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { crmNavActive, crmNavFor, type CrmNavItem } from "@/features/crm-shell/nav";
+import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
+import { WorkingSections } from "@/features/crm-shell/working-frame";
 
 type Role = "owner" | "manager";
 
+const RoleContext = createContext<Role>("manager");
+/** The signed-in office role, for screens that differ between the owner and a manager. */
+export const useCrmRole = () => useContext(RoleContext);
+
 function NavLink({ item, pathname, onNavigate }: { item: CrmNavItem; pathname: string; onNavigate?: () => void }) {
-  const active = Boolean(item.ready) && crmNavActive(pathname, item.href);
-  const className = cn(
-    "flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-    active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
-  );
+  const active = crmNavActive(pathname, item.href);
   const Icon = item.icon;
-  if (item.ready) {
-    return (
-      <Link href={item.href} className={className} aria-current={active ? "page" : undefined} onClick={onNavigate}>
-        <Icon className="size-4 shrink-0" />
-        <span className="truncate">{item.title}</span>
-      </Link>
-    );
-  }
-  // Sections not redrawn yet open in the working CRM — nothing is lost on the way.
+  // Every section opens the same way — inside this frame, whether it is already redrawn or not.
   return (
-    <a href={item.href} className={className} onClick={onNavigate}>
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      onClick={onNavigate}
+      className={cn(
+        "flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
+      )}
+    >
       <Icon className="size-4 shrink-0" />
       <span className="truncate">{item.title}</span>
-      <ArrowUpRightIcon className="text-muted-foreground ml-auto size-3.5 shrink-0" aria-label="откроется в рабочей CRM" />
-    </a>
+    </Link>
   );
 }
 
@@ -68,13 +68,17 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
+  const sectionKey = pathname.match(/^\/crm\/section\/(\w+)\/?$/)?.[1] ?? "";
+  const section = sectionKey ? crmSectionSrc(sectionKey, role) : null;
+
   const dock = [
-    { title: "Главная", href: "/crm", icon: LayoutDashboardIcon, internal: true },
-    { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon, internal: true },
-    { title: "Календарь", href: "/legacy-crm#/section/calendar", icon: CalendarDaysIcon, internal: false },
+    { title: "Главная", href: "/crm", icon: LayoutDashboardIcon },
+    { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon },
+    { title: "Календарь", href: "/crm/section/calendar", icon: CalendarDaysIcon },
   ];
 
   return (
+    <RoleContext.Provider value={role}>
     <div ref={setRoot} className="rp-crm bg-background text-foreground min-h-screen font-sans text-sm antialiased">
       <aside className="bg-sidebar fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r lg:flex">
         <div className="flex h-16 shrink-0 items-center border-b px-5">
@@ -125,6 +129,8 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
         </SheetContent>
       </Sheet>
 
+      <WorkingSections src={section?.src ?? null} title={section?.title ?? "Раздел CRM"} visible={Boolean(section)} />
+
       <div className="lg:pl-64">
         <div className="mx-auto w-full max-w-[1400px] px-3 pt-4 pb-24 sm:px-5 lg:px-8 lg:pt-6 lg:pb-10">{children}</div>
       </div>
@@ -134,22 +140,18 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
         aria-label="Быстрый переход"
       >
         {dock.map((item) => {
-          const active = item.internal && crmNavActive(pathname, item.href);
-          const className = cn(
-            "flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium",
-            active ? "text-primary" : "text-muted-foreground",
-          );
+          const active = crmNavActive(pathname, item.href);
           const Icon = item.icon;
-          return item.internal ? (
-            <Link key={item.href} href={item.href} className={className} aria-current={active ? "page" : undefined}>
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={cn("flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}
+            >
               <Icon className="size-5" />
               {item.title}
             </Link>
-          ) : (
-            <a key={item.href} href={item.href} className={className}>
-              <Icon className="size-5" />
-              {item.title}
-            </a>
           );
         })}
         <button type="button" className="text-muted-foreground flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium" onClick={() => setMenuOpen(true)}>
@@ -158,5 +160,6 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
         </button>
       </nav>
     </div>
+    </RoleContext.Provider>
   );
 }

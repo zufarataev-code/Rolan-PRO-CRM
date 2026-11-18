@@ -3,7 +3,7 @@ import test from "node:test";
 import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
-import { CRM_LEGACY_SECTIONS, crmNavFor } from "./nav";
+import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
 import type { CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
@@ -77,4 +77,10 @@ test("every old section in the new menu is one the working CRM agrees to open by
   for (const item of CRM_LEGACY_SECTIONS.filter((entry) => entry.ownerOnly)) assert.ok(ownerOnly.includes(`'${item.key}'`), item.key);
   const managerTitles = crmNavFor("manager").flatMap((group) => group.items).map((item) => item.title);
   assert.ok(!managerTitles.includes("Деньги") && !managerTitles.includes("Настройки"));
+  assert.ok(CRM_LEGACY_SECTIONS.some((item) => item.key === "orders"));
+  assert.equal(crmSectionSrc("leads", "manager")?.src, "/legacy-crm#/section/leads");
+  assert.equal(crmSectionSrc("servicePricing", "manager")?.src, "/legacy-crm#/service-pricing");
+  assert.equal(crmSectionSrc("installerOps", "owner")?.src, "/legacy-crm#/installer-operations");
+  assert.equal(crmSectionSrc("accounting", "manager"), null);
+  assert.equal(crmSectionSrc("anything", "owner"), null);
 });

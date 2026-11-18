@@ -12,6 +12,7 @@ import { ROLE_TESTING_HTML } from "@/features/legacy-crm/role-testing";
 import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
 import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 import { INTERFACE_LAYER_HTML } from "@/features/legacy-crm/interface-layer";
+import { EMBED_FRAME_HTML } from "@/features/legacy-crm/embed-frame";
 import { ENTITY_TOKENS_HTML } from "@/features/legacy-crm/entity-tokens";
 import { composeProductionHtml } from "@/features/legacy-crm/production-ui";
 import { currentReleaseId } from "@/features/legacy-crm/release";
@@ -546,7 +547,7 @@ ${BEFORE_PAINT_SCRIPT}
   const privilegedWorkspace = session.roles.includes(ROLE_CODES.OWNER) || session.roles.includes(ROLE_CODES.MANAGER);
   const privilegedUi = privilegedWorkspace ? `${teamAccessPatch}${calculatorPatch}` : "";
   // The owner's design canvas as one visual layer for every role (2026-10-04).
-  const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}${PULSE_THEME_HTML}${roleTestingUi}${INTERFACE_LAYER_HTML}`;
+  const injectedUi = `${DESIGN_THEME_HTML}${googleMapsBootstrapPatch}${teamDirectoryPatch}${privilegedUi}${previewPatch}${PULSE_THEME_HTML}${roleTestingUi}${EMBED_FRAME_HTML}${INTERFACE_LAYER_HTML}`;
   // Entity colour tokens go first in <head>: the legacy palettes read
   // window.RP_ENTITY at parse time (src/features/legacy-crm/entity-tokens.ts).
   const headIndex = cloudHtml.toLowerCase().indexOf("<head>");
