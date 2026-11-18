@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { use, useState } from "react";
-import { ArrowLeftIcon, CheckIcon, ExternalLinkIcon, MapPinIcon, PhoneIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, MapPinIcon, PanelRightOpenIcon, PhoneIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { dateTime, legacyProjectHref, money } from "@/features/crm-shell/format";
 import type { CrmProjectDetails, CrmProjectPage, CrmStage } from "@/features/crm-shell/types";
 import { LoadError, LoadingBlock, PageHeader, Pill, RingCard, SectionTitle, UrgencyPill } from "@/features/crm-shell/ui";
 import { useCrmData } from "@/features/crm-shell/use-crm-data";
+import { WorkingFrame } from "@/features/crm-shell/working-frame";
 import { cn } from "@/lib/utils";
 
 /** The working card's own stage line: same stages, same order, same hints. */
@@ -67,7 +69,7 @@ function Services({ project }: { project: CrmProjectDetails }) {
 }
 
 /** Tour of the site: photos with the windows marked on them, as in the approved demo. */
-function Tour({ project }: { project: CrmProjectDetails }) {
+function Tour({ project, onOpenCard }: { project: CrmProjectDetails; onOpenCard: () => void }) {
   const [photoId, setPhotoId] = useState("");
   const [selected, setSelected] = useState("");
   const photo = project.photos.find((item) => item.id === photoId) ?? project.photos[0];
@@ -108,8 +110,8 @@ function Tour({ project }: { project: CrmProjectDetails }) {
         <div className="bg-muted/60 flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 text-center">
           <b>Фото объекта пока нет</b>
           <p className="text-muted-foreground text-sm">Добавьте фото в карточке проекта — оно появится здесь, и на нём можно отметить окна точками.</p>
-          <Button asChild variant="outline" size="sm">
-            <a href={legacyProjectHref(project.id)}>Добавить фото</a>
+          <Button variant="outline" size="sm" onClick={onOpenCard}>
+            Добавить фото
           </Button>
         </div>
         {list}
@@ -147,7 +149,7 @@ function Tour({ project }: { project: CrmProjectDetails }) {
             ))}
           </div>
         ) : null}
-        <p className="text-muted-foreground mt-2 text-xs">Нажмите на точку или на окно в списке. Точки ставятся в карточке проекта.</p>
+        <p className="text-muted-foreground mt-2 text-xs">Нажмите на точку или на окно в списке. Точки ставятся в рабочей карточке.</p>
       </div>
       {list}
     </div>
@@ -158,6 +160,13 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
   const { projectId } = use(params);
   const { data, error, loading, reload } = useCrmData<CrmProjectPage>(`/api/v1/crm-ui/projects/${encodeURIComponent(projectId)}`);
   const project = data?.project ?? null;
+  const [cardOpen, setCardOpen] = useState(false);
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+  // Whatever was done in the working card is on this screen as soon as the card is closed.
+  const toggleCard = (open: boolean) => {
+    setCardOpen(open);
+    if (!open) void reload();
+  };
 
   return (
     <>
@@ -166,10 +175,8 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
       </Link>
       <PageHeader title={project?.client.name ?? "Проект"} sub={project ? `${project.number} · ${project.status}` : undefined} loading={loading} onReload={() => void reload()}>
         {project ? (
-          <Button asChild>
-            <a href={legacyProjectHref(project.id)}>
-              Рабочая карточка <ExternalLinkIcon />
-            </a>
+          <Button onClick={() => setCardOpen(true)}>
+            Рабочая карточка <PanelRightOpenIcon />
           </Button>
         ) : null}
       </PageHeader>
@@ -177,7 +184,16 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
       {!data && loading ? <LoadingBlock /> : null}
       {data && !project ? <p className="text-muted-foreground text-sm">Проект не найден или недоступен.</p> : null}
       {project ? (
-        <div className="grid gap-4">
+        <div className="grid gap-4" ref={(node) => setRoot(node?.closest<HTMLElement>(".rp-crm") ?? null)}>
+          <Sheet open={cardOpen} onOpenChange={toggleCard}>
+            <SheetContent side="right" container={root} className="w-full gap-0 p-0 sm:max-w-none lg:w-[min(1200px,calc(100vw-16rem))]">
+              <SheetHeader className="border-b py-3 pr-12">
+                <SheetTitle className="truncate">{project.client.name}</SheetTitle>
+                <SheetDescription>Рабочая карточка проекта: все действия — здесь</SheetDescription>
+              </SheetHeader>
+              <div className="min-h-0 flex-1">{cardOpen ? <WorkingFrame src={legacyProjectHref(project.id)} title="Рабочая карточка проекта" /> : null}</div>
+            </SheetContent>
+          </Sheet>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
             {project.client.phone ? (
               <a href={`tel:${project.client.phone}`} className="text-primary inline-flex min-h-8 items-center gap-1.5 font-semibold">
@@ -229,8 +245,8 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
                   <div className="text-lg leading-snug font-bold">{project.next?.title ?? "Проект под контролем"}</div>
                   {project.next?.sub ? <p className="text-muted-foreground mt-1 text-sm">{project.next.sub}</p> : null}
                 </div>
-                <Button asChild size="lg" className="w-full sm:w-auto sm:justify-self-start">
-                  <a href={legacyProjectHref(project.id)}>Сделать в карточке проекта</a>
+                <Button size="lg" className="w-full sm:w-auto sm:justify-self-start" onClick={() => setCardOpen(true)}>
+                  Сделать сейчас
                 </Button>
               </CardContent>
             </Card>
@@ -249,7 +265,7 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
               <SectionTitle>Тур по объекту{project.photos.length > 1 ? ` · ${project.photos.length} фото` : ""}</SectionTitle>
             </CardHeader>
             <CardContent className="px-5">
-              <Tour project={project} />
+              <Tour project={project} onOpenCard={() => setCardOpen(true)} />
             </CardContent>
           </Card>
         </div>
