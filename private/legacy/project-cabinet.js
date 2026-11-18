@@ -32,7 +32,7 @@ function projectCabinetEntryBar(o, u) {
   const open = projectCabinetUi().tourOpen === true || (projectCabinetUi().tourOpen !== false && model.photos.length > 0);
   return `${projectCabinetCss()}<div class="rpc" style="margin-bottom:12px">
     <section class="rpc-g4">
-      ${projectCabinetRing(model.stagePct, `${model.stages.filter(stage => stage.done).length} из ${model.stages.length}`, 'этапов пройдено', '#178a52')}
+      ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
       ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
       ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
       ${projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4')}
@@ -82,27 +82,28 @@ function projectCabinetModel(o, c, u, opts = {}) {
   const sqft = windows.reduce((sum, item) => sum + windowActualAreaSqft(item.win), 0);
   const revenue = canSeeMoney ? Number(orderRevenue(o)) || 0 : 0;
   const paid = canSeeMoney ? Number(orderPaidTotal(o)) || Number(o.paid) || 0 : 0;
-  const accepted = reached('proposal_accepted');
-  const noDeposit = o.paymentTerms === 'after_completion' || !!o.depositWaivedAt;
-  const depositDone = accepted && (noDeposit || !!o.depositReceived || (Number(orderPaidTotal(o)) || Number(o.paid) || 0) > 0);
-  const stages = [
-    { name: 'Замер', done: reached('measurement_done'), note: reached('measurement_done') ? 'выполнен' : o.status === 'measurement_scheduled' ? 'назначен' : 'не начат', pct: reached('measurement_done') ? 100 : 0 },
-    { name: 'КП', done: accepted, note: accepted ? 'принято' : o.status === 'proposal_sent' ? 'у клиента' : 'не отправлено', pct: accepted ? 100 : o.status === 'proposal_sent' ? 50 : 0 },
-    { name: 'Аванс', done: depositDone, note: !accepted ? 'после КП' : noDeposit ? 'без аванса' : depositDone ? 'получен' : 'ждём', pct: depositDone ? 100 : 0 },
-    { name: 'Монтаж', done: installDone, note: `${workPct}%`, pct: workPct },
-    { name: 'Акт', done: reached('act_signed'), note: reached('act_signed') ? 'подписан' : 'после монтажа', pct: reached('act_signed') ? 100 : 0 },
-    { name: 'Оплата', done: reached('payment_received'), note: reached('payment_received') ? 'получена' : 'после акта', pct: reached('payment_received') ? 100 : 0 },
-  ];
-  const current = stages.findIndex(stage => !stage.done);
-  stages.forEach((stage, index) => { stage.state = stage.done ? 'done' : index === current ? 'now' : 'wait'; });
+  // The project's stage logic is the working card's own stage line
+  // (renderOrderCleanProgress): the cabinet shows that line and only counts it.
+  let stageHtml = '';
+  try { stageHtml = renderOrderCleanProgress(o) || ''; } catch (error) { stageHtml = ''; }
+  const stageTotal = (stageHtml.match(/class="order-clean-stage-btn /g) || []).length;
+  const stageDone = (stageHtml.match(/class="order-clean-stage-btn (done|skipped)"/g) || []).length;
   let primary = null;
   try { primary = orderPrimaryNextAction(o); } catch (error) { primary = null; }
   const photos = (o.photos || []).filter(photo => photo && photo.dataUrl && photo.kind !== 'video');
   return {
-    lines, doneLines, workPct, windows, windowCount, sizedCount, sqft, revenue, paid, stages, primary, photos, canSeeMoney,
-    stagePct: Math.round(100 * stages.filter(stage => stage.done).length / stages.length),
+    lines, doneLines, workPct, windows, windowCount, sizedCount, sqft, revenue, paid, stageHtml, stageTotal, stageDone, primary, photos, canSeeMoney,
+    stagePct: stageTotal ? Math.round(100 * stageDone / stageTotal) : 0,
     paidPct: revenue > 0 ? Math.min(100, Math.round(100 * paid / revenue)) : 0,
   };
+}
+
+/** A stage whose window lives on the working card: switch to the card, then open it there. */
+function projectCabinetOpenWorkspace(key) {
+  try { localStorage.removeItem('rp_project_cabinet'); } catch (error) { /* nothing to remember in private mode */ }
+  // The window is built from the card's own DOM, so the card must be painted first.
+  renderNow();
+  return projectCardOpenWorkspace(key);
 }
 
 function projectCabinetRing(pct, title, sub, color) {
@@ -310,13 +311,14 @@ function projectCabinetHtml(o, c, u, opts = {}) {
       <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(false)">Обычная карточка</button>
     </header>
     <section class="rpc-g4">
-      ${projectCabinetRing(model.stagePct, `${model.stages.filter(stage => stage.done).length} из ${model.stages.length}`, 'этапов пройдено', '#178a52')}
+      ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
       ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
       ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
       ${model.canSeeMoney ? projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4') : projectCabinetRing(model.workPct, `${model.sqft.toFixed(0)} sq ft`, 'по замеру', '#7d4fc4')}
     </section>
     <section class="rpc-card"><h2>Этапы проекта</h2>
-      <div class="rpc-rail">${model.stages.map((stage, index) => `<div class="rpc-st ${stage.state}"><em>${String(index + 1).padStart(2, '0')} · ${academyEsc(stage.note)}</em><b>${stage.name}</b><div class="rpc-bar"><i style="width:${stage.pct}%"></i></div></div>`).join('')}</div>
+      ${model.stageHtml.split('projectCardOpenWorkspace(').join('projectCabinetOpenWorkspace(') || '<span class="rpc-note">Этапы недоступны.</span>'}
+      <p class="rpc-note">Та же линия этапов, что в обычной карточке: нажатие открывает окно этого шага.</p>
     </section>
     <section class="rpc-card"><h2>Следующий шаг</h2>
       ${primary ? `<div class="rpc-next"><div style="flex:1;min-width:220px"><b>${primary.icon || ''} ${academyEsc(primary.title || '')}</b><span>${academyEsc(primary.sub || '')}</span></div>${primary.href && !primary.disabled ? `<a class="rpc-btn" href="${primary.href}" target="_blank" rel="noopener">${academyEsc(primary.title || 'Открыть')}</a>` : primary.onclick && !primary.disabled ? `<button type="button" class="rpc-btn" onclick="${primary.onclick}">${academyEsc(primary.title || 'Открыть')}</button>` : ''}</div>` : '<span class="rpc-note">Для этого проекта нет действия.</span>'}
