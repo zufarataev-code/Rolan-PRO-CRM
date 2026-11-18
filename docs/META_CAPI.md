@@ -110,6 +110,8 @@ permissions; this script's exact-key read is not a new restricted IAM role.
 Refresh is explicit: run the same scoped sync after a vault change, then use the
 normal main-only release/watcher restart to load the canonical environment.
 A vault save or successful file sync alone does not prove runtime adoption.
+While deployment acceptance is pending, keep the canonical startup flag and the
+running process disabled: another main release can reload the startup file.
 Retain runtime uploads `false` until the approved provider QA and deployment checks
 pass. The dated initial-activation exception above governs the existing API receipt.
 Never enable Test Events on the customer database:
