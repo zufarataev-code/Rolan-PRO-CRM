@@ -77,3 +77,22 @@ export type CrmProjectPage = { user: CrmShellUser; project: CrmProjectDetails | 
 
 /** Leads that already have a project, by lead id. */
 export type CrmLeadLinks = { user: CrmShellUser; links: Record<string, { projectId: string; number: string; archived: boolean }> };
+
+export type CrmCalendarEvent = {
+  id: string;
+  kind: "consultation" | "measure" | "install" | "complaint";
+  title: string;
+  color: string;
+  at: string;
+  /** Local day of the event, YYYY-MM-DD, in the viewer's time zone. */
+  day: string;
+  time: string;
+  client: string;
+  people: string;
+  address: string;
+  note: string;
+  number: string;
+  projectId: string;
+};
+
+export type CrmCalendar = { user: CrmShellUser; from: string; to: string; today: string; events: CrmCalendarEvent[] };

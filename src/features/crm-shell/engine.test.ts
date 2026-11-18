@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
 import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
-import type { CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
+import type { CrmCalendar, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
 const script = new vm.Script(source);
@@ -60,6 +60,23 @@ test("a lead that already has a project is linked to it, an archived one is mark
   changed.archivedOrders = [{ id: "old", number: "R-OLD", canonicalLeadId: "lead-2" }];
   const result = runCrmEngine<CrmLeadLinks>(changed, owner, { model: "leadLinks" }, script);
   assert.deepEqual(result.links, { "lead-1": { projectId: "o1", number: "R-2604-001", archived: false }, "lead-2": { projectId: "", number: "R-OLD", archived: true } });
+});
+
+test("the calendar is the working calendar's events, with consultations booked from leads", () => {
+  const consultation = {
+    consultation_id: "c-77", status: "scheduled", scheduled_start_at: "2026-04-26T20:00:00Z", scheduled_end_at: "2026-04-26T21:00:00Z",
+    location_address: "Glendale, CA, 5 Lead St", lead: { lead_id: "l-9", name: "Lead Nine", lead_code: "L-9" }, client: null,
+    assigned_manager: null, assigned_consultant: null, manager_notes: "",
+  };
+  const result = runCrmEngine<CrmCalendar>(payload, owner, { model: "calendar", from: "2026-04-20", to: "2026-04-26" }, script, { consultations: [consultation] });
+  assert.deepEqual([result.from, result.to], ["2026-04-20", "2026-04-26"]);
+  const install = result.events.find((event) => event.kind === "install" && event.projectId === "o1");
+  // 09:00 UTC is 02:00 in Los Angeles on the same day.
+  assert.deepEqual([install?.day, install?.time, install?.client, install?.people], ["2026-04-26", "02:00", "Acme Business Tower", "Ринат, Нурик"]);
+  const booked = result.events.find((event) => event.client === "Lead Nine");
+  assert.deepEqual([booked?.kind, booked?.day, booked?.projectId, booked?.address], ["consultation", "2026-04-26", "", "Glendale, CA, 5 Lead St"]);
+  const wide = runCrmEngine<CrmCalendar>(payload, owner, { model: "calendar", from: "2026-01-01", to: "2026-12-31" }, script);
+  assert.deepEqual([wide.from, wide.to], ["2026-01-01", "2026-01-07"], "a range longer than two months is cut to a week");
 });
 
 test("no CRM card of an office role — no data", () => {

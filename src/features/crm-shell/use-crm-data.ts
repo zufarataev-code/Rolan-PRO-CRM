@@ -15,7 +15,7 @@ export function useCrmData<T>(path: string, options: { pollMs?: number } = {}) {
     try {
       // Dates and month borders are computed for the time zone of this device, as in the working CRM.
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      const response = await fetch(`${path}?tz=${encodeURIComponent(zone)}`, { cache: "no-store", credentials: "same-origin" });
+      const response = await fetch(`${path}${path.includes("?") ? "&" : "?"}tz=${encodeURIComponent(zone)}`, { cache: "no-store", credentials: "same-origin" });
       if (response.status === 401) {
         window.location.href = "/login";
         return;

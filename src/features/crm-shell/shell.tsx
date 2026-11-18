@@ -74,7 +74,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
   const dock = [
     { title: "Главная", href: "/crm", icon: LayoutDashboardIcon },
     { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon },
-    { title: "Календарь", href: "/crm/section/calendar", icon: CalendarDaysIcon },
+    { title: "Календарь", href: "/crm/calendar", icon: CalendarDaysIcon },
   ];
 
   return (

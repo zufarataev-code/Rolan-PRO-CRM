@@ -196,9 +196,43 @@ function crmShellLeadLinks(user) {
   return { user: crmShellUser(user), links };
 }
 
+/** Calendar: the working calendar's own events (calItemsInRange) for a range of local days. */
+function crmShellCalendar(user, from, to) {
+  const day = value => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '')); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null; };
+  const start = day(from) || new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+  let end = day(to) || start;
+  // One screen never asks for more than two months.
+  if (end < start || end - start > 62 * 864e5) end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  end = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
+  const key = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const visible = new Set(visibleOrdersForUser(user).map(order => order.id));
+  const events = calItemsInRange(start, end).map(ev => {
+    const o = ev.o || {};
+    const client = calendarClientForOrder(o) || {};
+    const palette = calendarEventPalette(ev.kind);
+    return {
+      id: String(ev.id),
+      kind: ev.kind,
+      title: (ev.info && ev.info.title) || '',
+      color: palette.color,
+      at: ev.dt.toISOString(),
+      day: key(ev.dt),
+      time: calendarTimeLabel(ev.dt),
+      client: client.name || 'Без клиента',
+      people: calendarEventPeople(ev),
+      address: crmShellAddress(o, client),
+      note: ev.service ? `${ev.service.name}${ev.service.days > 1 ? ` · день ${ev.service.day} из ${ev.service.days}` : ''}` : String(ev.note || ''),
+      number: o.number || '',
+      // A consultation booked from a lead has no project yet.
+      projectId: o._canonicalConsultationId || !visible.has(o.id) ? '' : o.id,
+    };
+  });
+  return { user: crmShellUser(user), from: key(start), to: key(end), today: key(new Date()), events };
+}
+
 /** Entry point of the server calculation: one workspace in, one JSON model out. */
 function crmShellRun(input) {
-  const { payload, viewer, request } = JSON.parse(input);
+  const { payload, viewer, request, consultations } = JSON.parse(input);
   // Reading only: nothing computed here is ever written back.
   save = function () {};
   db = payload;
@@ -208,9 +242,12 @@ function crmShellRun(input) {
   if (!user) return JSON.stringify({ error: 'no_card' });
   state.currentUserId = user.id;
   state.lang = 'ru';
+  // Consultations booked from leads live in the database, not in the workspace.
+  if (Array.isArray(consultations)) canonicalConsultations = consultations;
   if (request.model === 'overview') return JSON.stringify(crmShellOverview(user));
   if (request.model === 'projects') return JSON.stringify(crmShellProjects(user));
   if (request.model === 'project') return JSON.stringify(crmShellProject(user, String(request.projectId || '')));
   if (request.model === 'leadLinks') return JSON.stringify(crmShellLeadLinks(user));
+  if (request.model === 'calendar') return JSON.stringify(crmShellCalendar(user, request.from, request.to));
   return JSON.stringify({ error: 'unknown_model' });
 }
