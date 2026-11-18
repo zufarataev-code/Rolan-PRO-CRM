@@ -97,9 +97,18 @@ test("manager lead stages are audited, concurrent-safe and cannot forge a sale",
     assert.equal((await patch("DISQUALIFIED", "QUALIFIED")).status, 400);
     assert.equal((await patch("DISQUALIFIED", "QUALIFIED", "Outside service area")).status, 200);
     assert.equal((await patch("NEW_LEAD", "QUALIFIED")).status, 409);
-    const inbox = data<{ items: Array<{ lead_id: string; pipeline_status: { status_code: string }; stage_history: Array<{ reason?: string }> }> }>((await call(manager, "GET", "/api/v1/leads")).json);
+    type Receipt = { event_name: string; processing_status: string; updated_at: string };
+    const inbox = data<{ items: Array<{ lead_id: string; outcome_stage: string | null; delivery: { facebook: Receipt[]; google: Receipt[] }; pipeline_status: { status_code: string }; stage_history: Array<{ reason?: string }> }> }>((await call(manager, "GET", "/api/v1/leads")).json);
     const row = inbox.items.find(item => item.lead_id === id);
     assert.equal(row?.pipeline_status.status_code, "DISQUALIFIED");
+    assert.equal(row.outcome_stage, null, "Google qualification must not count as a sale");
+    assert.ok(!("conversion_events" in row || "meta_capi_outboxes" in row));
+    assert.ok(row.delivery.facebook.some(receipt => receipt.event_name === "DisqualifiedLead" && receipt.processing_status === "suppressed"));
+    assert.ok(row.delivery.google.some(receipt => receipt.event_name === "qualified_lead"));
+    for (const receipt of [...row.delivery.facebook, ...row.delivery.google]) {
+      assert.deepEqual(Object.keys(receipt).sort(), ["event_name", "processing_status", "updated_at"]);
+      assert.ok(Number.isFinite(Date.parse(receipt.updated_at)));
+    }
     assert.ok(row?.stage_history.some(item => item.reason === "Outside service area"));
     assert.equal((await patch("NEW_LEAD", "DISQUALIFIED")).status, 200);
     assert.equal((await patch("QUALIFIED", "NEW_LEAD")).status, 200);

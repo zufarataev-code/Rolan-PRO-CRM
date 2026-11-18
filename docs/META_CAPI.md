@@ -57,6 +57,14 @@ verify its exact event ID/name in Meta Events Manager. The owner process action 
 `POST /api/v1/integrations/meta-capi/process` with optional `{ "limit": 10 }` (1–25).
 The same endpoint accepts the existing scheduled conversion bearer credential.
 
+For the initial activation after PR #560, the owner explicitly accepted the
+existing single synthetic event's successful API receipt and persisted
+`test_accepted` if its Events Manager row remains absent. Deployment checks must
+pass first. The normal scheduler may then send the two existing, never-attempted
+native-Meta entries and future eligible stage changes. No second synthetic event,
+manual flush or live fixture replay is authorized; IDs, times and consent gates
+stay unchanged. See the dated activation decision in `DECISIONS.md`.
+
 The ten-minute Node scheduler runs independently of the Google scheduler and
 Google upload pause. Each pass reconciles verified legacy project outcomes into
 the existing business-event ledger before processing Meta's queue. Existing native
@@ -68,6 +76,43 @@ enable flag and valid dataset/token are present. Test acceptance is recorded as
 allows that same immutable event to be sent live. A live accepted event is not
 sent again. An already-bound dataset is never silently changed: a mismatch needs
 operator review. There is no automatic live activation or bidding-goal change.
+
+## CRM vault and RunCloud consumer
+
+The owning self-hosted Infisical project is **RolanPRO CRM**,
+`f63ecb45-8d12-4f8f-b2bb-4bb004b3aed1` (organization
+`de15a640-c614-464e-9c2e-2183ccd50acf`). Production `/meta-capi` contains
+`META_CAPI_DATASET_ID`, `META_CAPI_ACCESS_TOKEN` and `META_CAPI_UPLOAD_ENABLED`.
+Dataset `865337699151965` has a dedicated CRM token; website and CallRail native
+integration credentials remain separately owned. The temporary Test Events code
+belongs only to `staging /meta-capi`.
+
+The RunCloud host cannot reach the private Infisical address. The existing
+operator performs a scoped Infisical read on the authorized client and sends
+only these three values through pinned SSH with `deploy/meta-capi-env.sh`:
+
+```sh
+infisical run --projectId=f63ecb45-8d12-4f8f-b2bb-4bb004b3aed1 \
+  --env=prod --path=/meta-capi -- bash deploy/meta-capi-env.sh \
+  -F /path/to/private/ssh-config crm-production
+```
+
+The SSH config must use the established host key and operator identity for
+`143.110.136.211`. Personal profiles, SSH key paths and values stay outside Git.
+The script validates before transmission, executes as `runcloud`, keeps a
+protected unique backup, and atomically updates only the CAPI assignments in
+`/home/runcloud/.rolanpro-crm.env.production.local`. It explicitly clears the
+Test Events setting. No Infisical credential is installed on the server and no
+GitHub secret sync is configured. The operator account retains its existing
+permissions; this script's exact-key read is not a new restricted IAM role.
+
+Refresh is explicit: run the same scoped sync after a vault change, then use the
+normal main-only release/watcher restart to load the canonical environment.
+A vault save or successful file sync alone does not prove runtime adoption.
+Retain uploads `false` until the single isolated provider QA is accepted and
+verified in Events Manager. Never enable Test Events on the customer database:
+use a fixture-only disposable database and no automatic scheduler. Do not replay
+its synthetic event live or resend an uncertain single-test submission.
 
 ## Reliability and evidence
 
