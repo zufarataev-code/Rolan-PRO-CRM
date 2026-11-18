@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Deployment reachability and approved CAPI activation (Codex)
+
+- Owner approved production CAPI after deployment checks pass using the accepted single Test Events API receipt even if the Events Manager row remains absent, and explicitly included the two queued first deliveries plus future eligible events. No additional synthetic event or manual replay is authorized.
+- Task branch `codex/capi-release-probe-20261117`, based on main `5c478e7`, reuses task worktree `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`. Scope: external deployment-probe diagnosis, approved activation documentation and scoped runtime enablement after the gate passes.
+- Deploy `44203130731` activated `6317cf2` but failed all twenty external HEAD `/login` requests after their twenty-second deadlines. Operator HEAD and GET each return 200 with valid TLS in under 0.3 seconds. The current logs hide curl errors/phase timing, so they do not establish DNS, TCP, TLS or HTTP as the root cause. Uploads remain off while this is diagnosed.
+- Only the `From the internet` step in `server-diagnose.yml` is claimed for transport diagnosis; PR #543 retains watcher, Snapshot, health endpoint and its surrounding functions. Existing GitHub-hosted runner authority is preserved; no fleet settings, customer records, event timestamps or advertising goals are changed.
+- The owner supplied Cloud GitHub connection `55bf4695-a967-480d-98e7-71ce12020608` in RolanPro Org `2318df53-f8ea-479e-a1b0-1832554eed1f`. This is separate from the earlier self-hosted connection. Current Cloud browser identity is confirmed but lacks `read on app-connections`; no role grant or app reinstall was attempted. Existing scoped Infisical and pinned RunCloud delivery remains available.
+- Next: publish draft, collect bounded GHA transport evidence, make the smallest validated repair/retry through the normal release gate, then enable the approved sender via the owning vault, verify runtime mode and wait for normal scheduled receipts. Exact branch/CI/provider/cleanup results follow in this handoff and its PR.
+
 ## 2026-11-17 — «Пульт владельца»: пробный главный экран на живых данных (Claude)
 
 - Owner, 2026-11-17: «заливай в нашу CRM эту админку» — пульт из демо «Кабинет проекта» (кольца, выручка, направления, воронка). Прямое поручение владельца; проверка Codex — после, в PR.
