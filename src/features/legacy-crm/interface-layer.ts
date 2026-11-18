@@ -246,6 +246,19 @@ export const INTERFACE_LAYER_SCRIPT = `
           }
           const label = current === 'classic' ? 'Новый стиль' : 'Прежний стиль';
           if (button.textContent !== label) button.textContent = label;
+          // The new interface (/crm): one admin template for every screen. Office roles only.
+          let office = false;
+          try { office = ['owner', 'manager'].includes(currentUser()?.role); } catch (error) { office = false; }
+          let next = host.querySelector('[data-rolanpro-crm-next="1"]');
+          if (office && !next) {
+            next = document.createElement('a');
+            next.href = '/crm';
+            next.className = 'rolanpro-style-toggle';
+            next.setAttribute('data-rolanpro-crm-next', '1');
+            next.textContent = 'Новый интерфейс';
+            next.style.cssText = 'display:block;text-align:center;text-decoration:none;font-weight:700';
+            host.insertBefore(next, button);
+          } else if (!office && next) next.remove();
         }
 
         window.rolanproToggleStyle = function rolanproToggleStyle() {

@@ -1,0 +1,75 @@
+/*
+ * Styles of the new React screens under /field only.
+ * `important` keeps the utilities above the unlayered rules of app/globals.css,
+ * which still styles every other page of the CRM.
+ */
+@import "tailwindcss" important;
+@import "tw-animate-css";
+@import "./shadcn-variants.css";
+
+@theme inline {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+}
+
+/* Scoped to the field shell so the rest of the CRM keeps its own variables. */
+.rp-field {
+  --radius: 0.5rem;
+  --background: #f4f5f7;
+  --foreground: #141a26;
+  --card: #ffffff;
+  --card-foreground: #141a26;
+  --popover: #ffffff;
+  --popover-foreground: #141a26;
+  --primary: #0f2440;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f5;
+  --secondary-foreground: #141a26;
+  --muted: #eef1f5;
+  --muted-foreground: #5a6577;
+  --accent: #eef1f5;
+  --accent-foreground: #141a26;
+  --destructive: #b23a3a;
+  --border: #d9dee6;
+  --input: #d9dee6;
+  --ring: #0f2440;
+  --success: #15803d;
+  --warning: #a16207;
+}
+
+@layer base {
+  .rp-field,
+  .rp-field * {
+    border-color: var(--border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-field * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

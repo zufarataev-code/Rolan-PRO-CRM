@@ -15,6 +15,104 @@ This file is the canonical live handoff for every device, chat, agent, and contr
   - не сделано здесь: сборка в GitHub Actions вместо сервера (пункт 3 issue #541) — следующим PR.
 - Verification: full unit suite **1208/1208** (new: `watch-production-supervision.test.ts` drives the real script functions — restart with backoff, restart of an unresponsive process, 503 without restart, supervision during a build; `health.test.ts`; public-path test), `tsc --noEmit` clean, `bash -n` clean, production build clean (`/api/health` is a dynamic route), `git diff --check` clean.
 - Safety: на сервере ничего не менялось; изменения вступают в силу после слияния обычным деплоем (сторож перезапускает сам себя при изменении скрипта).
+## 2026-11-18 — `/crm/calendar`: «Календарь» в новом шаблоне (Claude)
+
+- Owner, 2026-11-18 01:21: «Давай» — на «следующий по плану — календарь». Прямое поручение владельца; проверка Codex — в PR.
+- Branch `claude/crm-calendar-screen-20261118`, based on `origin/main` `c471500`.
+- События считает рабочий календарь: новая модель `calendar` (`crm-shell-models.js` → `calItemsInRange`, `calendarEventsForOrder`, `calendarEventPeople`, адрес через `orderAddress`), `GET /api/v1/crm-ui/calendar?from=&to=` (диапазон не больше 62 дней, дни — по часовому поясу устройства). Записи на консультацию из лидов сервер берёт из существующего `GET /api/v1/consultations` и передаёт в расчёт (`canonicalConsultations`), как это делает рабочая CRM.
+- `/crm/calendar` (`app/crm/calendar/page.tsx`, дни — `calendar.ts`): «Неделя» (на компьютере семь колонок, на телефоне полоса дней и список выбранного дня) и «Месяц» (сетка с событиями, список выбранного дня); фильтр по типу события; событие ведёт на страницу проекта.
+- Экран только показывает. Назначение и перенос консультаций, замеров и монтажей, карта, фильтр по сотруднику и статистика по районам — на прежнем экране (кнопка «Прежний экран», `/crm/section/calendar`).
+- Пункт меню и кнопка нижней панели «Календарь» ведут на `/crm/calendar`. Legacy HTML не менялся.
+- `use-crm-data.ts`: адрес запроса может уже содержать параметры.
+- Verification: `calendar.test.ts` 3/3, `engine.test.ts` 9/9 (время события в поясе устройства, консультация из лида, обрезка длинного диапазона); экран просмотрен в локальном `next dev` на демо-данных (1440 и 390 px, неделя и месяц).
+- Не проверено до выкладки: на реальных данных production.
+- Next action: клиенты и задачи в новом шаблоне; назначение событий прямо из нового календаря.
+
+## 2026-11-18 — `/crm/leads`: «Новые лиды» в новом шаблоне (Claude)
+
+- Owner, 2026-11-18 00:17: «Давай» — на «перерисовываю разделы по одному, начну с "Новых лидов"». Прямое поручение владельца; проверка Codex — в PR.
+- Branch `claude/crm-leads-screen-20261118`, based on `origin/main` `b9f8f82`.
+- `/crm/leads` (`app/crm/leads/page.tsx`): те же записи, что на рабочем экране — `GET /api/v1/leads`; раскладка как в `canonicalMessengerLeadRows` (`src/features/crm-shell/leads.ts`). Фильтр-чипы «Активные / этапы / Закрытые», поиск, звонок и почта, история этапов.
+- Смена этапа — тем же `PATCH /api/v1/leads/<id>` с `expected_status_codes` и причиной для отказа/потери/спама; правила сервера не менялись.
+- «Создать проект» не переписан: в боковой панели открывается рабочая CRM и вызывается её `convertLead(id)` (подбор клиента, номер проекта, резерв лида, подтверждённое сохранение); панель перед закрытием ждёт сохранения.
+- «Открыть проект» / «Проект в архиве» — по новой модели `leadLinks` (`crm-shell-models.js`, `/api/v1/crm-ui/lead-links`): какие лиды уже имеют проект.
+- Пункт меню «Новые лиды» ведёт на `/crm/leads`; прежний экран остаётся по кнопке «Прежний экран» (`/crm/section/leads`). На новом экране нет: недавних звонков CallRail, статуса Meta CAPI, статусов отправки в Facebook/Google, уточнений клиента с сайта, записи на консультацию и лидов внешнего сервера заявок — это по-прежнему на прежнем экране.
+- По замечаниям Codex: (1) рабочая CRM теперь всегда запущена в скрытом фрейме каркаса на любом экране `/crm` (стартует через 2,5 с после открытия), чтобы её фоновые обязанности — автосоздание проектов из рекламных лидов, доведение закрытых проектов, живое обновление — работали и тогда, когда открыты только новые экраны; (2) `/crm/leads` сам обновляет список раз в 10 секунд, пока вкладка видна (`useCrmData({ pollMs })`).
+- Legacy HTML не менялся.
+- Verification: `leads.test.ts` 3/3, `engine.test.ts` 8/8; экран просмотрен в локальном `next dev` на примерных лидах (1440 и 390 px).
+- Не проверено до выкладки: «Создать проект» из панели на production (создаёт настоящий проект — проверяет владелец на реальном лиде).
+- Next action: календарь и клиенты в новом шаблоне.
+
+## 2026-11-18 — `/crm`: все разделы и рабочая карточка открываются внутри нового каркаса (Claude)
+
+- Owner, 2026-11-17 23:36: «Ок давай» — на план «действия проекта в новом шаблоне, затем остальные разделы». Прямое поручение владельца; проверка Codex — в PR.
+- Branch `claude/crm-project-actions-20261118`, based on `origin/main` `80c5667`.
+- Решение: действия не переписываются. Серверный расчёт (`engine.ts`) годится для чтения, но не для действий: `changeStatus` и закрытие услуг в рабочей CRM шлют уведомления и списывают плёнку из браузера. Поэтому рабочая CRM показывается внутри нового каркаса, а её собственная логика остаётся единственной.
+- `src/features/legacy-crm/embed-frame.ts` (вставляется в `/legacy-crm` перед слоем интерфейса): если страница открыта во фрейме внутри `/crm`, ставит `<html data-rp-embed="1">` и прячет своё меню, телефонную панель, шапку телефона, кнопку меню, плашку пользователя, «Сменить» и «Проверка ролей». Открытая напрямую рабочая CRM не меняется.
+- `/crm/section/<key>` — любой раздел меню открывается внутри нового каркаса (`WorkingSection`); внешних переходов в меню и нижней панели больше нет. Права прежние: `crmSectionSrc` (денежные разделы и настройки — только владелец) плюс проверка `crmSectionOpenAllowed` в самой CRM.
+- Страница проекта: «Рабочая карточка», «Сделать сейчас» и «Добавить фото» открывают рабочую карточку в боковой панели поверх страницы; после закрытия панели данные страницы перечитываются.
+- По замечанию Codex (правка могла потеряться, если закрыть фрейм раньше отложенного на 700 мс сохранения): разделы живут в одном постоянном фрейме каркаса (`WorkingSections` — показывается/скрывается, между разделами меняется только адрес после `#`); панель карточки перед закрытием вызывает `cloudPersistConfirmed()` рабочей CRM и ждёт подтверждения сервера.
+- Legacy HTML не менялся.
+- Verification: `embed-frame.test.ts` 2/2, `engine.test.ts` 7/7, `visual-architecture`/`interface-layer` без изменений; режим «внутри каркаса» просмотрен в локально поднятой legacy-странице на демо-данных (1180 и 390 px).
+- Не проверено до выкладки: вложенная страница в самом production (`X-Frame-Options: SAMEORIGIN` это разрешает).
+- Next action: перерисовывать разделы в новом шаблоне по одному (лиды, календарь, клиенты); действия проекта — по мере переноса логики на сервер.
+
+## 2026-11-18 — Сборка на сервере: проверка типов только в CI (Claude)
+
+- Причина: релиз `4415a28` (PR #567, новый интерфейс `/crm` + основа shadcn/ui) не собрался на production-сервере: `next build` на шаге «Linting and checking validity of types» упал с `JavaScript heap out of memory` при лимите 1 ГБ из `deploy/watch-production.sh`; сервер повторял сборку по кругу (нагрузка ~5). Активным оставался прежний релиз `7b93fb5` — CRM работала, новый интерфейс не появился.
+- Branch `claude/server-build-memory-20261118`, based on `origin/main` `4415a28`. `next.config.ts`: `typescript.ignoreBuildErrors: true` — `next build` только компилирует; типы по-прежнему проверяет CI отдельным шагом `npm run typecheck` перед любым деплоем. Лимит памяти сборки на сервере не менялся.
+- Verification: CI PR; после merge — read-only `server-diagnose` (активный релиз, локальный ответ приложения).
+- Next action: если сборка снова не уложится в 1 ГБ — решать на уровне сервера (сборка вне production-машины), не поднимая лимит вслепую.
+
+## 2026-11-17 (ночь) — Новый интерфейс `/crm`: один шаблон админки, цифры из расчётов рабочей CRM (Claude)
+
+- Owner, 2026-11-17 21:40: «сделал дизайн — интерфейс остался неизменным… все экраны между собой разные, каждый открывается по-своему, нет единого архитектурного решения… возьми единый шаблон, реализуй… мне нравится дашборд и логика ведения проекта». План (каркас → главная → воронка → проект → остальные разделы по одному, старая CRM работает, ничего не удаляется) владелец подтвердил: «да». Прямое поручение владельца; проверка Codex — в PR.
+- Branch `claude/crm-unified-shell-20261117`, based on `origin/main` `7b93fb5`; включает основу shadcn/ui из открытого PR #555 (merge ветки `claude/field-measure-screen-20261117`).
+- Новый адрес `/crm` (владелец и менеджер): общий каркас `src/features/crm-shell/shell.tsx` — меню слева на компьютере; на телефоне верхняя панель, нижняя панель из четырёх кнопок и выезжающее меню. Экраны: «Главная» (`/crm`), «Проекты» — воронка (`/crm/projects`, на телефоне этапы чипами, по одному этапу на экран), проект (`/crm/projects/<id>`: кольца, девять этапов, следующий шаг, услуги, тур по фото). Стили только под `.rp-crm` (`app/crm/crm.css`).
+- Второй копии расчётов нет. `src/features/crm-shell/engine.ts` загружает на сервере тот же скрипт рабочей CRM (legacy HTML + production-stages + project-cabinet + owner-board) в `node:vm` без браузера, отдаёт ему рабочее пространство, которое этому сотруднику вернул `GET /api/v1/legacy-crm/state` (те же роли и скрытие), и вызывает `private/legacy/crm-shell-models.js`: `ownerBoardModel`, `ORDER_KANBAN_FUNNEL`, `orderKanbanRevenue`, `orderPrimaryNextAction`, `renderOrderCleanProgress`, `projectCabinetModel`. Из расчёта ничего не сохраняется (`save` заглушён, сеть не отвечает). Часовой пояс устройства передаётся в запросе и действует только на время синхронного расчёта.
+- API только чтение: `/api/v1/crm-ui/overview`, `/projects`, `/projects/<id>`; правило RBAC для `/api/v1/crm-ui` — OWNER, MANAGER. Без карточки сотрудника офисной роли — 409 `no_card`.
+- Экраны `/crm` пока только показывают. Все действия проекта (услуги, замер, КП, монтаж, оплата, фото и точки тура) — в рабочей карточке, кнопки ведут в `/legacy-crm#/order/<id>`. Перетаскивания карточек в воронке нет.
+- Остальные разделы в новом меню открываются в рабочей CRM. Для этого в legacy HTML добавлен адрес `#/section/<ключ>` (`parseHash` + `crmSectionOpenAllowed`: только владелец и менеджер, «Ставки и расходы», «Ожидают оплаты», «Деньги», «Настройки» — только владелец). Других правок legacy HTML нет.
+- В рабочей CRM у владельца и менеджера под «Выйти» появилась ссылка «Новый интерфейс» (`interface-layer.ts`). Рабочая CRM остаётся входом по умолчанию.
+- Добавлены `src/components/ui/sheet.tsx` (написан вручную в форме shadcn: реестр из песочницы недоступен) и `public/landing/rolanpro-logo-dark.png`.
+- По замечаниям Codex в PR #567: адрес проекта берётся через `orderAddress(o, client)` (у клиента может быть несколько адресов); в списки «что сделать» и «монтажи» попадают только проекты, стоящие в этапах воронки до «Закрыто». Число «в работе» на кольцах — как у «Пульта владельца» (`ownerBoardModel`), не менялось.
+- Verification: `engine.test.ts` 7/7 (числа, колонки, девять этапов, отказ без карточки, неизменность данных и часового пояса, соответствие меню списку разрешённых разделов); `interface-layer.test.ts` 4/4; экраны просмотрены глазами в локальном `next dev` на демо-данных, посчитанных этим же движком (1440 и 390 px).
+- Не проверено: на реальных данных production; время расчёта на реальном объёме рабочего пространства; полный `tsc` и `next build` локально (в песочнице не генерируется Prisma Client) — их проверяет CI.
+- Next action: владелец открывает `/crm` и смотрит главную, воронку и проект; дальше — действия проекта в новом шаблоне и перенос разделов по одному (лиды, календарь, клиенты).
+
+## 2026-11-17 (ночь) — Кабинет проекта работает по логике рабочей карточки (Claude)
+
+- Owner, 2026-11-17 21:02: «логику проекта сделай». В кабинете этапы считались отдельно (шесть этапов моего вывода) и расходились с карточкой: карточка показывала «Монтаж — сейчас», кабинет — «Аванс — ждём». Прямое поручение владельца; проверка Codex — после, в PR.
+- Branch `claude/cabinet-project-logic-20261117`, based on `origin/main` `0628b29`.
+- `private/legacy/project-cabinet.js`: собственный расчёт этапов удалён. Кабинет показывает линию этапов рабочей карточки — вывод `renderOrderCleanProgress(o)` — и только считает в ней пройденные шаги для кольца («5 из 9»). Нажатие на этап открывает то же окно, что в карточке.
+- Окна, которые собираются из DOM карточки (`projectCardOpenWorkspace`: клиент, монтаж, оплата, история), из полного кабинета открываются через `projectCabinetOpenWorkspace()`: кабинет переключается на рабочую карточку (`renderNow()`) и открывает окно там.
+- Legacy HTML не менялся.
+- Verification: `project-cabinet.test.ts` 4/4; в локально поднятой legacy-странице на демо-данных: в кабинете девять кнопок этапов, клик по «Оплата» открывает окно оплаты проекта.
+- Не проверено: на реальных данных production.
+- Next action: владелец проверяет этапы на своём проекте; дальше — те же блоки для менеджера.
+
+## 2026-11-17 (вечер) — Кольца и тур кабинета на рабочей карточке проекта владельца (Claude)
+
+- Owner, 2026-11-17 вечер: открыл проект в production и не увидел кабинета и тура — ждал, что карточка проекта уже выглядит как пример, а не прячется за кнопкой «проба». Прямое поручение владельца; проверка Codex — после, в PR.
+- Branch `claude/cabinet-default-20261117`, based on `origin/main` `f6709f2`.
+- Первая попытка — открывать кабинет вместо карточки по умолчанию — провалила «Clean database build and end-to-end gate» («Project card did not render the selected service»): кабинет не умеет того, что умеет рабочая карточка (состав, замер, КП). Вывод: кабинет не заменяет карточку, а встаёт над ней.
+- `private/legacy/project-cabinet.js`: `projectCabinetEntryBar()` у владельца теперь рисует над рабочей карточкой четыре кольца кабинета и тур по объекту (раскрыт, если в проекте есть фото; иначе свёрнут под кнопкой). Рабочая карточка ниже не тронута. «Весь кабинет» открывает полный вид на устройстве, как раньше «проба».
+- В полном кабинете появилась «← Проекты»; в туре без фото — «Добавить фото» (существующий `addOrderPhoto()`), с фото — «+ Фото».
+- Legacy HTML не менялся. У остальных ролей без изменений.
+- Verification: `project-cabinet.test.ts` 4/4; глазами внутри локально поднятой legacy-страницы на демо-данных (1280 и 390 px).
+- Не проверено: на реальных данных production. Показа плёнки на стекле и сгенерированных комнат из демо в CRM нет.
+- Next action: владелец открывает проект; дальше — показ плёнки на фото (нужна разметка стекла) и те же блоки для менеджера.
+
+## 2026-11-17 — Production CAPI activation receipt (Codex)
+
+- Follow-up PR #564, branch `codex/capi-activation-receipt-20261117`, reuses `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`. Documentation only; runtime delivery remains the existing scheduler and protected operator sync. Final PR receipts record review, CI and worktree cleanup.
+- PR #562 merged as `00a1eda7d6dfeec7aebe88651ffc686b2ab69156` after 1,238 local tests, TypeScript, production build, exact-head CI `44208639311` and independent Claude `NO_FINDINGS`. The diagnostics preserve HTTP failure exits, TLS validation and request/attempt bounds.
+- Current release `227dd079f91c2d59c493403ff683af56ba084dc3` passed main CI `44210435081` and normal deployment `44211974647`, job `134492337316`. Its external HEAD `/login` returned HTTP 200 with valid TLS in 0.126712 seconds at 2026-11-18 00:57:15 UTC.
+- After that pass, the owning CRM Infisical `prod /meta-capi` flag (version 2, literal `true`) was synced with the published pinned SSH helper and only `rolanpro-crm-app:rolanpro-crm-app_0` was restarted. Actual process readback at 00:58:48 UTC: configured/enabled, mode `live`, dataset `865337699151965`, token present, Test Events empty. Startup configuration remains mode 0600; the token was neither regenerated nor published.
+- Transition correction: a concurrent main release briefly adopted the initially staged true flag before the intended reload. Both genuine entries still had zero attempts. Startup and actual process were restored to disabled at 00:55:34 UTC, then enabled only after the exact current-release pass above. No synthetic event or manual process/replay call was made.
+- The normal ten-minute scheduler delivered both original entries at 2026-11-18 01:08:30 UTC: `Lead` and `ProposalSent` each persisted `accepted`, attempt count 1, live `accepted_at`, no Test Events receipt and no error. Independent readback preserved both original event times. Aggregate queue: accepted 2, pending 0, errors 0. This establishes Meta API acceptance, not Events Manager visibility, matching, attribution or training eligibility.
+- The separate TCP incident remains with PR #543, comment `6965646960`: a failed runner resolved DNS quickly but timed out before TCP/TLS; a bounded SYN-only trace showed inbound SYN and outbound SYN-ACK. No DNS/TLS root cause, firewall change or gate waiver is claimed. Superseded run `44209836427` attempt 1 was cancelled after 14 observed timeouts; its only retry correctly rejected the obsolete SHA after main advanced. Current-release deployment above passed without changing the gate.
+- Temporary pinned operator credentials and the read-only status helper were removed after independent acceptance verification. Sanitized receipt: `capi-live-delivery-verified-20261117.json` and `.md` in the existing private visualization/evidence folder; bounded review logs remain in `/private/tmp/rolanpro-capi-onboarding-20261117`. The fixture container/volume were removed and Docker restored to stopped. Next cleanup after PR #564 merges: remove the clean owned task worktree; preserve the primary checkout, other branches and rollback material. Remaining external verification: Events Manager visibility and any attribution/training outcome.
 
 ## 2026-11-17 — Единый слой интерфейса на всю CRM по примеру «Кабинет проекта» (Claude)
 
@@ -103,6 +201,19 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Не проверено: на реальных данных production кабинет не открывался.
 - Пересечение: `rolanpro-crm-cloud.html` правят #550, #544, #539 — здесь три строки в `renderOrderDetails()`.
 - Next action: проверка Codex, затем владелец включает вид на своём проекте и говорит, что переносить дальше (замерщик, касса, КП).
+## 2026-11-17 — Первый React-экран на shadcn/ui: «Замеры» для замерщика, только просмотр (Claude)
+
+- Owner: интерфейс CRM должен стать простым и быстрым; после трёх примеров вне CRM владелец сказал «делай модуль». Первый модуль — экран замерщика, отдельной страницей, без правок legacy.
+- Branch `claude/field-measure-screen-20261117`, based on `origin/main` `5f7b3f6`. Legacy HTML, Prisma schema and the state endpoint are not edited.
+  - `/field/measure` — список проектов вокруг замера (назначенный визит первым), `/field/measure/[orderId]` — клиент, адрес, маршрут, звонок, помещения и окна, площадь по услугам, что ещё без размеров. Кнопка открывает тот же проект в рабочей CRM (`/legacy-crm#/order/<id>`).
+  - **Только чтение.** Ввод размеров и «Сдать замер» остаются в legacy: там панели, типы окон, привязка к услуге и `changeStatus()` с уведомлениями — их перенос идёт следующим шагом с тестами, а не вслепую.
+  - `GET /api/v1/field/measure` и `/api/v1/field/measure/[orderId]` читают рабочее пространство через существующий `GET /api/v1/legacy-crm/state` (те же роли, назначения и скрытие денег), а телефону отдают несколько килобайт вместо всего workspace.
+  - Площадь повторяет legacy `windowActualAreaSqft()` (фактические размеры → сохранённые панели → количество); правило закреплено тестом.
+  - Основа для следующих экранов: Tailwind v4 + компоненты shadcn/ui (`src/components/ui`, `components.json`, `postcss.config.mjs`). Стили подключены только в `app/field/field.css` с `important` и переменными внутри `.rp-field`, поэтому остальные страницы CRM не меняются. Компоненты взяты из репозитория shadcn-ui/ui (`new-york-v4`): CLI недоступен из среды Claude.
+  - Доступ: владелец, менеджер, замерщик (`/field`, `/api/v1/field` в `rbac.ts`).
+- Verification: `src/features/field-measure/view.test.ts` 3/3; экраны проверены в `next dev` на ширине телефона 390 px с подставными данными — без ошибок в консоли и без горизонтальной прокрутки, страница входа выглядит как раньше. Локально полный набор: 1026 pass / 33 fail, все 33 — `@prisma/client did not initialize` (движок Prisma недоступен в среде Claude); typecheck и production build по той же причине проверяет CI.
+- Not verified: на реальных данных production экран не открывался. Пересечение: `package.json`/`package-lock.json` (hot files); #554 (skill shadcn для Codex) и #553 (legacy-замер) этих файлов не трогают.
+- Next action: владелец открывает `/field/measure` на телефоне после merge и решает, переносить ли ввод размеров; затем узкий `POST` для размеров одного окна вместо записи всего workspace (#542, #549).
 
 ## 2026-11-15 — Ручной итог владельца сохраняется на сервере
 

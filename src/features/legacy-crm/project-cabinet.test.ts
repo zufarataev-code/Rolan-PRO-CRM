@@ -40,6 +40,10 @@ function load(order: Row, role = 'owner', flag = '1') {
     windowCatalog: () => undefined,
     catalogLabel: (item: Row) => item?.name || '',
     mm_to_inches: (mm: number) => mm / 25.4,
+    // The working card's stage line: 9 buttons, 4 done, 1 skipped, payment opens a card workspace.
+    renderOrderCleanProgress: () => ['done', 'skipped', 'done', 'done', 'done', 'current', 'next', 'next', 'next']
+      .map((state, index) => `<button type="button" class="order-clean-stage-btn ${state}" onclick="${index === 7 ? "projectCardOpenWorkspace('payment')" : `stage${index}()`}"></button>`).join(''),
+    projectCardOpenWorkspace: (key: string) => { calls.push(`workspace:${key}`); return true; },
     orderRevenue: () => 1000,
     orderPaidTotal: (o: Row) => (o.payments || []).reduce((sum: number, p: Row) => sum + p.amount, 0),
     orderPrimaryNextAction: () => ({ icon: '👷', title: 'Назначить монтаж', sub: 'Выберите исполнителей', onclick: "openInstallPlan('o1')" }),
@@ -51,7 +55,7 @@ function load(order: Row, role = 'owner', flag = '1') {
     academyEsc: (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ''),
     jsQuote: (value: unknown) => String(value ?? ''),
     uid: () => 'm1',
-    save: () => calls.push('save'), render: () => calls.push('render'), preservePositionForNextRender: () => undefined,
+    save: () => calls.push('save'), render: () => calls.push('render'), renderNow: () => calls.push('renderNow'), preservePositionForNextRender: () => undefined,
   });
   const start = html.indexOf('function projectCabinetEnabled(');
   assert.ok(start > 0, 'cabinet module is composed into the legacy page');
@@ -73,17 +77,29 @@ function order(): Row {
   };
 }
 
-test('the trial view is the owner\'s own choice and never appears for other roles', () => {
-  assert.equal(load(order(), 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
-  assert.equal(load(order(), 'owner', '').context.projectCabinetEnabled({ role: 'owner' }), false);
-  assert.equal(load(order(), 'manager', '1').context.projectCabinetEnabled({ role: 'manager' }), false);
-  assert.equal(load(order(), 'manager', '1').context.projectCabinetEntryBar(order(), { role: 'manager' }), '');
+test('the owner\'s working card opens with the rings and the tour above it; other roles are unchanged', () => {
+  const o = order();
+  const { context } = load(o, 'owner', '');
+  assert.equal(context.projectCabinetEnabled({ role: 'owner' }), false, 'the full view replaces the card only by the owner\'s choice');
+  assert.equal(load(o, 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
+  assert.equal(context.projectCabinetEntryBar(o, { role: 'manager' }), '');
+  const strip = context.projectCabinetEntryBar(o, { role: 'owner' });
+  assert.ok(strip.includes('этапов пройдено') && strip.includes('$400'), 'rings from the working functions');
+  assert.ok(strip.includes('Фото объекта'), 'a project with photos shows the tour straight away');
+  assert.ok(strip.includes('Весь кабинет'));
+  const empty = order(); empty.photos = [];
+  const emptyContext = load(empty, 'owner', '').context;
+  assert.ok(!emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes('Фото объекта пока нет'), 'no photos: the tour stays folded');
+  emptyContext.projectCabinetToggleTour(true);
+  assert.ok(emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes("addOrderPhoto('o1')"), 'opened by hand, it offers to add a photo');
 });
 
 test('stages, services, windows and money come from the working CRM functions', () => {
   const { context } = load(order());
   const model = context.projectCabinetModel(order(), {}, { role: 'owner' }, { canSeeMoney: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(model.stages.map((stage: Row) => stage.state))), ['done', 'done', 'done', 'now', 'wait', 'wait']);
+  assert.equal(model.stageTotal, 9, 'the stages are the working card\'s own stage line');
+  assert.equal(model.stageDone, 5, 'done and «не нужен» steps count as passed');
+  assert.equal(model.stagePct, 56);
   assert.equal(model.workPct, 50);
   assert.equal(model.windowCount, 4);
   assert.equal(model.sizedCount, 3);
@@ -107,6 +123,10 @@ test('the page keeps the working next step and marks a window on a photo', () =>
   const { context, calls } = load(o);
   const page = context.projectCabinetHtml(o, { name: 'Michael' }, { role: 'owner' }, { canSeeMoney: true, canManage: true });
   assert.ok(page.includes("openInstallPlan('o1')"));
+  assert.ok(page.includes('stage3()'), 'the full view shows the card\'s stage buttons with their actions');
+  assert.ok(page.includes("projectCabinetOpenWorkspace('payment')") && !page.includes("projectCardOpenWorkspace('payment')"));
+  context.projectCabinetOpenWorkspace('payment');
+  assert.deepEqual(calls.slice(-2), ['renderNow', 'workspace:payment'], 'a card-only window opens on the working card');
   assert.ok(page.includes('$400'));
   context.projectCabinetPickWindow('r1|w1');
   context.projectCabinetPhotoTap({ clientX: 150, clientY: 50, currentTarget: { getBoundingClientRect: () => ({ left: 100, top: 0, width: 200, height: 100 }) } }, 'o1', 'p1');

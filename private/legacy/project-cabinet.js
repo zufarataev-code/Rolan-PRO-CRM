@@ -4,8 +4,11 @@
 // functions live here. The cabinet reads the same Project and calls the same
 // helpers as the working card (projectLines, orderRevenue, orderPaidTotal,
 // orderPrimaryNextAction, projectSetServiceProgress): no second calculation.
-// It is shown only to the owner and only after the owner turns it on; the
-// choice is kept on the device, not in the workspace.
+// Owner, 2026-11-17 (evening): the cabinet must be visible on the project
+// card itself, not behind a trial button. So the owner's working card now
+// opens with the cabinet's rings and the tour above it; every function of the
+// working card stays below, untouched. «Весь кабинет» opens the full view on
+// that device (kept in localStorage, not in the workspace).
 
 function projectCabinetEnabled(u) {
   if (!u || u.role !== 'owner') return false;
@@ -16,16 +19,35 @@ function projectCabinetToggle(on) {
   try {
     if (on) localStorage.setItem('rp_project_cabinet', '1');
     else localStorage.removeItem('rp_project_cabinet');
-  } catch (error) { /* private mode: the trial view simply stays off */ }
+  } catch (error) { /* private mode: the full view simply stays off */ }
   render();
 }
 
-/** One line above the working card: the only way into the trial view. */
+/** Above the owner's working card: the cabinet's rings and the tour. The card below is untouched. */
 function projectCabinetEntryBar(o, u) {
   if (!o || !u || u.role !== 'owner') return '';
-  return `<div style="display:flex;justify-content:flex-end;margin:0 0 8px">
-    <button type="button" onclick="projectCabinetToggle(true)" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid #cfe3d7;background:#f2f8f4;color:#17794a">Кабинет проекта (проба)</button>
+  let model = null;
+  try { model = projectCabinetModel(o, null, u, { canSeeMoney: true }); } catch (error) { model = null; }
+  if (!model) return '';
+  const open = projectCabinetUi().tourOpen === true || (projectCabinetUi().tourOpen !== false && model.photos.length > 0);
+  return `${projectCabinetCss()}<div class="rpc" style="margin-bottom:12px">
+    <section class="rpc-g4">
+      ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
+      ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
+      ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
+      ${projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4')}
+    </section>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end">
+      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggleTour(${open ? 'false' : 'true'})">${open ? 'Свернуть тур' : `Тур по объекту · фото: ${model.photos.length}`}</button>
+      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(true)">Весь кабинет</button>
+    </div>
+    ${open ? projectCabinetTourHtml(o, model, true) : ''}
   </div>`;
+}
+
+function projectCabinetToggleTour(open) {
+  projectCabinetUi().tourOpen = open;
+  preservePositionForNextRender(); render();
 }
 
 /** Everything the cabinet shows, taken from the working CRM functions. */
@@ -60,27 +82,28 @@ function projectCabinetModel(o, c, u, opts = {}) {
   const sqft = windows.reduce((sum, item) => sum + windowActualAreaSqft(item.win), 0);
   const revenue = canSeeMoney ? Number(orderRevenue(o)) || 0 : 0;
   const paid = canSeeMoney ? Number(orderPaidTotal(o)) || Number(o.paid) || 0 : 0;
-  const accepted = reached('proposal_accepted');
-  const noDeposit = o.paymentTerms === 'after_completion' || !!o.depositWaivedAt;
-  const depositDone = accepted && (noDeposit || !!o.depositReceived || (Number(orderPaidTotal(o)) || Number(o.paid) || 0) > 0);
-  const stages = [
-    { name: 'Замер', done: reached('measurement_done'), note: reached('measurement_done') ? 'выполнен' : o.status === 'measurement_scheduled' ? 'назначен' : 'не начат', pct: reached('measurement_done') ? 100 : 0 },
-    { name: 'КП', done: accepted, note: accepted ? 'принято' : o.status === 'proposal_sent' ? 'у клиента' : 'не отправлено', pct: accepted ? 100 : o.status === 'proposal_sent' ? 50 : 0 },
-    { name: 'Аванс', done: depositDone, note: !accepted ? 'после КП' : noDeposit ? 'без аванса' : depositDone ? 'получен' : 'ждём', pct: depositDone ? 100 : 0 },
-    { name: 'Монтаж', done: installDone, note: `${workPct}%`, pct: workPct },
-    { name: 'Акт', done: reached('act_signed'), note: reached('act_signed') ? 'подписан' : 'после монтажа', pct: reached('act_signed') ? 100 : 0 },
-    { name: 'Оплата', done: reached('payment_received'), note: reached('payment_received') ? 'получена' : 'после акта', pct: reached('payment_received') ? 100 : 0 },
-  ];
-  const current = stages.findIndex(stage => !stage.done);
-  stages.forEach((stage, index) => { stage.state = stage.done ? 'done' : index === current ? 'now' : 'wait'; });
+  // The project's stage logic is the working card's own stage line
+  // (renderOrderCleanProgress): the cabinet shows that line and only counts it.
+  let stageHtml = '';
+  try { stageHtml = renderOrderCleanProgress(o) || ''; } catch (error) { stageHtml = ''; }
+  const stageTotal = (stageHtml.match(/class="order-clean-stage-btn /g) || []).length;
+  const stageDone = (stageHtml.match(/class="order-clean-stage-btn (done|skipped)"/g) || []).length;
   let primary = null;
   try { primary = orderPrimaryNextAction(o); } catch (error) { primary = null; }
   const photos = (o.photos || []).filter(photo => photo && photo.dataUrl && photo.kind !== 'video');
   return {
-    lines, doneLines, workPct, windows, windowCount, sizedCount, sqft, revenue, paid, stages, primary, photos, canSeeMoney,
-    stagePct: Math.round(100 * stages.filter(stage => stage.done).length / stages.length),
+    lines, doneLines, workPct, windows, windowCount, sizedCount, sqft, revenue, paid, stageHtml, stageTotal, stageDone, primary, photos, canSeeMoney,
+    stagePct: stageTotal ? Math.round(100 * stageDone / stageTotal) : 0,
     paidPct: revenue > 0 ? Math.min(100, Math.round(100 * paid / revenue)) : 0,
   };
+}
+
+/** A stage whose window lives on the working card: switch to the card, then open it there. */
+function projectCabinetOpenWorkspace(key) {
+  try { localStorage.removeItem('rp_project_cabinet'); } catch (error) { /* nothing to remember in private mode */ }
+  // The window is built from the card's own DOM, so the card must be painted first.
+  renderNow();
+  return projectCardOpenWorkspace(key);
 }
 
 function projectCabinetRing(pct, title, sub, color) {
@@ -220,8 +243,8 @@ function projectCabinetTourHtml(o, model, canManage) {
   if (!model.photos.length) {
     return `<section class="rpc-card"><h2>Тур по объекту</h2>
       <div style="font-size:16px;font-weight:800">Фото объекта пока нет</div>
-      <p class="rpc-note">Добавьте фото в замере — оно появится здесь, и на нём можно будет отметить окна.</p>
-      ${canManage ? `<button type="button" class="rpc-btn ghost" style="margin-top:10px" onclick="openManagerMeasureModal('${oid}')">Открыть замер</button>` : ''}
+      <p class="rpc-note">Добавьте фото объекта — оно появится здесь, и на нём можно будет отметить окна точками.</p>
+      ${canManage ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button type="button" class="rpc-btn" onclick="addOrderPhoto('${oid}')">Добавить фото</button><button type="button" class="rpc-btn ghost" onclick="openManagerMeasureModal('${oid}')">Открыть замер</button></div>` : ''}
     </section>`;
   }
   const photo = model.photos.find(item => item.id === ui.photoId) || model.photos[0];
@@ -246,7 +269,7 @@ function projectCabinetTourHtml(o, model, canManage) {
       </div>` : ''}
     </div>`;
   }).join('');
-  return `<section class="rpc-card"><h2>Тур по объекту · фото ${model.photos.indexOf(photo) + 1} из ${model.photos.length}</h2>
+  return `<section class="rpc-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><h2 style="margin:0">Тур по объекту · фото ${model.photos.indexOf(photo) + 1} из ${model.photos.length}</h2>${canManage ? `<button type="button" class="rpc-btn small ghost" onclick="addOrderPhoto('${oid}')">+ Фото</button>` : ''}</div>
     <div class="rpc-tour">
       <div>
         <div class="rpc-photo ${ui.pick ? 'pick' : ''}" onclick="projectCabinetPhotoTap(event,'${oid}','${jsQuote(photo.id)}')">
@@ -282,18 +305,20 @@ function projectCabinetHtml(o, c, u, opts = {}) {
   }).join('');
   return `${projectCabinetCss()}<div class="rpc">
     <header class="rpc-card rpc-top">
+      <button type="button" class="rpc-btn small ghost" onclick="state.view='orders'; location.hash=''; render();">← Проекты</button>
       <h1>Проект ${academyEsc(o.number || '')}<small>${academyEsc(c?.name || 'Клиент')}${address ? ' · ' + academyEsc(address) : ''}</small></h1>
       <span class="rpc-chip">${academyEsc(statusLabel(o.status))}</span>
       <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(false)">Обычная карточка</button>
     </header>
     <section class="rpc-g4">
-      ${projectCabinetRing(model.stagePct, `${model.stages.filter(stage => stage.done).length} из ${model.stages.length}`, 'этапов пройдено', '#178a52')}
+      ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
       ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
       ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
       ${model.canSeeMoney ? projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4') : projectCabinetRing(model.workPct, `${model.sqft.toFixed(0)} sq ft`, 'по замеру', '#7d4fc4')}
     </section>
     <section class="rpc-card"><h2>Этапы проекта</h2>
-      <div class="rpc-rail">${model.stages.map((stage, index) => `<div class="rpc-st ${stage.state}"><em>${String(index + 1).padStart(2, '0')} · ${academyEsc(stage.note)}</em><b>${stage.name}</b><div class="rpc-bar"><i style="width:${stage.pct}%"></i></div></div>`).join('')}</div>
+      ${model.stageHtml.split('projectCardOpenWorkspace(').join('projectCabinetOpenWorkspace(') || '<span class="rpc-note">Этапы недоступны.</span>'}
+      <p class="rpc-note">Та же линия этапов, что в обычной карточке: нажатие открывает окно этого шага.</p>
     </section>
     <section class="rpc-card"><h2>Следующий шаг</h2>
       ${primary ? `<div class="rpc-next"><div style="flex:1;min-width:220px"><b>${primary.icon || ''} ${academyEsc(primary.title || '')}</b><span>${academyEsc(primary.sub || '')}</span></div>${primary.href && !primary.disabled ? `<a class="rpc-btn" href="${primary.href}" target="_blank" rel="noopener">${academyEsc(primary.title || 'Открыть')}</a>` : primary.onclick && !primary.disabled ? `<button type="button" class="rpc-btn" onclick="${primary.onclick}">${academyEsc(primary.title || 'Открыть')}</button>` : ''}</div>` : '<span class="rpc-note">Для этого проекта нет действия.</span>'}
@@ -302,6 +327,6 @@ function projectCabinetHtml(o, c, u, opts = {}) {
       ${works || '<p class="rpc-note">Услуги ещё не добавлены. Добавить их можно в обычной карточке.</p>'}
     </section>
     ${projectCabinetTourHtml(o, model, canManage)}
-    <p class="rpc-note" style="text-align:center">Пробный вид для владельца. Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
+    <p class="rpc-note" style="text-align:center">Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
   </div>`;
 }
