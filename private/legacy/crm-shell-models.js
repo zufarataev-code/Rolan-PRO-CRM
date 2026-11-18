@@ -183,6 +183,19 @@ function crmShellProject(user, projectId) {
   };
 }
 
+/** Which lead already has a project (open or archived): the leads screen offers «Открыть проект» instead of creating a second one. */
+function crmShellLeadLinks(user) {
+  const visible = new Set(visibleOrdersForUser(user).map(order => order.id));
+  const links = {};
+  (db.archivedOrders || []).forEach(order => {
+    if (order && order.canonicalLeadId) links[order.canonicalLeadId] = { projectId: '', number: order.number || '', archived: true };
+  });
+  (db.orders || []).forEach(order => {
+    if (order && order.canonicalLeadId && visible.has(order.id)) links[order.canonicalLeadId] = { projectId: order.id, number: order.number || '', archived: false };
+  });
+  return { user: crmShellUser(user), links };
+}
+
 /** Entry point of the server calculation: one workspace in, one JSON model out. */
 function crmShellRun(input) {
   const { payload, viewer, request } = JSON.parse(input);
@@ -198,5 +211,6 @@ function crmShellRun(input) {
   if (request.model === 'overview') return JSON.stringify(crmShellOverview(user));
   if (request.model === 'projects') return JSON.stringify(crmShellProjects(user));
   if (request.model === 'project') return JSON.stringify(crmShellProject(user, String(request.projectId || '')));
+  if (request.model === 'leadLinks') return JSON.stringify(crmShellLeadLinks(user));
   return JSON.stringify({ error: 'unknown_model' });
 }

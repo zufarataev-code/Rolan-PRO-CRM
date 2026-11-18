@@ -53,7 +53,7 @@ export const CRM_NAV: CrmNavGroup[] = [
   {
     title: "Продажи",
     items: [
-      section("Новые лиды", "leads", InboxIcon),
+      { title: "Новые лиды", href: "/crm/leads", icon: InboxIcon },
       section("Холодные звонки", "coldcalls", PhoneCallIcon),
       section("КП", "proposals", FileTextIcon),
       section("Клиенты", "clients", UsersIcon),
@@ -94,14 +94,17 @@ export const CRM_NAV: CrmNavGroup[] = [
 
 const ALL_ITEMS = CRM_NAV.flatMap((group) => group.items);
 
-/** Sections the new menu asks the working CRM to open by #/section/<key>, and who may open them. */
-export const CRM_LEGACY_SECTIONS = [...ALL_ITEMS.filter((item) => item.section), { section: "orders", ownerOnly: false }]
+/** Working screens that stay reachable by address after their section was redrawn. */
+const KEPT: Record<string, string> = { orders: "Проекты", leads: "Новые лиды" };
+
+/** Sections the new interface asks the working CRM to open by #/section/<key>, and who may open them. */
+export const CRM_LEGACY_SECTIONS = [...ALL_ITEMS.filter((item) => item.section), ...Object.keys(KEPT).map((key) => ({ section: key, ownerOnly: false }))]
   .filter((item) => !OWN_ADDRESS[item.section ?? ""])
   .map((item) => ({ key: item.section ?? "", ownerOnly: Boolean(item.ownerOnly) }));
 
-/** The working CRM address for a section of the new menu; null when this role may not open it. */
+/** The working CRM address for a section; null when there is no such section or this role may not open it. */
 export function crmSectionSrc(key: string, role: "owner" | "manager") {
-  const item = key === "orders" ? { title: "Проекты", ownerOnly: false } : ALL_ITEMS.find((entry) => entry.section === key);
+  const item = KEPT[key] ? { title: KEPT[key], ownerOnly: false } : ALL_ITEMS.find((entry) => entry.section === key);
   if (!item || (item.ownerOnly && role !== "owner")) return null;
   return { title: item.title, src: `/legacy-crm${OWN_ADDRESS[key] ?? `#/section/${key}`}` };
 }

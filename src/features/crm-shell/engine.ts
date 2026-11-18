@@ -154,6 +154,7 @@ export type EngineViewer = {
 export type EngineRequest =
   | { model: "overview" }
   | { model: "projects" }
+  | { model: "leadLinks" }
   | { model: "project"; projectId: string };
 
 /**
