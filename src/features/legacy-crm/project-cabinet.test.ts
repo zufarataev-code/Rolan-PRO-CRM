@@ -73,11 +73,14 @@ function order(): Row {
   };
 }
 
-test('the trial view is the owner\'s own choice and never appears for other roles', () => {
-  assert.equal(load(order(), 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
-  assert.equal(load(order(), 'owner', '').context.projectCabinetEnabled({ role: 'owner' }), false);
-  assert.equal(load(order(), 'manager', '1').context.projectCabinetEnabled({ role: 'manager' }), false);
-  assert.equal(load(order(), 'manager', '1').context.projectCabinetEntryBar(order(), { role: 'manager' }), '');
+test('the cabinet is the owner\'s project card by default; other roles keep the working card', () => {
+  assert.equal(load(order(), 'owner', '').context.projectCabinetEnabled({ role: 'owner' }), true);
+  assert.equal(load(order(), 'owner', '0').context.projectCabinetEnabled({ role: 'owner' }), false, '«Обычная карточка» is remembered on the device');
+  assert.equal(load(order(), 'manager', '').context.projectCabinetEnabled({ role: 'manager' }), false);
+  assert.equal(load(order(), 'manager', '').context.projectCabinetEntryBar(order(), { role: 'manager' }), '');
+  const empty = order(); empty.photos = [];
+  const page = load(empty).context.projectCabinetHtml(empty, { name: 'Michael' }, { role: 'owner' }, { canSeeMoney: true, canManage: true });
+  assert.ok(page.includes("addOrderPhoto('o1')"), 'a project without photos offers to add one right in the tour');
 });
 
 test('stages, services, windows and money come from the working CRM functions', () => {

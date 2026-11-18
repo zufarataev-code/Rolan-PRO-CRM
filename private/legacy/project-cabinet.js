@@ -4,27 +4,28 @@
 // functions live here. The cabinet reads the same Project and calls the same
 // helpers as the working card (projectLines, orderRevenue, orderPaidTotal,
 // orderPrimaryNextAction, projectSetServiceProgress): no second calculation.
-// It is shown only to the owner and only after the owner turns it on; the
-// choice is kept on the device, not in the workspace.
+// Owner, 2026-11-17 (evening): the cabinet IS the project card for the owner —
+// it opens by default. «Обычная карточка» switches back on that device; the
+// choice is kept on the device, not in the workspace. Other roles are unchanged.
 
 function projectCabinetEnabled(u) {
   if (!u || u.role !== 'owner') return false;
-  try { return localStorage.getItem('rp_project_cabinet') === '1'; } catch (error) { return false; }
+  try { return localStorage.getItem('rp_project_cabinet') !== '0'; } catch (error) { return true; }
 }
 
 function projectCabinetToggle(on) {
   try {
-    if (on) localStorage.setItem('rp_project_cabinet', '1');
-    else localStorage.removeItem('rp_project_cabinet');
-  } catch (error) { /* private mode: the trial view simply stays off */ }
+    if (on) localStorage.removeItem('rp_project_cabinet');
+    else localStorage.setItem('rp_project_cabinet', '0');
+  } catch (error) { /* private mode: the cabinet simply stays on */ }
   render();
 }
 
-/** One line above the working card: the only way into the trial view. */
+/** One line above the working card: the way back into the cabinet. */
 function projectCabinetEntryBar(o, u) {
   if (!o || !u || u.role !== 'owner') return '';
   return `<div style="display:flex;justify-content:flex-end;margin:0 0 8px">
-    <button type="button" onclick="projectCabinetToggle(true)" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid #cfe3d7;background:#f2f8f4;color:#17794a">Кабинет проекта (проба)</button>
+    <button type="button" onclick="projectCabinetToggle(true)" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid #cfe3d7;background:#f2f8f4;color:#17794a">Кабинет проекта</button>
   </div>`;
 }
 
@@ -220,8 +221,8 @@ function projectCabinetTourHtml(o, model, canManage) {
   if (!model.photos.length) {
     return `<section class="rpc-card"><h2>Тур по объекту</h2>
       <div style="font-size:16px;font-weight:800">Фото объекта пока нет</div>
-      <p class="rpc-note">Добавьте фото в замере — оно появится здесь, и на нём можно будет отметить окна.</p>
-      ${canManage ? `<button type="button" class="rpc-btn ghost" style="margin-top:10px" onclick="openManagerMeasureModal('${oid}')">Открыть замер</button>` : ''}
+      <p class="rpc-note">Добавьте фото объекта — оно появится здесь, и на нём можно будет отметить окна точками.</p>
+      ${canManage ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button type="button" class="rpc-btn" onclick="addOrderPhoto('${oid}')">Добавить фото</button><button type="button" class="rpc-btn ghost" onclick="openManagerMeasureModal('${oid}')">Открыть замер</button></div>` : ''}
     </section>`;
   }
   const photo = model.photos.find(item => item.id === ui.photoId) || model.photos[0];
@@ -246,7 +247,7 @@ function projectCabinetTourHtml(o, model, canManage) {
       </div>` : ''}
     </div>`;
   }).join('');
-  return `<section class="rpc-card"><h2>Тур по объекту · фото ${model.photos.indexOf(photo) + 1} из ${model.photos.length}</h2>
+  return `<section class="rpc-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><h2 style="margin:0">Тур по объекту · фото ${model.photos.indexOf(photo) + 1} из ${model.photos.length}</h2>${canManage ? `<button type="button" class="rpc-btn small ghost" onclick="addOrderPhoto('${oid}')">+ Фото</button>` : ''}</div>
     <div class="rpc-tour">
       <div>
         <div class="rpc-photo ${ui.pick ? 'pick' : ''}" onclick="projectCabinetPhotoTap(event,'${oid}','${jsQuote(photo.id)}')">
@@ -282,6 +283,7 @@ function projectCabinetHtml(o, c, u, opts = {}) {
   }).join('');
   return `${projectCabinetCss()}<div class="rpc">
     <header class="rpc-card rpc-top">
+      <button type="button" class="rpc-btn small ghost" onclick="state.view='orders'; location.hash=''; render();">← Проекты</button>
       <h1>Проект ${academyEsc(o.number || '')}<small>${academyEsc(c?.name || 'Клиент')}${address ? ' · ' + academyEsc(address) : ''}</small></h1>
       <span class="rpc-chip">${academyEsc(statusLabel(o.status))}</span>
       <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(false)">Обычная карточка</button>
@@ -302,6 +304,6 @@ function projectCabinetHtml(o, c, u, opts = {}) {
       ${works || '<p class="rpc-note">Услуги ещё не добавлены. Добавить их можно в обычной карточке.</p>'}
     </section>
     ${projectCabinetTourHtml(o, model, canManage)}
-    <p class="rpc-note" style="text-align:center">Пробный вид для владельца. Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
+    <p class="rpc-note" style="text-align:center">Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
   </div>`;
 }
