@@ -7,6 +7,7 @@ import { runCrmEngine, type EngineRequest } from "@/features/crm-shell/engine";
 // What this employee may see is decided in one place — the working CRM's state
 // endpoint. The new interface reads through it and never around it.
 import { GET as readLegacyState } from "../../../app/api/v1/legacy-crm/state/route";
+import { GET as readConsultations } from "../../../app/api/v1/consultations/route";
 
 /** The new interface opens for the office first; field roles keep their working screens. */
 export const CRM_SHELL_ROLES = [ROLE_CODES.OWNER, ROLE_CODES.MANAGER] as const;
@@ -20,6 +21,15 @@ export async function crmShellResponse(request: NextRequest, model: EngineReques
   const payload = body.data?.payload;
   if (!payload) return apiError(404, "workspace_not_initialized", "CRM workspace is not initialized.");
 
+  // The calendar also shows consultations booked from leads; the working CRM
+  // loads them from the same endpoint. Without them the calendar still opens.
+  let consultations: unknown[] | undefined;
+  if (model.model === "calendar") {
+    const response = await readConsultations(request).catch(() => null);
+    const items = response?.ok ? ((await response.json()) as { data?: { items?: unknown[] } }).data?.items : undefined;
+    consultations = Array.isArray(items) ? items : undefined;
+  }
+
   let result: Record<string, unknown>;
   try {
     result = runCrmEngine<Record<string, unknown>>(
@@ -30,6 +40,8 @@ export async function crmShellResponse(request: NextRequest, model: EngineReques
         timeZone: request.nextUrl.searchParams.get("tz") ?? undefined,
       },
       model,
+      undefined,
+      { consultations },
     );
   } catch (error) {
     console.error("[crm-shell] calculation failed", error);

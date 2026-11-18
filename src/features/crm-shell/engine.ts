@@ -155,6 +155,7 @@ export type EngineRequest =
   | { model: "overview" }
   | { model: "projects" }
   | { model: "leadLinks" }
+  | { model: "calendar"; from: string; to: string }
   | { model: "project"; projectId: string };
 
 /**
@@ -163,9 +164,16 @@ export type EngineRequest =
  * for its duration only, so dates and month borders match what the same person
  * sees in the working CRM on their own device.
  */
-export function runCrmEngine<T>(payload: unknown, viewer: EngineViewer, request: EngineRequest, script: vm.Script = engineScript()): T {
+export function runCrmEngine<T>(
+  payload: unknown,
+  viewer: EngineViewer,
+  request: EngineRequest,
+  script: vm.Script = engineScript(),
+  /** Records the working CRM loads beside the workspace (consultations booked from leads). */
+  extras: { consultations?: unknown[] } = {},
+): T {
   const sandbox = createSandbox();
-  sandbox.__crmShellInput = JSON.stringify({ payload, viewer: { legacyUserIds: viewer.legacyUserIds, role: viewer.role }, request });
+  sandbox.__crmShellInput = JSON.stringify({ payload, viewer: { legacyUserIds: viewer.legacyUserIds, role: viewer.role }, request, consultations: extras.consultations });
   const context = vm.createContext(sandbox);
   const previousZone = process.env.TZ;
   process.env.TZ = resolveTimeZone(viewer.timeZone);
