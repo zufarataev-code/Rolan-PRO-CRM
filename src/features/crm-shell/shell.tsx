@@ -8,7 +8,8 @@ import { CalendarDaysIcon, KanbanSquareIcon, LayoutDashboardIcon, MenuIcon } fro
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { crmNavActive, crmNavFor, type CrmNavItem } from "@/features/crm-shell/nav";
+import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
+import { WorkingSections } from "@/features/crm-shell/working-frame";
 
 type Role = "owner" | "manager";
 
@@ -67,6 +68,9 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
+  const sectionKey = pathname.match(/^\/crm\/section\/(\w+)\/?$/)?.[1] ?? "";
+  const section = sectionKey ? crmSectionSrc(sectionKey, role) : null;
+
   const dock = [
     { title: "Главная", href: "/crm", icon: LayoutDashboardIcon },
     { title: "Проекты", href: "/crm/projects", icon: KanbanSquareIcon },
@@ -124,6 +128,8 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
           </div>
         </SheetContent>
       </Sheet>
+
+      <WorkingSections src={section?.src ?? null} title={section?.title ?? "Раздел CRM"} visible={Boolean(section)} />
 
       <div className="lg:pl-64">
         <div className="mx-auto w-full max-w-[1400px] px-3 pt-4 pb-24 sm:px-5 lg:px-8 lg:pt-6 lg:pb-10">{children}</div>

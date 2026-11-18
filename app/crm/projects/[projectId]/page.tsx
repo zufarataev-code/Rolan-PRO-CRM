@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import { ArrowLeftIcon, CheckIcon, MapPinIcon, PanelRightOpenIcon, PhoneIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { dateTime, legacyProjectHref, money } from "@/features/crm-shell/format"
 import type { CrmProjectDetails, CrmProjectPage, CrmStage } from "@/features/crm-shell/types";
 import { LoadError, LoadingBlock, PageHeader, Pill, RingCard, SectionTitle, UrgencyPill } from "@/features/crm-shell/ui";
 import { useCrmData } from "@/features/crm-shell/use-crm-data";
-import { WorkingFrame } from "@/features/crm-shell/working-frame";
+import { saveWorkingFrame, WorkingFrame } from "@/features/crm-shell/working-frame";
 import { cn } from "@/lib/utils";
 
 /** The working card's own stage line: same stages, same order, same hints. */
@@ -162,10 +162,18 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
   const project = data?.project ?? null;
   const [cardOpen, setCardOpen] = useState(false);
   const [root, setRoot] = useState<HTMLElement | null>(null);
-  // Whatever was done in the working card is on this screen as soon as the card is closed.
+  const card = useRef<HTMLIFrameElement>(null);
+  const [closing, setClosing] = useState(false);
+  // Closing the card first confirms its last edit is saved, then this screen re-reads the project.
   const toggleCard = (open: boolean) => {
-    setCardOpen(open);
-    if (!open) void reload();
+    if (open) return setCardOpen(true);
+    if (closing) return;
+    setClosing(true);
+    void saveWorkingFrame(card.current).finally(() => {
+      setClosing(false);
+      setCardOpen(false);
+      void reload();
+    });
   };
 
   return (
@@ -189,9 +197,9 @@ export default function CrmProjectPageView({ params }: { params: Promise<{ proje
             <SheetContent side="right" container={root} className="w-full gap-0 p-0 sm:max-w-none lg:w-[min(1200px,calc(100vw-16rem))]">
               <SheetHeader className="border-b py-3 pr-12">
                 <SheetTitle className="truncate">{project.client.name}</SheetTitle>
-                <SheetDescription>Рабочая карточка проекта: все действия — здесь</SheetDescription>
+                <SheetDescription>{closing ? "Сохраняю изменения…" : "Рабочая карточка проекта: все действия — здесь"}</SheetDescription>
               </SheetHeader>
-              <div className="min-h-0 flex-1">{cardOpen ? <WorkingFrame src={legacyProjectHref(project.id)} title="Рабочая карточка проекта" /> : null}</div>
+              <div className="min-h-0 flex-1">{cardOpen ? <WorkingFrame ref={card} src={legacyProjectHref(project.id)} title="Рабочая карточка проекта" /> : null}</div>
             </SheetContent>
           </Sheet>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">

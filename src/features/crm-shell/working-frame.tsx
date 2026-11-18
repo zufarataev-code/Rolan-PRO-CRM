@@ -1,21 +1,87 @@
 "use client";
 
+import { useCallback, useEffect, useRef, type Ref } from "react";
+
 import { cn } from "@/lib/utils";
+
+type WorkingWindow = Window & {
+  cloudHasPendingChanges?: () => boolean;
+  cloudPersistConfirmed?: () => Promise<boolean>;
+  parseHash?: () => void;
+  render?: () => void;
+};
+
+function workingWindow(frame: HTMLIFrameElement | null): WorkingWindow | null {
+  try {
+    return (frame?.contentWindow as WorkingWindow | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The working CRM saves an edit a moment after it is made. Before its frame is
+ * closed, anything still waiting is sent and confirmed by the server, so
+ * closing right after an action never loses it.
+ */
+export async function saveWorkingFrame(frame: HTMLIFrameElement | null) {
+  const win = workingWindow(frame);
+  try {
+    if (win?.cloudHasPendingChanges?.() && win.cloudPersistConfirmed) return await win.cloudPersistConfirmed();
+  } catch {
+    return false;
+  }
+  return true;
+}
 
 /**
  * A screen of the working CRM shown inside the new frame. The working CRM
  * hides its own menu and phone dock there (src/features/legacy-crm/embed-frame.ts),
  * so the person sees one menu and the same data and actions as always.
  */
-export function WorkingFrame({ src, title, className }: { src: string; title: string; className?: string }) {
-  return <iframe src={src} title={title} className={cn("bg-background block size-full border-0", className)} />;
+export function WorkingFrame({ src, title, className, ref, onLoad }: { src: string; title: string; className?: string; ref?: Ref<HTMLIFrameElement>; onLoad?: () => void }) {
+  return <iframe ref={ref} src={src} title={title} onLoad={onLoad} className={cn("bg-background block size-full border-0", className)} />;
 }
 
-/** A whole section: fills the frame between the menu, the top bar and the phone dock. */
-export function WorkingSection({ src, title }: { src: string; title: string }) {
+/**
+ * The sections not redrawn yet share ONE working CRM for the whole visit: it
+ * is opened on the first such section, shown or hidden as the person moves
+ * around, and never torn down — so a section opens at once and an edit made a
+ * second before leaving it is still saved.
+ */
+export function WorkingSections({ src, title, visible }: { src: string | null; title: string; visible: boolean }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const first = useRef<string | null>(null);
+  const wanted = useRef<string | null>(null);
+  if (src && !first.current) first.current = src;
+  if (src) wanted.current = src;
+
+  // Same page, another section: only the address after # changes, nothing reloads.
+  const show = useCallback(() => {
+    const win = workingWindow(frame.current);
+    const target = wanted.current;
+    if (!win || !target) return;
+    try {
+      // Until the working CRM has loaded there is nothing to steer; onLoad calls this again.
+      if (typeof win.parseHash !== "function") return;
+      const hash = target.slice(target.indexOf("#"));
+      if (win.location.hash === hash) {
+        win.parseHash();
+        win.render?.();
+      } else win.location.hash = hash;
+    } catch {
+      /* the frame is between two pages (sign-in, reload); its next load calls this again */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (src && visible) show();
+  }, [src, visible, show]);
+
+  if (!first.current) return null;
   return (
-    <div className="fixed inset-x-0 top-14 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 lg:top-0 lg:bottom-0 lg:left-64">
-      <WorkingFrame src={src} title={title} />
+    <div className={cn("fixed inset-x-0 top-14 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 lg:top-0 lg:bottom-0 lg:left-64", !visible && "hidden")}>
+      <WorkingFrame ref={frame} src={first.current} title={title} onLoad={show} />
     </div>
   );
 }
