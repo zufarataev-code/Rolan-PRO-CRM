@@ -51,8 +51,9 @@ settings):
 No credential is issued by this implementation. No vault, dataset assignment,
 provider grant or live publication is implied by committed code. Apply migrations
 before running this release. Configure the selected dataset/token privately and
-verify `GET /api/v1/integrations/meta-capi/status` as the owner. Enable uploads with
-a Test Events code first, process a task-authorized event, and independently
+verify `GET /api/v1/integrations/meta-capi/status` as the owner. For provider QA,
+use a fixture-only database with a Test Events code and a task-authorized event, then
+independently
 verify its exact event ID/name in Meta Events Manager. The owner process action is
 `POST /api/v1/integrations/meta-capi/process` with optional `{ "limit": 10 }` (1–25).
 The same endpoint accepts the existing scheduled conversion bearer credential.
@@ -109,8 +110,9 @@ permissions; this script's exact-key read is not a new restricted IAM role.
 Refresh is explicit: run the same scoped sync after a vault change, then use the
 normal main-only release/watcher restart to load the canonical environment.
 A vault save or successful file sync alone does not prove runtime adoption.
-Retain uploads `false` until the single isolated provider QA is accepted and
-verified in Events Manager. Never enable Test Events on the customer database:
+Retain runtime uploads `false` until the approved provider QA and deployment checks
+pass. The dated initial-activation exception above governs the existing API receipt.
+Never enable Test Events on the customer database:
 use a fixture-only disposable database and no automatic scheduler. Do not replay
 its synthetic event live or resend an uncertain single-test submission.
 

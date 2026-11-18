@@ -2,6 +2,17 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-17 — Production CAPI activation receipt (Codex)
+
+- Follow-up branch `codex/capi-activation-receipt-20261117` reuses `/Volumes/Documents_SSDR0/CodexClaudeProjects/RolanPro/CRM-capi-onboarding-20261117`. Documentation only; runtime delivery remains the existing scheduler and protected operator sync.
+- PR #562 merged as `00a1eda7d6dfeec7aebe88651ffc686b2ab69156` after 1,238 local tests, TypeScript, production build, exact-head CI `44208639311` and independent Claude `NO_FINDINGS`. The diagnostics preserve HTTP failure exits, TLS validation and request/attempt bounds.
+- Current release `227dd079f91c2d59c493403ff683af56ba084dc3` passed main CI `44210435081` and normal deployment `44211974647`, job `134492337316`. Its external HEAD `/login` returned HTTP 200 with valid TLS in 0.126712 seconds at 2026-11-18 00:57:15 UTC.
+- After that pass, the owning CRM Infisical `prod /meta-capi` flag (version 2, literal `true`) was synced with the published pinned SSH helper and only `rolanpro-crm-app:rolanpro-crm-app_0` was restarted. Actual process readback at 00:58:48 UTC: configured/enabled, mode `live`, dataset `865337699151965`, token present, Test Events empty. Startup configuration remains mode 0600; the token was neither regenerated nor published.
+- Transition correction: a concurrent main release briefly adopted the initially staged true flag before the intended reload. Both genuine entries still had zero attempts. Startup and actual process were restored to disabled at 00:55:34 UTC, then enabled only after the exact current-release pass above. No synthetic event or manual process/replay call was made.
+- Immediately after the final reload, the original `Lead` and `ProposalSent` entries remained queued with zero attempts and unchanged original times. Next: verify the normal ten-minute scheduler's persisted provider receipts and queue health, then record final cleanup.
+- The separate TCP incident remains with PR #543, comment `6965646960`: a failed runner resolved DNS quickly but timed out before TCP/TLS; a bounded SYN-only trace showed inbound SYN and outbound SYN-ACK. No DNS/TLS root cause, firewall change or gate waiver is claimed. Superseded run `44209836427` attempt 1 was cancelled after 14 observed timeouts; its only retry correctly rejected the obsolete SHA after main advanced. Current-release deployment above passed without changing the gate.
+- Private task evidence and temporary pinned operator files remain in `/private/tmp/rolanpro-capi-onboarding-20261117`; the completed fixture container/volume were removed and Docker restored to stopped. The primary checkout and other branches are preserved.
+
 ## 2026-11-17 — Единый слой интерфейса на всю CRM по примеру «Кабинет проекта» (Claude)
 
 - Owner, 2026-11-17: «то дизайнерское и интерфейсное решение [пример «Кабинет проекта»] должно быть реализовано в нашей CRM … без изменения нашей логики … всё в едином слое». Отдельные пробные экраны и перекраска цветов (#556, #558, #561) — не то, что он просил. Прямое поручение владельца; проверка Codex — после, в PR.
