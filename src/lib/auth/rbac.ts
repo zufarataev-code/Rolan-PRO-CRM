@@ -10,6 +10,9 @@ export const ROUTE_ROLE_RULES: Array<{
     prefix: "/survey",
     roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT],
   },
+  // Field measurement screen (React + shadcn/ui): the surveyor and the office.
+  { prefix: "/field", roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT] },
+  { prefix: "/api/v1/field", roles: [ROLE_CODES.OWNER, ROLE_CODES.MANAGER, ROLE_CODES.CONSULTANT] },
   { prefix: "/installer", roles: [ROLE_CODES.INSTALLER] },
   { prefix: "/installer-app", roles: [ROLE_CODES.INSTALLER] },
   {
