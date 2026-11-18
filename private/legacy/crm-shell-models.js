@@ -56,6 +56,13 @@ function crmShellUrgency(o) {
   return urgency ? String(urgency.label || '') : '';
 }
 
+/** The project's own job site (a client may have several addresses), as the working card resolves it. */
+function crmShellAddress(o, client) {
+  let address = '';
+  try { address = orderAddress(o, client) || ''; } catch (error) { address = ''; }
+  return String(address || client.address || '');
+}
+
 function crmShellCard(o) {
   const client = getClient(o.clientId) || {};
   const revenue = Number(orderKanbanRevenue(o)) || 0;
@@ -69,7 +76,7 @@ function crmShellCard(o) {
     id: o.id,
     number: o.number || '',
     client: client.name || 'Клиент',
-    address: client.address || '',
+    address: crmShellAddress(o, client),
     status: statusLabel(o.status),
     sum: revenue,
     paid,
@@ -90,8 +97,9 @@ function crmShellUser(user) {
 /** Main screen: the owner board's own model plus what needs attention first. */
 function crmShellOverview(user) {
   const board = ownerBoardModel(user);
-  const closed = ['completed', 'review_received'];
-  const active = crmShellOrders(user).filter(order => !closed.includes(order.status));
+  // In work = standing in a funnel stage before «Закрыто»; a status the funnel does not know is not work in progress.
+  const open = ORDER_KANBAN_FUNNEL.filter(stage => stage.id !== 'done').flatMap(stage => stage.statuses);
+  const active = crmShellOrders(user).filter(order => open.includes(order.status));
   const time = value => { const at = value ? new Date(value).getTime() : NaN; return Number.isFinite(at) ? at : Infinity; };
   const attention = active.map(crmShellCard)
     .sort((a, b) => Number(!!b.urgency) - Number(!!a.urgency) || time(a.installationAt) - time(b.installationAt))
@@ -152,7 +160,7 @@ function crmShellProject(user, projectId) {
       id: o.id,
       number: o.number || '',
       status: statusLabel(o.status),
-      client: { name: client.name || 'Клиент', phone: client.phone || '', address: client.address || '' },
+      client: { name: client.name || 'Клиент', phone: client.phone || '', address: crmShellAddress(o, client) },
       manager: (getUser(o.managerId) || {}).name || '',
       measurer: (getUser(o.measurerId) || {}).name || '',
       canSeeMoney,

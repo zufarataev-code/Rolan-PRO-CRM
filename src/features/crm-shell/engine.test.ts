@@ -29,6 +29,7 @@ test("the funnel has the CRM kanban's columns and each card carries its next ste
   const install = board.columns.find((column) => column.id === "install");
   assert.equal(install?.cards[0]?.number, "R-2604-001");
   assert.equal(install?.cards[0]?.status, "Монтаж назначен");
+  assert.equal(install?.cards[0]?.address, "Los Angeles, CA, 633 W 5th St");
 });
 
 test("a project shows the working card's nine stages, services and windows", () => {
@@ -42,6 +43,15 @@ test("a project shows the working card's nine stages, services and windows", () 
   assert.equal(project.windows.length, 3);
   assert.equal(project.canSeeMoney, true);
   assert.equal(runCrmEngine<CrmProjectPage>(payload, owner, { model: "project", projectId: "missing" }, script).project, null);
+});
+
+test("a project with its own address shows it, and an unknown status is not work in progress", () => {
+  const changed = JSON.parse(JSON.stringify(payload)) as { orders: Record<string, unknown>[] };
+  changed.orders[0].address = "Pasadena, CA, 1 Job Site Rd";
+  changed.orders[1].status = "cancelled";
+  const overview = runCrmEngine<CrmOverview>(changed, owner, { model: "overview" }, script);
+  assert.deepEqual(overview.attention.map((card) => card.id), ["o1"]);
+  assert.equal(overview.attention[0].address, "Pasadena, CA, 1 Job Site Rd");
 });
 
 test("no CRM card of an office role — no data", () => {
