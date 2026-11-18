@@ -74,3 +74,6 @@ export type CrmProjectDetails = {
 };
 
 export type CrmProjectPage = { user: CrmShellUser; project: CrmProjectDetails | null };
+
+/** Leads that already have a project, by lead id. */
+export type CrmLeadLinks = { user: CrmShellUser; links: Record<string, { projectId: string; number: string; archived: boolean }> };

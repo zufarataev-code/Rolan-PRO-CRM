@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
 import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
-import type { CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
+import type { CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
 const script = new vm.Script(source);
@@ -54,6 +54,14 @@ test("a project with its own address shows it, and an unknown status is not work
   assert.equal(overview.attention[0].address, "Pasadena, CA, 1 Job Site Rd");
 });
 
+test("a lead that already has a project is linked to it, an archived one is marked", () => {
+  const changed = JSON.parse(JSON.stringify(payload)) as { orders: Record<string, unknown>[]; archivedOrders?: Record<string, unknown>[] };
+  changed.orders[0].canonicalLeadId = "lead-1";
+  changed.archivedOrders = [{ id: "old", number: "R-OLD", canonicalLeadId: "lead-2" }];
+  const result = runCrmEngine<CrmLeadLinks>(changed, owner, { model: "leadLinks" }, script);
+  assert.deepEqual(result.links, { "lead-1": { projectId: "o1", number: "R-2604-001", archived: false }, "lead-2": { projectId: "", number: "R-OLD", archived: true } });
+});
+
 test("no CRM card of an office role — no data", () => {
   assert.deepEqual(runCrmEngine(payload, { legacyUserIds: [], role: "owner" }, { model: "overview" }, script), { error: "no_card" });
   assert.deepEqual(runCrmEngine(payload, { legacyUserIds: ["u_i1", "u_z1"], role: "manager" }, { model: "projects" }, script), { error: "no_card" });
@@ -79,6 +87,7 @@ test("every old section in the new menu is one the working CRM agrees to open by
   assert.ok(!managerTitles.includes("Деньги") && !managerTitles.includes("Настройки"));
   assert.ok(CRM_LEGACY_SECTIONS.some((item) => item.key === "orders"));
   assert.equal(crmSectionSrc("leads", "manager")?.src, "/legacy-crm#/section/leads");
+  assert.equal(crmSectionSrc("calendar", "manager")?.src, "/legacy-crm#/section/calendar");
   assert.equal(crmSectionSrc("servicePricing", "manager")?.src, "/legacy-crm#/service-pricing");
   assert.equal(crmSectionSrc("installerOps", "owner")?.src, "/legacy-crm#/installer-operations");
   assert.equal(crmSectionSrc("accounting", "manager"), null);
