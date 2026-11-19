@@ -2,6 +2,12 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+
+## 2026-11-19 — Facebook qualification and website click matching
+
+- Branch `codex/lead-qualification-matching`. A new explicit qualification or first sent proposal records one Facebook qualification per lead. Both lead screens explain skipped deliveries. Genuine, consented website clicks can match subsequent stage events.
+- Verification and deployment are pending. Use isolated fixtures for delivery tests and the normal production scheduler for genuine traffic.
+
 ## 2026-11-18 — `/crm/calendar`: «Календарь» в новом шаблоне (Claude)
 
 - Owner, 2026-11-18 01:21: «Давай» — на «следующий по плану — календарь». Прямое поручение владельца; проверка Codex — в PR.
