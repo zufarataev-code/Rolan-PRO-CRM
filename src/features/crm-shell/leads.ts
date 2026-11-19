@@ -23,6 +23,7 @@ export type ApiLead = {
   assigned_manager?: { full_name: string } | null;
   pipeline_status: { status_code: string; name_ru: string; is_closed: boolean } | null;
   outcome_stage?: string | null;
+  delivery?: Partial<Record<"facebook" | "google", { event_name: string; status_label: string; updated_at: string }[]>>;
   stage_history?: { occurred_at: string; pipeline_status_code?: string; reason?: string }[];
   created_at: string;
   status_flags?: { is_new?: boolean };
@@ -52,6 +53,7 @@ export type LeadRow = {
   stageLocked: boolean;
   /** Someone is creating a project from this lead right now. */
   beingConverted: boolean;
+  delivery: ApiLead["delivery"];
   history: { at: string; stage: string; reason: string }[];
 };
 
@@ -97,6 +99,7 @@ export function leadRows(leads: ApiLead[], stages: LeadStage[], now = Date.now()
         stageClosed: Boolean(lead.outcome_stage || status.is_closed),
         stageLocked: Boolean(lead.outcome_stage),
         beingConverted: Number.isFinite(claimedAt) && now - claimedAt < CLAIM_SHOWN_MS,
+        delivery: lead.delivery,
         history: (lead.stage_history ?? []).map((change) => ({ at: change.occurred_at, stage: stageName(change.pipeline_status_code ?? "") || change.pipeline_status_code || "", reason: change.reason || "" })),
       };
     });

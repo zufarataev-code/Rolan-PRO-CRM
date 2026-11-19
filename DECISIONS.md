@@ -2,6 +2,10 @@
 
 This file records durable decisions. Current activity, blockers, and next steps belong in `PROJECT_STATE.md`.
 
+## 2026-11-19 — Facebook qualification and website click matching
+
+The first new explicit qualification or first sent proposal now qualifies a lead once for Facebook. A proposal keeps its stage receipt and a sale still requires a verified positive value. Previously recorded proposals are not replayed. Website click matching uses the signed original acquisition, recorded advertising permission and the existing send-time consent check. Google uses its configured qualification rule.
+
 ## 2026-11-17 — Approved CRM CAPI activation after deployment acceptance
 
 - The owner accepted the existing one-event Meta API receipt and persisted fixture `test_accepted` as sufficient provider validation for this activation if the exact row remains absent in Events Manager. Deployment checks must pass first; no additional synthetic event or live fixture replay is authorized.

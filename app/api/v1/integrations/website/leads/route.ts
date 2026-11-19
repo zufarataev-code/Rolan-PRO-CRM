@@ -46,6 +46,7 @@ type WebsiteLeadPayload = {
   attribution?: {
     google_ads_customer_id?: string | null;
     google_ads_campaign_id?: string | null;
+    fbclid?: string | null;
     gclid?: string | null;
     gbraid?: string | null;
     wbraid?: string | null;
@@ -93,7 +94,16 @@ function parseOptionalDate(value: string | null | undefined) {
 function toAttributionInput(payload: WebsiteLeadPayload["attribution"]): AttributionCaptureInput | null {
   if (!payload) return null;
 
+  const capturedAt = parseOptionalDate(payload.captured_at);
+  const effectiveAt = parseOptionalDate(payload.consent?.effective_at);
+  const now = Date.now();
+  const explicitConsent = payload.consent?.source === "rolan_marketing_consent" &&
+    payload.consent.ad_user_data === "GRANTED" && payload.consent.ad_personalization !== "DENIED" &&
+    Boolean(payload.consent.policy_version) && effectiveAt && effectiveAt.getTime() <= now;
+  const click = payload.fbclid;
   return {
+    metaFbclid: explicitConsent && capturedAt && capturedAt.getTime() > 0 && capturedAt.getTime() <= now &&
+      typeof click === "string" && click.length > 0 && click.length <= 2048 && !/[^A-Za-z0-9_-]/.test(click) ? click : null,
     googleAdsCustomerId: payload.google_ads_customer_id,
     googleAdsCampaignId: payload.google_ads_campaign_id,
     gclid: payload.gclid,
@@ -106,7 +116,7 @@ function toAttributionInput(payload: WebsiteLeadPayload["attribution"]): Attribu
     utmTerm: payload.utm_term,
     utmContent: payload.utm_content,
     sessionAttributes: payload.session_attributes,
-    capturedAt: parseOptionalDate(payload.captured_at),
+    capturedAt,
     consent: payload.consent
       ? {
           adUserData: (payload.consent.ad_user_data ?? "UNKNOWN") as ConsentState,
@@ -114,7 +124,7 @@ function toAttributionInput(payload: WebsiteLeadPayload["attribution"]): Attribu
           audienceMarketingEligible: payload.consent.audience_marketing_eligible === true,
           source: payload.consent.source?.trim() || "website",
           policyVersion: payload.consent.policy_version,
-          effectiveAt: parseOptionalDate(payload.consent.effective_at),
+          effectiveAt,
         }
       : null,
   };

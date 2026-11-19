@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { before, after, test } from "node:test";
 import { PrismaClient } from "@prisma/client";
+import { enqueueLeadStage } from "../src/features/meta-capi/events";
 import { assertSafeE2eTarget, assertServerUsesTestDatabase } from "./guard";
 
 const base = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
@@ -81,4 +82,35 @@ test("signed ordered follow-ups preserve one lead, human notes, original acquisi
   assert.equal(businessAfter.last_name, "Representative");
   assert.equal(businessAfter.contact_title, "Owner");
   assert.equal(businessAfter.email, "business@example.com");
+});
+
+test("signed acquisition carries only a complete consented click into one proposal qualification", async () => {
+  const capturedAt = new Date(Date.now() - 60_000);
+  const consent = { source: "rolan_marketing_consent", ad_user_data: "GRANTED", ad_personalization: "UNKNOWN", effective_at: capturedAt.toISOString(), policy_version: "rolan-privacy-v2" };
+  for (const [fbclid, time, policy, expected] of [
+    ["Original_Click-1", capturedAt.toISOString(), consent, true],
+    ["Original_Click-1", null, consent, false],
+    ["Bad click", capturedAt.toISOString(), consent, false],
+    ["Original_Click-1", capturedAt.toISOString(), { ...consent, ad_user_data: "DENIED" }, false],
+    ["Original_Click-1", capturedAt.toISOString(), { ...consent, source: "rolan_us_opt_out" }, false],
+  ] as const) {
+    const created = await signed("POST", { submission_id: randomUUID(), name: "Click fixture", email: "fixture@example.com", attribution: { fbclid, captured_at: time, consent: policy } });
+    assert.equal(created.status, 200);
+    const id: string = created.body.lead_id;
+    try {
+      const click = await db.acquisitionTouchpoint.findFirst({ where: { lead_id: id, meta_fbclid: { not: null } } });
+      assert.equal(click?.meta_fbclid ?? null, expected ? fbclid : null);
+      const occurredAt = new Date();
+      const proposal = { leadId: id, stageCode: "PROPOSAL_SENT", occurredAt, eventId: randomUUID() };
+      await Promise.all([1, 2].map(() => db.$transaction(tx => enqueueLeadStage(tx, proposal))));
+      const events = await db.metaCapiOutbox.findMany({ where: { lead_id: id }, orderBy: { event_name: "asc" } });
+      assert.deepEqual(events.map(row => row.event_name), ["ProposalSent", "QualifiedLead"]);
+      for (const event of events) assert.equal((event.payload_snapshot as any)?.user_data.fbc, expected ? `fb.1.${capturedAt.getTime()}.${fbclid}` : undefined);
+    } finally {
+      await db.metaCapiOutbox.deleteMany({ where: { lead_id: id } });
+      await db.acquisitionTouchpoint.deleteMany({ where: { lead_id: id } });
+      await db.consentSnapshot.deleteMany({ where: { lead_id: id } });
+      await db.lead.delete({ where: { lead_id: id } });
+    }
+  }
 });

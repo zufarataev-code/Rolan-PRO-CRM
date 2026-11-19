@@ -49,6 +49,7 @@ export function normalizeAttributionCapture(
     leadId: cleanText(input.leadId, META_MAX_LENGTH),
     dealId: cleanText(input.dealId, META_MAX_LENGTH),
     clientId: cleanText(input.clientId, META_MAX_LENGTH),
+    metaFbclid: input.metaFbclid ?? null,
     gclid: cleanText(input.gclid, CLICK_ID_MAX_LENGTH),
     gbraid: cleanText(input.gbraid, CLICK_ID_MAX_LENGTH),
     wbraid: cleanText(input.wbraid, CLICK_ID_MAX_LENGTH),
@@ -77,6 +78,7 @@ export function hasAttributionData(
   capture: NonNullable<ReturnType<typeof normalizeAttributionCapture>>,
 ) {
   return Boolean(
+    capture.metaFbclid ||
     capture.googleAdsCampaignId ||
     capture.gclid ||
       capture.gbraid ||
@@ -112,6 +114,7 @@ export async function persistLeadAttribution(
         lead_id: leadId,
         google_ads_customer_id: capture.googleAdsCustomerId,
         google_ads_campaign_id: capture.googleAdsCampaignId,
+        meta_fbclid: capture.metaFbclid,
         gclid: capture.gclid,
         gbraid: capture.gbraid,
         wbraid: capture.wbraid,

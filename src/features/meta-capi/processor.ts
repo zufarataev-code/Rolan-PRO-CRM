@@ -90,6 +90,7 @@ export async function processNextMetaCapiEvent() {
     payload.custom_data.value = saleValue;
   }
   if (lead.consent_snapshots[0]?.ad_user_data !== "GRANTED") {
+    delete payload.user_data.fbc;
     delete payload.user_data.em;
     delete payload.user_data.ph;
     if (!payload.user_data.lead_id) return finish("suppressed", "missing_matching_data");

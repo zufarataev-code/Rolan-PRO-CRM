@@ -19,13 +19,14 @@ export type MetaEventPayload = {
   event_time: number;
   event_id: string;
   action_source: "system_generated";
-  user_data: { lead_id?: string; em?: string[]; ph?: string[] };
+  user_data: { fbc?: string; lead_id?: string; em?: string[]; ph?: string[] };
   custom_data: { event_source?: "crm"; lead_event_source?: "RolanPRO CRM"; value?: number; currency?: string };
 };
 
 type Input = {
   source: string | null;
   nativeLeadId: string | null;
+  websiteClick?: { meta_fbclid: string | null; captured_at: Date };
   email: string | null;
   phone: string | null;
   consent: string | null;
@@ -50,6 +51,10 @@ export function buildMetaCrmPayload(input: Input): { payload: MetaEventPayload |
   if (native && input.nativeLeadId && /^\d{15,17}$/.test(input.nativeLeadId)) user.lead_id = input.nativeLeadId;
   // Unknown consent permits the existing native lead reference, never contact matching.
   if (input.consent === "GRANTED") {
+    const click = input.websiteClick;
+    if (website && click?.meta_fbclid && click.captured_at <= input.occurredAt) {
+      user.fbc = `fb.1.${click.captured_at.getTime()}.${click.meta_fbclid}`;
+    }
     const email = input.email?.trim().toLowerCase();
     const phoneNumber = normalizePhoneE164(input.phone)?.slice(1);
     if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) user.em = [sha256Hex(email)];

@@ -477,6 +477,7 @@ model AcquisitionTouchpoint {
   legacy_order_id            String?                    @unique @db.VarChar(120)
   lead_id                    String?                    @db.Uuid
   client_id                  String?                    @db.Uuid
+  meta_fbclid                String?                    @db.Text
   gclid                      String?                    @db.Text
   gbraid                     String?                    @db.Text
   wbraid                     String?                    @db.Text
