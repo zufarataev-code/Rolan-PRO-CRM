@@ -7,7 +7,7 @@ loss and spam are separate events. `QualifiedLead` is one milestone per lead;
 `ConvertedLead` can only be produced from an existing positive-value verified
 `converted_lead` business event. Creating a project or changing a label cannot
 produce a sale. Stage-history events use their persisted activity ID, so retries
-reuse the same event. Re-entering qualification does not count it again.
+reuse the same event. The first new explicit qualification or first sent proposal creates one immutable qualification per lead. A proposal also retains its own stage receipt. Reconciliation of a previously recorded proposal does not backfill qualification.
 Returning to New records a neutral `LeadReopened` history event. Standard `Lead`
 is produced only by the accepted native intake receipt, with its original time.
 
@@ -22,17 +22,24 @@ alone is used, without email or phone. Explicitly denied advertising consent
 suppresses delivery. Contact identifiers are included only with a recorded
 `ad_user_data=GRANTED` snapshot: trimmed/lowercase email and country-code phone
 digits are SHA-256 hashed. The worker rechecks current consent before each send
-and strips contact hashes if permission is no longer granted.
+and strips contact hashes and the website click match if permission is no longer granted.
 
 Website and CallRail/phone lead **stage updates** use ordinary CAPI with
 `action_source=system_generated`, because the action is a CRM status change,
 not another website submission or another telephone call. These ordinary events
 omit native `lead_id` and the special CRM optimization custom parameters. They
-require explicit `ad_user_data=GRANTED` and usable hashed contact matching;
+require explicit `ad_user_data=GRANTED` and usable matching data;
 unknown/denied consent is visibly suppressed. This does not recreate raw web/call
 acquisition events or invent IP, browser or page context. Messenger-only/unknown
 sources remain `suppressed/unsupported_source`. The transport never infers consent
 from receipt of a form or changes an advertising goal.
+
+Signed website intake can store a complete Facebook click ID on the original
+lead touchpoint when the site supplies its capture time and recorded CMP grant.
+CRM stage feedback uses that lead's click as `fbc` with the original capture time
+in milliseconds. The US regional default alone does not authorize this additional
+identifier. Neither inbox exposes the click or provider error text. Each receipt
+has a localized status label with an allowlisted explanation for skipped delivery.
 
 ## Configuration and activation
 

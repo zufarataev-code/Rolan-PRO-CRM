@@ -52,13 +52,27 @@ test("ordinary web and phone stage feedback requires consent and does not invent
   assert.equal(web.custom_data.event_source, undefined);
 });
 
+function outboxFixture(saved: Map<string, any>) {
+  return {
+    createMany: async ({ data, skipDuplicates }: any) => {
+      assert.equal(skipDuplicates, true);
+      if (saved.has(data.event_id)) return { count: 0 };
+      saved.set(data.event_id, data);
+      return { count: 1 };
+    },
+    findUniqueOrThrow: async ({ where }: any) => saved.get(where.event_id),
+  };
+}
+
 test("signed website importer provenance reaches ordinary CAPI after recorded consent", async () => {
-  let queued: any;
+  const saved = new Map<string, any>();
   const tx: any = {
-    lead: { findUnique: async () => ({ lead_id: "website", source: "website", external_source: "rolanpro.com", external_submission_id: "submission-not-a-meta-id", created_at: input.generatedAt, consent_snapshots: [{ ad_user_data: "GRANTED", ad_personalization: "UNKNOWN" }], phone: input.phone, email: input.email }) },
-    metaCapiOutbox: { upsert: async ({ create }: any) => { queued = create; return create; } },
+    lead: { findUnique: async () => ({ lead_id: "website", source: "website", external_source: "rolanpro.com", external_submission_id: "submission-not-a-meta-id", created_at: input.generatedAt, acquisition_touchpoints: [{ meta_fbclid: "Original_Click-1", captured_at: input.generatedAt }], consent_snapshots: [{ ad_user_data: "GRANTED", ad_personalization: "UNKNOWN" }], phone: input.phone, email: input.email }) },
+    metaCapiOutbox: outboxFixture(saved),
   };
   await enqueueLeadStage(tx, { leadId: "website", stageCode: "QUALIFIED", occurredAt });
+  const queued = saved.get("crm-lead-website-QualifiedLead");
+  assert.equal(queued.payload_snapshot.user_data.fbc, `fb.1.${input.generatedAt.getTime()}.Original_Click-1`);
   assert.equal(queued.processing_status, "queued");
   assert.equal(queued.payload_snapshot.event_name, "QualifiedLead");
   assert.equal(queued.payload_snapshot.user_data.lead_id, undefined);
@@ -70,7 +84,7 @@ test("one qualified milestone per lead survives re-entry; sale requires the veri
   const saved = new Map<string, any>();
   const tx: any = {
     lead: { findUnique: async () => ({ lead_id: "lead", external_source: "meta_lead_ads", external_submission_id: input.nativeLeadId, created_at: input.generatedAt, consent_snapshots: [], acquisition_touchpoints: [], phone: null, email: null }) },
-    metaCapiOutbox: { upsert: async ({ where, create, update }: any) => { assert.deepEqual(update, {}); if (!saved.has(where.event_id)) saved.set(where.event_id, create); return saved.get(where.event_id); } },
+    metaCapiOutbox: outboxFixture(saved),
     conversionEvent: { findUnique: async () => ({ conversion_event_id: "sale", event_type: "converted_lead", lead_id: "lead", transaction_id: "verified-sale", occurred_at: occurredAt, conversion_value: 250, currency: "USD", adjustments: [] }) },
     activityLog: { findFirst: async () => null },
   };
@@ -80,6 +94,21 @@ test("one qualified milestone per lead survives re-entry; sale requires the veri
   assert.equal(await enqueueLeadStage(tx, { leadId: "lead", stageCode: "CLOSED_WON", occurredAt }), null);
   await enqueueLeadStage(tx, { leadId: "lead", stageCode: "DEPOSIT_PAID", occurredAt, eventId: "audit-3" });
   assert.equal(saved.get("crm-stage-audit-3").event_name, "DepositPaid");
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "proposal" });
+  assert.equal(saved.get("crm-stage-proposal").event_name, "ProposalSent");
+  assert.equal(saved.get("crm-lead-lead-QualifiedLead").occurred_at, occurredAt);
+
+  saved.clear();
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "proposal" });
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "proposal" });
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "QUALIFIED", occurredAt: new Date(occurredAt.getTime() + 5000) });
+  assert.equal(saved.size, 2);
+  assert.equal(saved.get("crm-lead-lead-QualifiedLead").occurred_at, occurredAt);
+  saved.delete("crm-lead-lead-QualifiedLead"); // Simulate a proposal already handled before rollout.
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "proposal" });
+  assert.equal(saved.size, 1);
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "new-proposal" });
+  assert.equal(saved.get("crm-lead-lead-QualifiedLead").event_name, "QualifiedLead");
   await enqueueConvertedLead(tx, { conversionEventId: "sale" });
   assert.equal(saved.get("verified-sale").event_name, "ConvertedLead");
 });
@@ -103,7 +132,7 @@ test("existing native leads recover raw receipt with its persisted original time
   const tx: any = {
     lead: { findUnique: async () => ({ lead_id: "existing-lead", external_source: "meta_lead_ads", external_submission_id: input.nativeLeadId, created_at: input.generatedAt, consent_snapshots: [], phone: null, email: null }) },
     activityLog: { findFirst: async () => ({ created_at: receiptAt }) },
-    metaCapiOutbox: { upsert: async ({ where, create }: any) => { if (!saved.has(where.event_id)) saved.set(where.event_id, create); return saved.get(where.event_id); } },
+    metaCapiOutbox: outboxFixture(saved),
   };
   await enqueueLeadStage(tx, { leadId: "existing-lead", stageCode: "NEW_LEAD", occurredAt, eventId: "reopened" });
   assert.equal(saved.get("crm-stage-reopened").event_name, "LeadReopened");
@@ -128,6 +157,8 @@ test("worker claims before sending, rechecks consent and releases the exact leas
     assert.equal(updates[0].data.processing_status, "processing");
     assert.equal(updates[0].data.lease_token, updates[1].where.lease_token);
     assert.equal(updates[1].data.lease_token, null);
+    (prisma.lead as any).findUnique = async () => ({ consent_snapshots: [{ ad_user_data: "GRANTED", ad_personalization: "DENIED" }] });
+    assert.deepEqual(await processNextMetaCapiEvent(), { status: "suppressed", code: "consent_denied" });
     (prisma.metaCapiOutbox as any).updateMany = async () => ({ count: 0 });
     assert.deepEqual(await processNextMetaCapiEvent(), { status: "busy" });
   } finally {
@@ -140,7 +171,7 @@ test("worker preserves event identity across retry, separates test acceptance, a
   const savedEnv = { ...process.env }, originalFetch = globalThis.fetch;
   const originals = { findFirst: prisma.metaCapiOutbox.findFirst, updateMany: prisma.metaCapiOutbox.updateMany, leadFind: prisma.lead.findUnique, saleFind: prisma.conversionEvent.findUnique };
   const now = new Date();
-  const event: MetaEventPayload = { ...payload, event_time: Math.floor(now.getTime() / 1000) };
+  const event: MetaEventPayload = { ...payload, user_data: { ...payload.user_data, fbc: "fb.1.1000000000000.fixture" }, event_time: Math.floor(now.getTime() / 1000) };
   let retracted = false, received = 0;
   const updates: any[] = [], submitted: any[] = [];
   const row: any = { meta_capi_outbox_id: "row", lead_id: "lead", conversion_event_id: null, event_name: "QualifiedLead", event_id: "fixture", occurred_at: now, attempt_count: 0, dataset_id: "123", payload_snapshot: event };
@@ -153,6 +184,7 @@ test("worker preserves event identity across retry, separates test acceptance, a
     globalThis.fetch = async (_url, init) => { submitted.push(JSON.parse(String(init?.body))); return Response.json({ events_received: received }); };
     assert.deepEqual(await processNextMetaCapiEvent(), { status: "retry", code: "unconfirmed_acceptance" });
     assert.ok(updates.at(-1).data.next_attempt_at > now);
+    assert.equal(submitted[0].data[0].user_data.fbc, undefined);
     received = 1;
     assert.deepEqual(await processNextMetaCapiEvent(), { status: "test_accepted", code: null });
     assert.equal(updates.at(-1).data.accepted_at, undefined);

@@ -23,6 +23,7 @@ export interface AttributionCaptureInput {
   leadId?: string | null;
   dealId?: string | null;
   clientId?: string | null;
+  metaFbclid?: string | null;
   gclid?: string | null;
   gbraid?: string | null;
   wbraid?: string | null;
