@@ -23,7 +23,7 @@ export type ApiLead = {
   assigned_manager?: { full_name: string } | null;
   pipeline_status: { status_code: string; name_ru: string; is_closed: boolean } | null;
   outcome_stage?: string | null;
-  delivery?: Partial<Record<"facebook" | "google", { event_name: string; status_label: string; updated_at: string }[]>>;
+  delivery?: Partial<Record<"facebook" | "google", { event_name: string; processing_status: string; status_label: string; updated_at: string }[]>>;
   stage_history?: { occurred_at: string; pipeline_status_code?: string; reason?: string }[];
   created_at: string;
   status_flags?: { is_new?: boolean };

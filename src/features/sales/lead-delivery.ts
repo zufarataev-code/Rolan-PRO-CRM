@@ -34,3 +34,9 @@ export function deliveryLabel(provider: "facebook" | "google", status: string, e
   const labels = providerLabels[provider];
   return Object.hasOwn(labels, status) ? labels[status] : Object.hasOwn(commonLabels, status) ? commonLabels[status] : "Статус неизвестен";
 }
+
+
+export function deliveryEventLabel(name: string) {
+  const names: Record<string, string> = { qualified_lead: "QualifiedLead", converted_lead: "ConvertedLead", RETRACTION: "Отзыв конверсии", RESTATEMENT: "Корректировка суммы" };
+  return Object.hasOwn(names, name) ? names[name] : name;
+}

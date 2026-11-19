@@ -56,10 +56,11 @@ function outboxFixture(saved: Map<string, any>) {
   return {
     createMany: async ({ data, skipDuplicates }: any) => {
       assert.equal(skipDuplicates, true);
-      if (!saved.has(data.event_id)) saved.set(data.event_id, data);
+      if (saved.has(data.event_id)) return { count: 0 };
+      saved.set(data.event_id, data);
+      return { count: 1 };
     },
     findUniqueOrThrow: async ({ where }: any) => saved.get(where.event_id),
-    findFirst: async ({ where }: any) => [...saved.values()].find(row => row.lead_id === where.lead_id && row.event_name === where.event_name),
   };
 }
 
@@ -106,6 +107,8 @@ test("one qualified milestone per lead survives re-entry; sale requires the veri
   saved.delete("crm-lead-lead-QualifiedLead"); // Simulate a proposal already handled before rollout.
   await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "proposal" });
   assert.equal(saved.size, 1);
+  await enqueueLeadStage(tx, { leadId: "lead", stageCode: "PROPOSAL_SENT", occurredAt, eventId: "new-proposal" });
+  assert.equal(saved.get("crm-lead-lead-QualifiedLead").event_name, "QualifiedLead");
   await enqueueConvertedLead(tx, { conversionEventId: "sale" });
   assert.equal(saved.get("verified-sale").event_name, "ConvertedLead");
 });
@@ -154,6 +157,8 @@ test("worker claims before sending, rechecks consent and releases the exact leas
     assert.equal(updates[0].data.processing_status, "processing");
     assert.equal(updates[0].data.lease_token, updates[1].where.lease_token);
     assert.equal(updates[1].data.lease_token, null);
+    (prisma.lead as any).findUnique = async () => ({ consent_snapshots: [{ ad_user_data: "GRANTED", ad_personalization: "DENIED" }] });
+    assert.deepEqual(await processNextMetaCapiEvent(), { status: "suppressed", code: "consent_denied" });
     (prisma.metaCapiOutbox as any).updateMany = async () => ({ count: 0 });
     assert.deepEqual(await processNextMetaCapiEvent(), { status: "busy" });
   } finally {

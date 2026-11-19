@@ -9,11 +9,6 @@ export async function enqueueLeadStage(tx: Prisma.TransactionClient, input: Stag
   const eventId = ["Lead", "QualifiedLead"].includes(eventName)
     ? `crm-lead-${input.leadId}-${eventName}`
     : `crm-stage-${input.eventId ?? `${input.leadId}-${input.stageCode}-${input.occurredAt.getTime()}`}`;
-  if (eventName === "ProposalSent") {
-    // A reconciler also visits proposals already recorded before this rule went live.
-    const previous = await tx.metaCapiOutbox.findFirst({ where: { lead_id: input.leadId, event_name: "ProposalSent" }, select: { event_id: true } });
-    if (!previous) await enqueueQualifiedLead(tx, input);
-  }
   return enqueue(tx, { ...input, eventName, eventId });
 }
 
@@ -46,16 +41,17 @@ async function enqueue(tx: Prisma.TransactionClient, input: { leadId: string; ev
     if (receipt) await enqueue(tx, { leadId: lead.lead_id, eventName: "Lead", eventId: `crm-lead-${lead.lead_id}-Lead`, occurredAt: receipt.created_at });
   }
   const consent = lead.consent_snapshots[0];
-  const source = lead.external_source === "rolanpro.com" && lead.source === "website"
+  const signedWebsite = lead.external_source === "rolanpro.com" && lead.source === "website";
+  const source = signedWebsite
     ? "website" : lead.external_source || (lead.source === "meta_lead_ads" ? null : lead.source);
   const { payload, reason } = buildMetaCrmPayload({
-    websiteClick: lead.external_source === "rolanpro.com" && lead.source === "website" ? lead.acquisition_touchpoints[0] : undefined,
+    websiteClick: signedWebsite ? lead.acquisition_touchpoints[0] : undefined,
     source, nativeLeadId: lead.external_submission_id, email: lead.email, phone: lead.phone,
     consent: consent?.ad_personalization === "DENIED" ? "DENIED" : consent?.ad_user_data ?? "UNKNOWN", eventName: input.eventName,
     eventId: input.eventId, occurredAt: input.occurredAt, generatedAt: lead.created_at, value: input.value, currency: input.currency,
   });
   // An empty-update Prisma upsert can race a concurrent insert of the same milestone.
-  await tx.metaCapiOutbox.createMany({
+  const inserted = await tx.metaCapiOutbox.createMany({
     skipDuplicates: true,
     data: {
       lead_id: lead.lead_id, conversion_event_id: input.conversionEventId, event_id: input.eventId,
@@ -64,5 +60,7 @@ async function enqueue(tx: Prisma.TransactionClient, input: { leadId: string; ev
       processing_status: payload ? "queued" : "suppressed", last_error_code: reason,
     },
   });
+  // Reconciliation revisits existing proposals every cycle. Only a new receipt can qualify.
+  if (inserted.count && input.eventName === "ProposalSent") await enqueueQualifiedLead(tx, input);
   return tx.metaCapiOutbox.findUniqueOrThrow({ where: { event_id: input.eventId } });
 }

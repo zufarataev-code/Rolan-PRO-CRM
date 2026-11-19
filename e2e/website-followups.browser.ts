@@ -52,7 +52,15 @@ async function main() {
       };
       await setStage("CONTACTING");
       await setStage("CONTACTED");
-      await fixtureCard.getByText("Отправка пропущена", { exact: true }).first().waitFor();
+      const skippedLabel = "Отправка пропущена · Нет согласия на передачу рекламных данных";
+      await fixtureCard.getByText(skippedLabel, { exact: true }).first().waitFor();
+      const modern = await context.newPage();
+      await modern.goto(base + "/crm/leads");
+      const modernCard = modern.locator('[data-slot="card"]').filter({ hasText: "Website browser fixture" }).first();
+      await modernCard.getByText("Отправка в Facebook и Google", { exact: true }).click();
+      await modernCard.getByText(skippedLabel, { exact: false }).first().waitFor();
+      assert.ok(await modern.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
+      await modern.close();
       assert.match(await fixtureCard.innerText(), /Facebook CAPI[\s\S]*Contact[\s\S]*Отправка пропущена/);
       assert.match(await fixtureCard.innerText(), /Google Ads/);
       await setStage("QUALIFIED");

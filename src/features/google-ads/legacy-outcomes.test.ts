@@ -30,7 +30,6 @@ test("actual proposal sharing qualifies once, while publishing its link does not
   const events: any[] = [], outboxes: any[] = [];
   const tx = {
     $executeRaw: async () => 1,
-    metaCapiOutbox: { findFirst: async () => null },
     lead: { findUnique: async () => null },
     deal: { findFirst: async () => null },
     acquisitionTouchpoint: { findUnique: async () => point },
