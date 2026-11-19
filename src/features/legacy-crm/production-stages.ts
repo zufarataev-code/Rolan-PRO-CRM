@@ -9,6 +9,17 @@ const stable = (value: unknown) => JSON.stringify(value, (_key, item) => item &&
 const active = ['installation_scheduled', 'installation_accepted', 'installation_en_route', 'installation_in_progress'];
 const closed = ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'];
 const money = (value: number) => Math.round(value * 100) / 100;
+/**
+ * Stages as the browser can change them. Payroll snapshots and own-earnings
+ * summaries are server-owned and hidden from managers, so a manager's save
+ * never carries them; comparing them would read every completed stage as an
+ * edit and reject the whole workspace save.
+ */
+const editableStages = (value: unknown) => stable(rows(value).map(stage => {
+  if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage;
+  const { payroll: _payroll, ownEarnings: _ownEarnings, ...editable } = stage;
+  return editable;
+}));
 
 /** Settle an active installation once; later payment/closure states retain their history. */
 export function settleProductionProject(before: Row, order: Row, payload: Row, actor: string): void {
@@ -131,7 +142,7 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
       });
     }
     const stages = productionStages(order);
-    const changed = stable(order.productionStages ?? []) !== stable(before.productionStages ?? []);
+    const changed = editableStages(order.productionStages) !== editableStages(before.productionStages);
     if (!stages.length && !changed) continue;
     const manager = owner || managerIds.includes(String(before.managerId));
     if (changed && !manager && !field) return 'Этапы может менять только ответственный менеджер проекта.';
