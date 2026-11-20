@@ -171,6 +171,43 @@ test('historical services accrue and settle in each service completion period',(
   assert.deepEqual(payload.payrollPayments.map((payment:Row)=>payment.amount),[100,200]);
   assert.deepEqual(order.payouts.map((payment:Row)=>payment.accrualId),['line:jan','line:feb']);
 });
+test('historical payroll uses saved service dates and keeps contractor-only work off the project crew', () => {
+  const installer = { id: 'i1', payConfig: { type: 'per_sqft' } };
+  const otherInstaller = { id: 'i2', payConfig: { type: 'fixed_per_job', fixedPerJob: 400 } };
+  const services = [
+    { id: 'film', quickProjectLine: true, startDate: '2026-01-30', endDate: '2026-02-02', installerIds: ['i1'] },
+    { id: 'hardware', type: 'offering', startDate: '2026-03-04', installerIds: ['i1'] },
+    { id: 'electric', type: 'offering', startDate: '2026-04-06', endDate: '2026-04-06', installerIds: [] },
+  ];
+  const order = {
+    id: 'import', quickEntry: true, quickProjectImportedCompleted: true, extraServices: services,
+    installationDoneAt: '2026-04-06T12:00:00Z', installerIds: ['i1', 'i2'],
+    serviceSchedules: [{ id: 'line:electric', installerIds: ['i1', 'i2'] }],
+  };
+  const html = composeProductionHtml(readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8'), readFileSync('private/legacy/production-stages.js', 'utf8'));
+  const c = vm.createContext({
+    db: { orders: [order] }, getUser: (id: string) => [installer, otherInstaller].find(user => user.id === id),
+    projectStages: () => [], projectLineQtyText: () => '1', installerSeniorFactor: () => 1,
+  });
+  vm.runInContext([
+    'projectHistoricalEntryLines', 'projectQuickDateValue', 'projectServiceAssignment',
+    'historicalProjectInstallerAccruals', 'calcUserPayoutForPeriod',
+  ].map(name => {
+    const start = html.indexOf(`function ${name}(`);
+    return html.slice(start, html.indexOf('\n}', start) + 2);
+  }).join('\n'), c);
+  c.projectLines = () => services.map(service => {
+    const key = `line:${service.id}`;
+    const assignment = c.projectServiceAssignment(order, { id: key, lines: [service] });
+    return { key, name: service.id, sources: [service], installerPay: 100, ...assignment };
+  });
+  const totalOn = (id: string, day: string) => c.calcUserPayoutForPeriod(id, new Date(`${day}T00:00:00Z`), new Date(`${day}T23:59:59Z`)).total;
+  assert.equal(totalOn('i1', '2026-01-30'), 0);
+  assert.equal(totalOn('i1', '2026-02-02'), 100);
+  assert.equal(totalOn('i1', '2026-03-04'), 100);
+  assert.equal(totalOn('i1', '2026-04-06'), 0);
+  assert.equal(totalOn('i2', '2026-04-06'), 0);
+});
 test('each historical visit receives its minimum in the month when it happened',()=>{
   const user:Row={id:'i1',role:'installer',name:'Installer',payConfig:{type:'per_sqft'}};
   const payload:Row={settings:{},users:[user],orders:[]};

@@ -118,7 +118,7 @@ function orderInstallerPayoutForUser(o, userId) {
   const historicalUser = getUser(userId);
   if (o?.quickProjectImportedCompleted === true && typeof historicalProjectInstallerAccruals === 'function') {
     const historical = historicalProjectInstallerAccruals(o, historicalUser);
-    if (historical.length) return historical.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    if (historical) return historical.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   }
   const installerIds = [...new Set((o?.installerIds || []).filter(Boolean))];
   if (!installerIds.includes(userId)) return 0;
@@ -150,11 +150,14 @@ function orderInstallerPayoutForUser(o, userId) {
  */
 function historicalProjectInstallerAccruals(o, user) {
   const pc = user?.payConfig || {};
+  if (!o?.quickProjectImportedCompleted || (pc.type === 'fixed_per_job' && o.measurerId === user?.id) || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return null;
   const historicalLines = typeof projectHistoricalEntryLines === 'function' ? projectHistoricalEntryLines(o) : projectQuickLines(o);
-  if (!o?.quickProjectImportedCompleted || !historicalLines.length || (pc.type === 'fixed_per_job' && o.measurerId === user?.id) || !['per_sqft', 'fixed_per_job'].includes(pc.type)) return [];
+  // Null allows legacy project-wide payroll. An empty list means the service
+  // calculation applies but this employee has nothing to accrue.
+  if (!historicalLines.length) return null;
   const lines = projectLines(o).filter(line => (line.installerIds || []).length);
   const completedLines = lines.map(line => {
-    const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort();
+    const sourceDates = (line.sources || []).map(source => projectQuickDateValue(source?.endDate) || projectQuickDateValue(source?.startDate)).filter(Boolean).sort();
     const completedOn = sourceDates[sourceDates.length - 1] || '';
     const date = completedOn ? `${completedOn}T12:00:00.000Z` : line.installationAt || o.installationDoneAt || '';
     const visitDates = new Set();
@@ -260,8 +263,8 @@ function calcUserPayoutForPeriod(userId, startDate, endDate, orders = db.orders)
       });
       o = projectStageUnstagedOrder(o);
     }
-    const historicalAccruals = typeof historicalProjectInstallerAccruals === 'function' ? historicalProjectInstallerAccruals(o, u) : [];
-    if (historicalAccruals.length) {
+    const historicalAccruals = typeof historicalProjectInstallerAccruals === 'function' ? historicalProjectInstallerAccruals(o, u) : null;
+    if (historicalAccruals) {
       historicalAccruals.forEach(item => {
         const dt = new Date(item.date);
         if (dt < startDate || dt > endDate) return;
@@ -4506,7 +4509,7 @@ function renderQuickEntry() {
       <div class="qe-svc-head"><span class="qe-num">${i + 1}</span>
         <div class="qe-grid qe-grid-line">
           <label>Начало работ<input id="qe-l${i}-date" type="date" value="${academyEsc(line.date)}" onchange="quickEntrySetLine(${i}, 'date', this.value)"></label>
-          <label>Окончание<input id="qe-l${i}-endDate" type="date" min="${academyEsc(line.date)}" value="${academyEsc(line.endDate || line.date)}" onchange="quickEntrySetLine(${i}, 'endDate', this.value)"></label>
+          <label>Окончание<input id="qe-l${i}-endDate" type="date" min="${academyEsc(line.date)}" value="${academyEsc(line.endDate || line.date)}" onchange="quickEntrySetLine(${i}, 'endDate', this.value)"><span class="qe-hint">Дата начисления сдельной зарплаты</span></label>
           <label>Направление<select id="qe-l${i}-dir" onchange="quickEntrySetLine(${i}, 'dir', this.value)">${dirs.map(d => opt(d.id, d.title, line.dir)).join('')}</select></label>
           <label>Услуга<select id="qe-l${i}-offering" onchange="quickEntrySetLine(${i}, 'offering', this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'В направлении нет услуг — добавьте в «Услуги и цены»'}</option>${offerings.map(item => opt(item.id, `${item.name} · ${fmtMoney(Number(item.pricePerSqft) || 0)}/${serviceOfferingNeedsSizes(item) ? 'sq ft' : serviceOfferingUnitShort(item)}`, line.offering)).join('')}</select></label>
           ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'без материала'))}"></label>`}
@@ -4623,7 +4626,7 @@ function renderQuickEntry() {
       const lcrew = (l.installerIds || []).map(id => getUser(id)?.name).filter(Boolean).join(', ');
       const hiredRows = (o.extraExpenses || []).filter(x => x.type === 'subcontractor' && (x.lineId === l.id || String(x.label || '').endsWith(l.label)));
       const hiredSum = hiredRows.reduce((sum, x) => sum + (Number(x.amount) || 0), 0);
-      return `<tr class="qe-line"><td></td><td>${fmtDate(l.startDate || l.endDate || o.installationAt)}</td><td colspan="2"><span class="qe-dot" style="background:${academyEsc(toneOf(l.serviceType).color)}"></span>${i + 1} · ${academyEsc(l.label)}</td><td>${academyEsc(l.catalogId ? catalogLabel(getCatalogItem(l.catalogId)) : projectQuickManualFilmName(l) || (l.unit && l.unit !== 'sqft' ? serviceOfferingUnitShort(l) : '—'))}</td><td class="r">${(Number(l.qty) || 0).toFixed(0)} ${academyEsc(l.unit === 'sqft' ? 'sq ft' : serviceOfferingUnitShort(l))}</td><td class="r">${fmtMoney(Number(l.price) || 0)}</td><td>${academyEsc(lcrew || hiredRows.map(x => x.label.split(' · ')[0]).join(', ') || '—')}</td><td class="r">${fmtMoney(lc.payout + hiredSum)}</td><td class="r">${fmtMoney(lc.film + lc.supplies)}</td><td></td></tr>`;
+      return `<tr class="qe-line"><td></td><td>${fmtDate(l.endDate || l.startDate || o.installationDoneAt || o.installationAt)}</td><td colspan="2"><span class="qe-dot" style="background:${academyEsc(toneOf(l.serviceType).color)}"></span>${i + 1} · ${academyEsc(l.label)}</td><td>${academyEsc(l.catalogId ? catalogLabel(getCatalogItem(l.catalogId)) : projectQuickManualFilmName(l) || (l.unit && l.unit !== 'sqft' ? serviceOfferingUnitShort(l) : '—'))}</td><td class="r">${(Number(l.qty) || 0).toFixed(0)} ${academyEsc(l.unit === 'sqft' ? 'sq ft' : serviceOfferingUnitShort(l))}</td><td class="r">${fmtMoney(Number(l.price) || 0)}</td><td>${academyEsc(lcrew || hiredRows.map(x => x.label.split(' · ')[0]).join(', ') || '—')}</td><td class="r">${fmtMoney(lc.payout + hiredSum)}</td><td class="r">${fmtMoney(lc.film + lc.supplies)}</td><td></td></tr>`;
     }).join('') : '';
     return `<tr class="${bad ? 'qe-bad' : ''} ${openProject ? 'qe-open' : ''}">
       <td>${qlines.length ? `<button type="button" class="qe-link qe-caret" onclick="quickEntryToggleProject('${o.id}')">${openProject ? '▾' : '▸'}</button>` : ''}</td>

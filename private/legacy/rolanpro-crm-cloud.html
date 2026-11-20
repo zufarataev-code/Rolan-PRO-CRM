@@ -26068,7 +26068,7 @@ function installerHistoricalAnalyticsRows(o, userId) {
   if (o?.quickProjectImportedCompleted !== true || typeof historicalProjectInstallerAccruals !== 'function') return [];
   const user = getUser(userId);
   const accruals = historicalProjectInstallerAccruals(o, user);
-  if (!accruals.length) return [];
+  if (!accruals?.length) return [];
   const byDate = new Map();
   const rowFor = value => {
     const date = String(value || o.installationDoneAt || o.installationAt || o.createdAt || '');
@@ -26077,7 +26077,7 @@ function installerHistoricalAnalyticsRows(o, userId) {
     return byDate.get(key);
   };
   projectLines(o).filter(line => (line.installerIds || []).includes(userId)).forEach(line => {
-    const completed = (line.sources || []).map(source => projectQuickDateValue(source?.endDate)).filter(Boolean).sort().at(-1);
+    const completed = (line.sources || []).map(source => projectQuickDateValue(source?.endDate) || projectQuickDateValue(source?.startDate)).filter(Boolean).sort().at(-1);
     const row = rowFor(completed ? `${completed}T12:00:00.000Z` : line.installationAt);
     const crew = Math.max(1, new Set((line.installerIds || []).filter(Boolean)).size);
     row.team = Math.max(row.team, crew);
@@ -28552,8 +28552,18 @@ function projectServiceGroups(o) {
 }
 function projectServiceAssignment(o, group) {
   const saved = (o.serviceSchedules || []).find(item => item.id === group.id);
-  if (saved) return saved;
   const line = group.lines[0];
+  // Imported work records the actual crew on the service, including an empty
+  // crew for contractor-only work. Older imports may only have a schedule.
+  if ((o.quickEntry || o.quickProjectImportedCompleted) && Array.isArray(line?.installerIds)) {
+    return {
+      id: group.id,
+      installerIds: line.installerIds,
+      installationAt: line.startDate ? `${line.startDate}T09:00:00` : saved?.installationAt || o.installationAt || '',
+      endsAt: line.endDate ? `${line.endDate}T17:00:00` : saved?.endsAt || '',
+    };
+  }
+  if (saved) return saved;
   // Once independent scheduling exists, new services remain unassigned.
   if (o.serviceSchedules?.length) return { id: group.id, installerIds: [], installationAt: '' };
   return {
@@ -30675,7 +30685,7 @@ function renderQuickProjectEntry(o) {
     <div class="font-bold text-sm">${academyEsc(primaryServiceInfo(line.serviceType)?.title || line.label || 'Услуга')}</div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
       <div><label>Начало работ</label><input type="date" value="${projectQuickDateValue(line.startDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','startDate',this.value)"></div>
-      <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"></div>
+      <div><label>Окончание работ</label><input type="date" min="${projectQuickDateValue(line.startDate)}" value="${projectQuickDateValue(line.endDate)}" onchange="projectEstimateUpdateQuickLine('${o.id}','${line.id}','endDate',this.value)"><div class="text-xs text-gray-500">Дата начисления сдельной зарплаты</div></div>
     </div>
     <div class="mt-2"><label>Исполнители старого проекта</label><div class="project-estimate-assignees">${availableInstallers.map(user => `<label class="project-estimate-assignee"><input type="checkbox" ${(line.installerIds || []).includes(user.id) ? 'checked' : ''} onchange="projectQuickToggleInstaller('${o.id}','${line.id}','${user.id}',this.checked)">${teamAvatarHtml(user,24)}<span>${academyEsc(user.name)}</span></label>`).join('') || '<span class="text-xs text-gray-500">Нет специалистов по установке</span>'}</div></div>
     ${includedLines.length ? `<div class="mt-2"><label>Входит в пакет — фактическое количество</label><div class="space-y-1">${includedLines.map(item => `<div class="flex gap-2 items-center"><span class="text-sm" style="flex:1">${academyEsc(item.label || serviceOffering(item.offeringId)?.name || 'Включённая работа')}</span><input aria-label="Фактическое количество включённой работы" type="number" min="0" step="0.01" value="${Number(item.qty || 0)}" onchange="projectQuickUpdateIncludedQty('${o.id}','${item.id}',this.value)" style="width:100px"><span class="text-xs text-gray-500">${academyEsc(serviceOfferingUnitShort(item))}</span></div>`).join('')}</div><div class="text-xs text-gray-500 mt-1">Например, площадь плёнки не равна погонным футам силикона. Укажите реальный объём выполненной работы.</div></div>` : ''}
