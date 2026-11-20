@@ -31,27 +31,36 @@ export async function enqueueConvertedLead(tx: Prisma.TransactionClient, input: 
 }
 
 async function enqueue(tx: Prisma.TransactionClient, input: { leadId: string; eventName: string; eventId: string; occurredAt: Date; conversionEventId?: string; value?: number; currency?: string }) {
-  const lead = await tx.lead.findUnique({ where: { lead_id: input.leadId }, include: { consent_snapshots: { where: { effective_at: { lte: input.occurredAt } }, orderBy: [{ effective_at: "desc" }, { created_at: "desc" }], take: 1 } } });
+  const lead = await tx.lead.findUnique({ where: { lead_id: input.leadId }, include: { acquisition_touchpoints: {
+    where: { meta_fbclid: { not: null }, captured_at: { lte: input.occurredAt } },
+    orderBy: [{ captured_at: "asc" }, { acquisition_touchpoint_id: "asc" }], take: 1, select: { meta_fbclid: true, captured_at: true },
+  }, consent_snapshots: { where: { effective_at: { lte: input.occurredAt } }, orderBy: [{ effective_at: "desc" }, { created_at: "desc" }], take: 1 } } });
   if (!lead) return null;
   if (input.eventName !== "Lead" && lead.external_source === "meta_lead_ads") {
     const receipt = await tx.activityLog.findFirst({ where: { entity_type: "lead", entity_id: lead.lead_id, action_key: "integration.meta_lead_ads.received" }, orderBy: { created_at: "asc" }, select: { created_at: true } });
     if (receipt) await enqueue(tx, { leadId: lead.lead_id, eventName: "Lead", eventId: `crm-lead-${lead.lead_id}-Lead`, occurredAt: receipt.created_at });
   }
   const consent = lead.consent_snapshots[0];
-  const source = lead.external_source === "rolanpro.com" && lead.source === "website"
+  const signedWebsite = lead.external_source === "rolanpro.com" && lead.source === "website";
+  const source = signedWebsite
     ? "website" : lead.external_source || (lead.source === "meta_lead_ads" ? null : lead.source);
   const { payload, reason } = buildMetaCrmPayload({
+    websiteClick: signedWebsite ? lead.acquisition_touchpoints[0] : undefined,
     source, nativeLeadId: lead.external_submission_id, email: lead.email, phone: lead.phone,
     consent: consent?.ad_personalization === "DENIED" ? "DENIED" : consent?.ad_user_data ?? "UNKNOWN", eventName: input.eventName,
     eventId: input.eventId, occurredAt: input.occurredAt, generatedAt: lead.created_at, value: input.value, currency: input.currency,
   });
-  return tx.metaCapiOutbox.upsert({
-    where: { event_id: input.eventId }, update: {},
-    create: {
+  // An empty-update Prisma upsert can race a concurrent insert of the same milestone.
+  const inserted = await tx.metaCapiOutbox.createMany({
+    skipDuplicates: true,
+    data: {
       lead_id: lead.lead_id, conversion_event_id: input.conversionEventId, event_id: input.eventId,
       event_name: input.eventName, occurred_at: input.occurredAt,
       ...(payload ? { payload_snapshot: payload as unknown as Prisma.InputJsonValue } : {}),
       processing_status: payload ? "queued" : "suppressed", last_error_code: reason,
     },
   });
+  // Reconciliation revisits existing proposals every cycle. Only a new receipt can qualify.
+  if (inserted.count && input.eventName === "ProposalSent") await enqueueQualifiedLead(tx, input);
+  return tx.metaCapiOutbox.findUniqueOrThrow({ where: { event_id: input.eventId } });
 }

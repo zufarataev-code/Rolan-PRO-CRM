@@ -24317,29 +24317,16 @@ function renderLeadsView() {
   `;
 }
 function leadDeliveryHtml(delivery) {
-  const statusLabels = {
-    queued: 'В очереди', retry: 'Ожидает повтора',
-    suppressed: 'Отправка пропущена', needs_operator_action: 'Требуется проверка',
-  };
-  const providerLabels = {
-    facebook: { processing: 'Обрабатывается CRM', accepted: 'Принято Facebook', test_accepted: 'Только тест · принято Facebook' },
-    google: {
-      not_queued: 'Событие записано, отсутствует в очереди отправки', submitting: 'Идёт отправка',
-      submitted: 'Отправлено', submitted_without_request_id: 'Отправлено, нет ID для проверки результата',
-      confirmed: 'Обработка подтверждена Google', validated: 'Только тест · проверено Google',
-    },
-  };
   const eventLabels = {
     qualified_lead: 'QualifiedLead', converted_lead: 'ConvertedLead',
     RETRACTION: 'Отзыв конверсии', RESTATEMENT: 'Корректировка суммы',
   };
   return '<dl class="text-xs text-gray-600 mt-2" style="overflow-wrap:anywhere">' + [['facebook', 'Facebook CAPI'], ['google', 'Google Ads']].map(([key, name]) => {
     const events = delivery?.[key];
-    const labels = { ...statusLabels, ...providerLabels[key] };
     const lines = Array.isArray(events) && events.length ? events.map(event => {
-      const label = Object.hasOwn(labels, event.processing_status) ? labels[event.processing_status] : 'Статус неизвестен';
+      const label = event.status_label || 'Статус неизвестен';
       const eventName = Object.hasOwn(eventLabels, event.event_name) ? eventLabels[event.event_name] : event.event_name;
-      return `<dd>${academyEsc(eventName)} · <strong>${label}</strong> · ${event.processing_status === 'not_queued' ? 'записано' : 'обновлено'} ${academyEsc(fmtDateTime(event.updated_at))}</dd>`;
+      return `<dd>${academyEsc(eventName)} · <strong>${academyEsc(label)}</strong> · ${event.processing_status === 'not_queued' ? 'записано' : 'обновлено'} ${academyEsc(fmtDateTime(event.updated_at))}</dd>`;
     }).join('') : `<dd>${Array.isArray(events) ? 'Нет записи об отправке' : 'Нет данных CRM'}</dd>`;
     return `<div class="mt-1"><dt class="font-semibold">${name}</dt>${lines}</div>`;
   }).join('') + '</dl>';

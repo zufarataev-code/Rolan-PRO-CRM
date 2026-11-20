@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { deliveryLabel } from "../sales/lead-delivery";
 import { LEAD_STAGES } from "../sales/lead-stages";
 import { OPEN_LEAD_STATUS_CODES } from "../sales/lead-claim";
 
@@ -32,7 +33,7 @@ function fixture() {
 
 test("inbox shows each provider's recorded state and distinguishes validation, live receipts, and missing data", () => {
   const { context, rows } = fixture();
-  const row = (event_name: string, processing_status: string) => ({ event_name, processing_status, updated_at: "2026-11-17T12:00:00Z" });
+  const row = (event_name: string, processing_status: string) => ({ event_name, processing_status, status_label: deliveryLabel(event_name === "QualifiedLead" || event_name === "<Lead>" ? "facebook" : "google", processing_status), updated_at: "2026-11-17T12:00:00Z" });
   Object.assign(rows[0], { delivery: {
     facebook: [row("<Lead>", "test_accepted"), row("QualifiedLead", "queued")],
     google: [row("qualified_lead", "submitted"), row("converted_lead", "confirmed"), row("RESTATEMENT", "validated")],
@@ -93,4 +94,12 @@ test("the inbox action retries an interrupted saved-project conversion without m
   assert.deepEqual(actions, ["complete", "open:saved-project"]);
   assert.equal(context.db.orders.length, 1);
   assert.equal(context.canonicalLeads.length, 0);
+});
+
+test("delivery labels expose only recognized reasons and distinguish Messenger from other sources", () => {
+  assert.match(deliveryLabel("facebook", "suppressed", "unsupported_source", "facebook_messenger"), /Messenger/);
+  assert.doesNotMatch(deliveryLabel("facebook", "suppressed", "unsupported_source", "referral"), /Messenger/);
+  assert.match(deliveryLabel("google", "suppressed", "no_usable_identifiers"), /сопоставления/);
+  assert.match(deliveryLabel("google", "suppressed", "click_too_old"), /клика/);
+  assert.equal(deliveryLabel("google", "suppressed", "raw private error"), "Отправка пропущена · Причина не указана");
 });

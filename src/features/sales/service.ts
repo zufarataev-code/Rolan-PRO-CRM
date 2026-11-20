@@ -9,6 +9,8 @@ import { ROLE_CODES } from "@/lib/auth/constants";
 import { buildClientAccessWhere, buildDealAccessWhere, buildLeadScopeWhere } from "@/features/sales/access";
 import { websiteUpdateHistory } from "@/features/integrations/website-lead-updates";
 import { callrailHistory } from "@/features/integrations/callrail";
+import type { Prisma } from "@prisma/client";
+import { deliveryLabel } from "./lead-delivery";
 import { leadOutcomeStage } from "./lead-stages";
 
 function toNumber(value: { toString(): string } | null | undefined) {
@@ -568,7 +570,7 @@ export async function listConsultantOptions() {
 }
 
 export async function listLeads(managerId?: string) {
-  const uploadFields = { processing_status: true, updated_at: true, request_id: true } as const;
+  const uploadFields = { processing_status: true, updated_at: true, request_id: true, last_error: true } as const;
   const leads = await prisma.lead.findMany({
     where: managerId ? buildLeadScopeWhere(managerId) : undefined,
     include: {
@@ -584,7 +586,7 @@ export async function listLeads(managerId?: string) {
         },
       },
       meta_capi_outboxes: {
-        select: { event_name: true, processing_status: true, updated_at: true },
+        select: { event_name: true, processing_status: true, updated_at: true, last_error_code: true },
         orderBy: [{ updated_at: "desc" }, { event_id: "asc" }],
       },
       city: {
@@ -620,7 +622,9 @@ export async function listLeads(managerId?: string) {
     ]).sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime() || a.event_name.localeCompare(b.event_name));
     return {
       ...serializeLead(lead),
-      delivery: { google, facebook: lead.meta_capi_outboxes },
+      delivery: { google, facebook: lead.meta_capi_outboxes.map(({ last_error_code, ...receipt }) => ({
+        ...receipt, status_label: deliveryLabel("facebook", receipt.processing_status, last_error_code, lead.external_source || lead.source),
+      })) },
       outcome_stage: leadOutcomeStage(lead.conversion_events.filter(event => event.event_type === "converted_lead")),
       stage_history: changes.filter(change => change.entity_id === lead.lead_id).slice(0, 10).map(change => ({ occurred_at: change.created_at, ...change.metadata as Record<string, unknown> })),
       website_updates: history.get(lead.lead_id) || [],
@@ -629,13 +633,15 @@ export async function listLeads(managerId?: string) {
   });
 }
 
-function googleLeadDeliveryRows(event_name: string, createdAt: Date, uploads: { processing_status: string; updated_at: Date; request_id: string | null }[]) {
-  if (!uploads.length) return [{ event_name, processing_status: "not_queued", updated_at: createdAt }];
-  return uploads.map(({ processing_status, updated_at, request_id }) => ({
-    event_name, updated_at,
-    processing_status: processing_status === "submitted" && !request_id && (event_name === "qualified_lead" || event_name === "converted_lead")
-      ? "submitted_without_request_id" : processing_status,
-  }));
+function googleLeadDeliveryRows(event_name: string, createdAt: Date, uploads: { processing_status: string; updated_at: Date; request_id: string | null; last_error: Prisma.JsonValue }[]) {
+  if (!uploads.length) return [{ event_name, processing_status: "not_queued", status_label: deliveryLabel("google", "not_queued"), updated_at: createdAt }];
+  return uploads.map(upload => {
+    const status = upload.processing_status === "submitted" && !upload.request_id && (event_name === "qualified_lead" || event_name === "converted_lead")
+      ? "submitted_without_request_id" : upload.processing_status;
+    const error = upload.last_error;
+    const code = error && typeof error === "object" && !Array.isArray(error) ? error.code : null;
+    return { event_name, updated_at: upload.updated_at, processing_status: status, status_label: deliveryLabel("google", status, code) };
+  });
 }
 
 export async function listClients(managerId?: string) {

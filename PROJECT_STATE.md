@@ -15,6 +15,13 @@ This file is the canonical live handoff for every device, chat, agent, and contr
   - не сделано здесь: сборка в GitHub Actions вместо сервера (пункт 3 issue #541) — следующим PR.
 - Verification: full unit suite **1208/1208** (new: `watch-production-supervision.test.ts` drives the real script functions — restart with backoff, restart of an unresponsive process, 503 without restart, supervision during a build; `health.test.ts`; public-path test), `tsc --noEmit` clean, `bash -n` clean, production build clean (`/api/health` is a dynamic route), `git diff --check` clean.
 - Safety: на сервере ничего не менялось; изменения вступают в силу после слияния обычным деплоем (сторож перезапускает сам себя при изменении скрипта).
+## 2026-11-19 — Facebook qualification and website click matching
+
+- Branch `codex/lead-qualification-matching`. A new explicit qualification or first sent proposal records one Facebook qualification per lead. Both lead screens explain skipped deliveries. Genuine, consented website clicks can match subsequent stage events.
+- CRM PR #572. Code head `760a554` passed 1,260 unit tests, typecheck, production build, clean migration, schema drift check and 25 disposable PostgreSQL end-to-end tests. Both lead screens showed the consent reason at 390 and 1440 px. Independent Claude re-review found no release blocker.
+- Production website MR !1 in `rolanpro/rolan-pro-production` is merged. The live signed sender matched the file on main at `45a1e64`. Rollback is on the production host at `/home/runcloud/rolanpro-site-crm-click.hZZwgrmU/rollback.sh`.
+- CRM releases from main after both CI jobs pass. Verify the active release, the existing Messenger skip reason and the live CAPI queue. A new Meta qualification or click match requires genuine traffic.
+
 ## 2026-11-18 — `/crm/calendar`: «Календарь» в новом шаблоне (Claude)
 
 - Owner, 2026-11-18 01:21: «Давай» — на «следующий по плану — календарь». Прямое поручение владельца; проверка Codex — в PR.

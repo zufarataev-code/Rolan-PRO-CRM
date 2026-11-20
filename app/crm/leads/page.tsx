@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
+import { deliveryEventLabel } from "@/features/sales/lead-delivery";
 import { dateTime } from "@/features/crm-shell/format";
 import { filterLeads, leadFilters, leadRows, OPEN_LEAD_STATUSES, REASON_STAGES, stageChoices, type ApiLead, type LeadRow, type LeadStage } from "@/features/crm-shell/leads";
 import type { CrmLeadLinks } from "@/features/crm-shell/types";
@@ -129,6 +130,20 @@ function LeadCard({ row, stages, link, onChanged, onConvert }: { row: LeadRow; s
           {row.company || row.person ? <div className="mt-1 text-sm">{[row.company, row.person].filter(Boolean).join(" · ")}</div> : null}
           {row.message ? <p className="bg-muted mt-2 rounded-lg p-2.5 text-sm whitespace-pre-wrap">{row.message}</p> : null}
           {row.beingConverted ? <p className="text-warning mt-2 text-xs font-medium">Проект по заявке уже оформляется</p> : null}
+          <details className="text-muted-foreground mt-2 text-xs">
+            <summary className="cursor-pointer">Отправка в Facebook и Google</summary>
+            <dl className="mt-1 grid gap-1 break-words">
+              {(["facebook", "google"] as const).map(provider => {
+                const receipts = row.delivery?.[provider];
+                return <div key={provider}>
+                  <dt className="font-semibold">{provider === "facebook" ? "Facebook CAPI" : "Google Ads"}</dt>
+                  {receipts?.length ? receipts.map((receipt, index) => (
+                    <dd key={index}>{deliveryEventLabel(receipt.event_name)} · {receipt.status_label} · {receipt.processing_status === "not_queued" ? "записано" : "обновлено"} {dateTime(receipt.updated_at)}</dd>
+                  )) : <dd>{receipts ? "Нет записи об отправке" : "Нет данных CRM"}</dd>}
+                </div>;
+              })}
+            </dl>
+          </details>
           {row.history.length ? (
             <details className="text-muted-foreground mt-2 text-xs">
               <summary className="cursor-pointer">История этапов · {row.history.length}</summary>
