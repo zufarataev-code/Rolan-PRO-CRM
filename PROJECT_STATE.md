@@ -2,6 +2,13 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-20 — Выполненные проекты: зарплата по дате услуги
+
+- Branch `codex/historical-service-payroll-date`, PR [#573](https://github.com/zufarataev-code/Rolan-PRO-CRM/pull/573). Дата окончания каждой услуги определяет расчётный период сдельной зарплаты её исполнителей. Для архивной услуги без окончания используется сохранённая дата начала. В формах есть подпись у даты, в раскрытом списке показана дата окончания услуги.
+- Фактические исполнители услуги приоритетнее сохранённого расписания. Услуга, выполненная только подрядчиком, не начисляется общей бригаде. Фикс за проект, замер и доплаты за выезды следуют действующим правилам.
+- Проверка: 1261 тест, TypeScript, production build и `git diff --check` прошли. Форма с тестовыми данными в Chromium на 390, 820 и 1440 px показывает отдельные даты, изменение одной строки не меняет другую.
+- Следующий шаг: пройти CI и перекрёстную проверку PR перед релизом из `main`.
+
 ## 2026-11-19 — Facebook qualification and website click matching
 
 - Branch `codex/lead-qualification-matching`. A new explicit qualification or first sent proposal records one Facebook qualification per lead. Both lead screens explain skipped deliveries. Genuine, consented website clicks can match subsequent stage events.
