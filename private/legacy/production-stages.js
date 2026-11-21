@@ -3991,7 +3991,8 @@ function quickEntrySetLine(i, field, value) {
   }
   // Owner, 2026-11-21: «написал за электрику 1500… сумма не суммировалась» — у услуги
   // без размеров пустое количество при введённой сумме значит одну единицу.
-  if (['offering', 'price'].includes(field) && !(Number(line.qty) > 0)) {
+  // Подставляем 1 только в пустое поле: явный 0 или минус остаются ошибкой.
+  if (['offering', 'price'].includes(field) && String(line.qty ?? '').trim() === '') {
     const offering = serviceOffering(line.offering);
     if (offering && !serviceOfferingNeedsSizes(offering) && (field === 'offering' || Number(line.price) > 0)) line.qty = '1';
   }

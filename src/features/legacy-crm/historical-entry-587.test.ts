@@ -45,6 +45,7 @@ test('a work-only service with a price and an empty quantity counts as 1, a film
     assert.match(fn(stages, name), /const qty = quickEntryEffectiveQty\(line, offering\)/, `${name} uses the same quantity rule as the preview`);
   }
   assert.match(fn(stages, 'quickEntrySetLine'), /line\.qty = '1'/, 'picking a work-only service fills quantity 1');
+  assert.match(fn(stages, 'quickEntrySetLine'), /\['offering', 'price'\]\.includes\(field\) && String\(line\.qty \?\? ''\)\.trim\(\) === ''/, 'only a blank quantity is auto-filled; an explicit 0 stays an error');
 });
 
 test('the summary names a service that is left out of the total and splits the reserve into tax and the month fixed share', () => {
