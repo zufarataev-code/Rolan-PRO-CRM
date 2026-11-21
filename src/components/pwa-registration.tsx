@@ -20,6 +20,8 @@ function isStandalone() {
 function isAuthenticatedWorkspace(pathname: string) {
   return (
     pathname === "/legacy-crm" ||
+    pathname === "/crm" ||
+    pathname.startsWith("/crm/") ||
     pathname.startsWith("/owner") ||
     pathname.startsWith("/manager") ||
     pathname.startsWith("/survey") ||

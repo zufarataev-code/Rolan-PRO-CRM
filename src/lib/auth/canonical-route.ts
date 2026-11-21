@@ -2,8 +2,8 @@ export const CRM_ROLE_ROUTES = {
   consultant: "/legacy-crm",
   installer: "/legacy-crm",
   installerJobs: "/legacy-crm",
-  owner: "/legacy-crm",
-  manager: "/legacy-crm",
+  owner: "/crm",
+  manager: "/crm",
 } as const;
 
 export function notificationPathForRoles(roles: string[]) {
@@ -13,8 +13,8 @@ export function notificationPathForRoles(roles: string[]) {
 
 /**
  * Старые и экспериментальные role-specific адреса остаются только
- * совместимыми входами. Пользовательский интерфейс CRM для всех ролей
- * открывается только в одном пространстве /legacy-crm.
+ * совместимыми входами: владелец и менеджер попадают в новый интерфейс /crm,
+ * полевые роли — в рабочую CRM /legacy-crm.
  */
 export function canonicalRolePath(pathname: string) {
   if (pathname === "/owner" || pathname.startsWith("/owner/")) {
