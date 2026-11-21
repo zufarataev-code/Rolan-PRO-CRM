@@ -29213,7 +29213,9 @@ function projectCardExpandedLine(o, lines = projectLines(o)) {
   const picked = selection[o.id] && lines.find(line => line.key === selection[o.id]);
   if (picked) return picked;
   const main = lines.filter(line => line.kind !== 'included');
-  return main.length === 1 ? main[0] : null;
+  // A service still waiting for its measurement is a row on the card too.
+  const pending = typeof projectPendingSizedServices === 'function' ? projectPendingSizedServices(o).length : 0;
+  return main.length === 1 && !pending ? main[0] : null;
 }
 
 function projectCardChosenLine(o, lines = projectLines(o)) {

@@ -80,6 +80,9 @@ test('with two or more services every row starts collapsed; one service opens st
   current = one;
   context.projectCardSelectLine('o', 'a');
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'a tap closes a service that opened by itself');
+  context.state.projectCardSelection = {};
+  context.projectPendingSizedServices = () => [{ id: 'waiting-for-measurement' }];
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'one service plus one waiting for its measurement: nothing opens');
   const render = fn(stages, 'renderProjectCardServices');
   assert.match(render, /const chosen = projectCardExpandedLine\(o, lines\);/);
   assert.match(render, /\$\{selected \? 'Свернуть ‹' :/);
