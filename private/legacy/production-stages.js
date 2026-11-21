@@ -4026,13 +4026,19 @@ function quickEntrySetProjectDate(edge, value) {
   const oldStart = starts[0] || '', oldEnd = ends[ends.length - 1] || '';
   const single = lines.length === 1;
   if (edge === 'start') {
+    // Двигаем услуги, которые начинали проект, и все, что новая граница
+    // «перешагнула» — иначе началом проекта стала бы другая услуга.
     lines.forEach(l => {
-      if (!single && projectQuickDateValue(l.date) !== oldStart) return;
+      const start = projectQuickDateValue(l.date);
+      if (!single && start !== oldStart && !(start && start < next)) return;
       l.date = next;
       if (!l.endDate || projectQuickDateValue(l.endDate) < next) l.endDate = next;
     });
   } else if (edge === 'end') {
-    const moved = lines.filter(l => single || projectQuickDateValue(l.endDate || l.date) === oldEnd);
+    const moved = lines.filter(l => {
+      const end = projectQuickDateValue(l.endDate || l.date);
+      return single || end === oldEnd || (end && end > next);
+    });
     const tooEarly = moved.find(l => projectQuickDateValue(l.date) > next);
     if (tooEarly) {
       alert(`Дата завершения раньше начала услуги ${lines.indexOf(tooEarly) + 1}. Сначала поменяйте её начало.`);
@@ -4089,7 +4095,7 @@ function quickEntryLineCalc(line, complexity = quickEntryState().form.complexity
   const offering = serviceOffering(offeringId);
   const sized = offering ? serviceOfferingNeedsSizes(offering) : true;
   const catalogId = line.catalogId || (line.film && line.film !== '__manual' ? line.film : '') || '';
-  const qty = Number(line.qty) || 0;
+  const qty = quickEntryEffectiveQty(line, offering);
   const price = Number(line.price) || 0;
   const installers = [...new Set(line.installerIds || line.installers || [])].filter(Boolean);
   const ref = { offeringId, catalogId, serviceType: line.serviceType || line.dir, unit: sized ? 'sqft' : serviceOfferingUnit(offering) };
@@ -4477,12 +4483,14 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     const persistedDraft = cloud ? cloneCloudWorkspaceValue(cloudBaseSnapshot?.orders?.find(item => item.id === o.id) || null) : null;
     closeQuickProjectAsCompletedWith(o, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
     if (cloud && !await cloudPersistConfirmed()) {
-      const base = cloneCloudWorkspaceValue(cloudBaseSnapshot);
-      if (base && persistedDraft) {
-        // Сервер не принял закрытие: возвращаем сохранённую версию, чтобы
-        // склад, зарплата и оплата не остались проведёнными только на устройстве.
-        db = base;
-        localStorage.setItem('rolanpro_crm', JSON.stringify(db));
+      if (persistedDraft) {
+        // Сервер не принял закрытие: возвращаем только этот проект к
+        // сохранённому черновику. Остальные правки, сделанные за это время,
+        // не трогаем.
+        const index = db.orders.findIndex(item => item.id === o.id);
+        if (index >= 0) db.orders[index] = persistedDraft;
+        else db.orders.push(persistedDraft);
+        save();
       }
       s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
       s.openProject = o.id;

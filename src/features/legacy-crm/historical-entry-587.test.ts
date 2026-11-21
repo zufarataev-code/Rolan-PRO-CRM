@@ -37,6 +37,7 @@ test('a work-only service with a price and an empty quantity counts as 1, a film
     electric: 1, electricNoPrice: 0, electricTwo: 2, film: 0,
     filmReason: 'укажите sq ft', electricReason: '', emptyReason: '', backwards: 'окончание раньше начала',
   });
+  assert.match(fn(stages, 'quickEntryLineCalc'), /const qty = quickEntryEffectiveQty\(line, offering\);/, 'the per-service margin uses the same quantity');
   for (const name of ['quickEntryPreviewOrder', 'quickEntryCommit']) {
     assert.match(fn(stages, name), /const qty = quickEntryEffectiveQty\(line, offering\)/, `${name} uses the same quantity rule as the preview`);
   }
@@ -77,6 +78,20 @@ test('changing the project start or end moves the matching service dates, and an
     { date: '2026-10-20', endDate: '2026-10-21' },
     { date: '2026-10-25', endDate: '2026-11-02' },
   ], 'only the service that ended the project moves');
+  assert.deepEqual(run([
+    { date: '2026-01-01', endDate: '2026-01-02' },
+    { date: '2026-01-05', endDate: '2026-01-20' },
+  ], 'start', '2026-01-10').lines, [
+    { date: '2026-01-10', endDate: '2026-01-10' },
+    { date: '2026-01-10', endDate: '2026-01-20' },
+  ], 'a later start moves every service it crosses, so the chosen start stays the project start');
+  assert.deepEqual(run([
+    { date: '2026-01-01', endDate: '2026-01-12' },
+    { date: '2026-01-03', endDate: '2026-01-20' },
+  ], 'end', '2026-01-10').lines, [
+    { date: '2026-01-01', endDate: '2026-01-10' },
+    { date: '2026-01-03', endDate: '2026-01-10' },
+  ], 'an earlier end moves every service it crosses');
   const refused = run([{ date: '2026-10-28', endDate: '2026-10-29' }], 'end', '2026-10-20');
   assert.deepEqual(refused.lines, [{ date: '2026-10-28', endDate: '2026-10-29' }]);
   assert.equal(refused.alerts.length, 1);
@@ -111,12 +126,13 @@ test('the owner close first saves the draft on the server, then closes it in a s
     commit.indexOf('save();\n    if (cloud && !await cloudPersistConfirmed())'),
     commit.indexOf('closeQuickProjectAsCompletedWith(o, { requestedPaid: paid, paidDate: lastDate, method'),
     commit.lastIndexOf('if (cloud && !await cloudPersistConfirmed())'),
-    commit.indexOf('db = base;'),
+    commit.indexOf('db.orders[index] = persistedDraft;'),
   ];
   assert.ok(order.every(i => i > 0), 'all four steps are present');
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'draft save → close → confirmed close save → rollback');
   assert.match(commit, /черновик ещё не сохранён на сервере, проект не закрыт/);
   assert.match(commit, /закрыть проект не удалось/);
+  assert.doesNotMatch(commit, /db = cloneCloudWorkspaceValue\(cloudBaseSnapshot\)|db = base;/, 'a refused close never replaces the whole workspace');
   assert.match(commit, /finally \{\n\s*s\.committing = false;/);
   assert.match(fn(stages, 'cloudPersist'), /Обновите страницу, чтобы вернуться к сохранённой версии/);
 });
