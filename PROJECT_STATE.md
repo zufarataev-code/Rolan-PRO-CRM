@@ -2,6 +2,20 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-21 — #587: перенос выполненного проекта в одно окно (Claude)
+
+- Owner, 2026-11-21 07:05: «Что это снова за хуйня» (проект Christus R-261030-141 не сохранился); 07:11: «Да, пиши сам» — исправление пишет Claude, проверяет Codex, мерджит владелец. Codex Builder дважды не смог применить правку.
+- Branch `claude/project-thread-6klayb`, based on `origin/main` `616b7ec`. Только `private/legacy/production-stages.js` и тесты; сервер не менялся.
+- Закрытие владельцем: сначала подтверждённо сохраняется черновик (`cloudPersistConfirmed`), потом отдельным сохранением проект закрывается. Если сервер не принял закрытие — возвращается сохранённая версия, проект остаётся черновиком в «Не завершён перенос». Повторный клик во время сохранения игнорируется.
+- Новый клиент: под именем всегда видна кнопка «+ Создать нового клиента «имя»». Если похожих клиентов нет, карточка создаётся без лишнего клика; если есть — CRM останавливает и просит выбрать.
+- «удалить» у черновика открывает архив проекта (функции `quickEntryRemove` раньше не было).
+- Пустое количество у услуги без площади (электрика) считается 1; поле подписано «Кол-во, …». Услуга, которая не попала в сумму, называется в итоге с причиной.
+- Итог: «Налог (резерв)», «Прибыль проекта», отдельно «Доля постоянных расходов месяца» с основанием; пока в месяце меньше трёх проектов, эта цифра бледная и помечена как неточная.
+- Даты проекта можно менять: начало и конец сдвигают даты соответствующих услуг.
+- Verification: `historical-entry-587.test.ts` 7/7, весь `npm test` и `npm run typecheck` зелёные.
+- Не проверено до выкладки: закрытие на production (требует настоящего сохранения на сервере).
+- Next action: ревью Codex, мердж владельцем, затем владелец повторно вносит Christus.
+
 ## 2026-11-19 — Facebook qualification and website click matching
 
 - Branch `codex/lead-qualification-matching`. A new explicit qualification or first sent proposal records one Facebook qualification per lead. Both lead screens explain skipped deliveries. Genuine, consented website clicks can match subsequent stage events.

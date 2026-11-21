@@ -317,7 +317,7 @@ test('manual project total is allocated into the service rows instead of becomin
     currentUser: () => ({ role: 'owner' }),
     alert: () => undefined,
   });
-  vm.runInContext(`${fn(stages, 'quickEntryLineBasePrice')}; ${fn(stages, 'quickEntryDistributeTotal')}; result = quickEntryDistributeTotal(form, 2000);`, context);
+  vm.runInContext(`${fn(stages, 'quickEntryEffectiveQty')}; ${fn(stages, 'quickEntryLineBasePrice')}; ${fn(stages, 'quickEntryDistributeTotal')}; result = quickEntryDistributeTotal(form, 2000);`, context);
   assert.equal(context.result, true);
   assert.equal(form.pricingMode, 'manual');
   assert.equal(form.manualTotal, '2000');
