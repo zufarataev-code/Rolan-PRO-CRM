@@ -45128,7 +45128,9 @@ async function cloudPersistConfirmed() {
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = null;
   for (let attempt=0;attempt<50&&cloudSaveInFlight;attempt++) await new Promise(resolve=>setTimeout(resolve,100));
-  if (cloudSaveInFlight) return false;
+  // The debounce timer was cleared above: keep the edit queued so the running
+  // save is followed by one that includes it (#588).
+  if (cloudSaveInFlight) { cloudSaveQueued = true; return false; }
   try { return await cloudPersist({throwOnFailure:true}); }
   catch (error) { return false; }
 }
