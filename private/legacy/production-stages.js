@@ -546,7 +546,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     const icon = typeof rpDirIcon === 'function' ? rpDirIcon(key, 18) : service.icon;
     if (!direction) {
       if (!(money && edit)) return '';
-      missing.push(`<button type="button" class="project-cashier-direction add" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(key)}','services')" aria-label="Добавить направление ${academyEsc(service.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || service.title)}</b><span>+ добавить</span></span></button>`);
+      missing.push(key);
       return '';
     }
     const count = direction.lines.length + direction.pending.length;
@@ -556,10 +556,17 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     return `<button type="button" class="project-cashier-direction on ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')" aria-label="Открыть направление ${academyEsc(direction.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${windows ? ` · ${windows} ок.` : ''}${money && total ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey && included.length > 1 ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
   }).join('');
   const active = (tiles.match(/project-cashier-direction on/g) || []).length;
-  const adding = !active || state.projectCashierAdding?.[o.id] === true;
-  const addHtml = !missing.length ? '' : adding
-    ? `<div class="project-cashier-add-row">${missing.join('')}${active ? `<button type="button" class="project-cashier-add-cancel" onclick="projectCashierToggleAdd('${o.id}')">Отмена</button>` : ''}</div>`
-    : `<button type="button" class="project-cashier-add-toggle" onclick="projectCashierToggleAdd('${o.id}')">+ Добавить направление</button>`;
+  // #577 (Owner, 2026-11-21: «пять больших плиток не нужны, одна маленькая кнопка
+  // + услуга»): no tile grid for the missing directions. One small button opens the
+  // direction picker; a project made from a lead offers that lead's direction first.
+  const leadKey = !o.quickEntry && typeof orderLeadIntentServiceId === 'function' ? orderLeadIntentServiceId(o) : '';
+  const leadService = !active && money && edit && directionOrder.includes(leadKey) && !byKey.has(leadKey) ? ORDER_PRIMARY_SERVICES.find(item => item.id === leadKey) : null;
+  const leadSource = leadService && typeof sourceDisplayLabel === 'function' && o.leadSource ? sourceDisplayLabel(o.leadSource) : '';
+  const leadHtml = leadService ? `<button type="button" class="project-cashier-lead" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(leadKey)}','services')" aria-label="Добавить услуги направления ${academyEsc(leadService.title)}"><span class="project-cashier-lead-kicker">из заявки${leadSource ? ` · ${academyEsc(leadSource)}` : ''}</span><b>${academyEsc(leadService.title)}</b><span>+ выбрать услуги</span></button>` : '';
+  const addHtml = money && edit && missing.length
+    ? `<button type="button" class="project-cashier-add-toggle" onclick="openProjectDirectionPicker('${o.id}')">+ Направление / услуга</button>`
+    : '';
+  const emptyHtml = !active ? '<span class="project-cashier-empty">В проекте пока нет услуг</span>' : '';
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
@@ -572,7 +579,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // colour. This strip keeps only the facts and «+ Добавить направление».
   return `<div class="project-cashier-map ${active ? 'compact' : ''}" data-project-cashier-map>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(1)}</b> sq ft</span></div></div>
-    ${!active ? `<div class="project-cashier-directions four count-${Math.min(Math.max(missing.length, 1), 4)}">${missing.join('')}</div>` : addHtml}
+    ${leadHtml || emptyHtml || addHtml ? `<div class="project-cashier-add-row compact">${leadHtml}${emptyHtml}${addHtml}</div>` : ''}
   </div>`;
 }
 
@@ -2025,7 +2032,11 @@ function projectOrderShortFilm(oid, catalogId) {
 
 function projectFeedHtml(o, c, u, ctx) {
   setTimeout(() => premiumSyncClientProposal(o.id), 0);
-  const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
+  const { canManage, canSeeMoney, measureAction, recentTimeline } = ctx;
+  // #577 (Owner, 2026-11-21): an empty project needs no big «Следующий шаг: Добавить
+  // услуги проекта» bar — «Состав проекта» already says «В проекте пока нет услуг»
+  // and carries the one «+ Направление / услуга» button.
+  const primary = ctx.primary?.key === 'add_services' ? null : ctx.primary;
   const money = canSeeMoney;
   const lines = projectLines(o);
   const rooms = o.measurements?.rooms || [];
@@ -3956,6 +3967,11 @@ function quickEntryConfirmNewClient() {
  * услуга) пустое количество при сумме больше нуля — это одна единица; у услуги
  * по площади sq ft обязательны. Owner, 2026-11-21.
  */
+/** #577 (Owner, 2026-11-21): the quantity of a fixed-sum service reads «Кол-во, шт.», not «Кол-во, услуга». */
+function quickEntryQtyUnit(offering) {
+  const unit = offering ? serviceOfferingUnitShort(offering) : '';
+  return !unit || unit === 'услуга' ? 'шт.' : unit;
+}
 function quickEntryEffectiveQty(line, offering = serviceOffering(line?.offering)) {
   const qty = Math.max(0, Number(line?.qty) || 0);
   if (qty > 0) return qty;
@@ -4647,9 +4663,9 @@ function renderQuickEntry() {
           <label>Окончание<input id="qe-l${i}-endDate" type="date" min="${academyEsc(line.date)}" value="${academyEsc(line.endDate || line.date)}" onchange="quickEntrySetLine(${i}, 'endDate', this.value)"></label>
           <label>Направление<select id="qe-l${i}-dir" onchange="quickEntrySetLine(${i}, 'dir', this.value)">${dirs.map(d => opt(d.id, d.title, line.dir)).join('')}</select></label>
           <label>Услуга<select id="qe-l${i}-offering" onchange="quickEntrySetLine(${i}, 'offering', this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'В направлении нет услуг — добавьте в «Услуги и цены»'}</option>${offerings.map(item => opt(item.id, `${item.name} · ${fmtMoney(Number(item.pricePerSqft) || 0)}/${serviceOfferingNeedsSizes(item) ? 'sq ft' : serviceOfferingUnitShort(item)}`, line.offering)).join('')}</select></label>
-          ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'Материал не нужен — только работа'))}"></label>`}
+          ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'Материал не нужен, только работа'))}"></label>`}
           ${line.film === '__manual' ? `<label>Название плёнки<input id="qe-l${i}-filmManual" value="${academyEsc(line.filmManual)}" placeholder="например, 3M Prestige 70"></label>` : ''}
-          <label>Кол-во, ${sized ? 'sq ft' : academyEsc(serviceOfferingUnitShort(offering))}<input id="qe-l${i}-qty" type="number" min="0" step="0.1" value="${academyEsc(line.qty)}" placeholder="${sized ? '' : '1'}" onchange="quickEntrySetLine(${i}, 'qty', this.value)"></label>
+          <label>Кол-во, ${sized ? 'sq ft' : academyEsc(quickEntryQtyUnit(offering))}<input id="qe-l${i}-qty" type="number" min="0" step="0.1" value="${academyEsc(line.qty)}" placeholder="${sized ? '' : '1'}" onchange="quickEntrySetLine(${i}, 'qty', this.value)"></label>
           <label>Сумма клиенту, $<input id="qe-l${i}-price" type="number" min="0" step="1" value="${academyEsc(line.price)}" onchange="quickEntrySetLine(${i}, 'price', this.value)"><span class="qe-hint">${unitHint}</span></label>
         </div>
         <button type="button" class="qe-x" title="Убрать услугу" onclick="quickEntryRemoveLine(${i})">×</button>

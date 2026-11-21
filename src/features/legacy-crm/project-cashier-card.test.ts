@@ -9,25 +9,27 @@ const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-test('only the directions in the project are tiles; the rest hide behind «+ Добавить направление»', () => {
+test('only the directions in the project are cards; one small «+ Направление / услуга» opens the picker (#577)', () => {
   const map = fn(stages, 'projectCashierMapHtml');
   assert.match(map, /const directionOrder = \['smart_film', 'solar_film', 'protective_film', 'decorative_film', 'privacy_film'\];/);
   assert.match(map, /directionOrder\.map\(key =>/);
   assert.match(map, /class="project-cashier-direction on \$\{excluded \? 'excluded' : ''\}"/);
-  assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add tiles');
-  // Owner, 2026-10-28: «убрать ненужные окна по направлениям — лишний шум».
-  // Owner, 2026-11-10: «солнцезащитную компактно — архитектура не ложится»: a direction
-  // already in the project is NOT repeated as a tile above its own card; the strip keeps
-  // the facts and «+ Добавить направление», and the choice tiles appear only while adding.
+  assert.match(map, /if \(!\(money && edit\)\) return '';/, 'field roles see no add button');
+  // Owner, 2026-11-10: a direction already in the project is not repeated as a tile.
   assert.doesNotMatch(map, /count-\$\{Math\.min\(active, 4\)\}">\$\{tiles\}/, 'no duplicate tile above the direction card');
-  assert.match(map, /\$\{!active \? `<div class="project-cashier-directions four count-\$\{Math\.min\(Math\.max\(missing\.length, 1\), 4\)\}">\$\{missing\.join\(''\)\}<\/div>` : addHtml\}/);
-  assert.match(map, /missing\.push\(`<button type="button" class="project-cashier-direction add"/);
-  assert.match(map, /const adding = !active \|\| state\.projectCashierAdding\?\.\[o\.id\] === true;/, 'an empty project shows the choices at once');
-  assert.match(map, /\+ Добавить направление/);
+  // Owner, 2026-11-21 (#577): «пять больших плиток не нужны, одна маленькая кнопка».
+  assert.doesNotMatch(map, /project-cashier-directions four/, 'no five big direction tiles in an empty project');
+  assert.doesNotMatch(map, /class="project-cashier-direction add"/);
+  assert.match(map, /onclick="openProjectDirectionPicker\('\$\{o\.id\}'\)">\+ Направление \/ услуга<\/button>/);
+  assert.match(map, /<span class="project-cashier-empty">В проекте пока нет услуг<\/span>/);
+  // A project made from a lead offers the lead's direction first, «из заявки».
+  assert.match(map, /const leadKey = !o\.quickEntry && typeof orderLeadIntentServiceId === 'function' \? orderLeadIntentServiceId\(o\) : '';/);
+  assert.match(map, /directionOrder\.includes\(leadKey\) && !byKey\.has\(leadKey\)/);
+  assert.match(map, /class="project-cashier-lead" onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(leadKey\)\}','services'\)"/);
+  assert.match(map, /из заявки\$\{leadSource/);
   assert.match(fn(stages, 'projectCashierToggleAdd'), /state\.projectCashierAdding = /);
   assert.doesNotMatch(html, /\.project-cashier-direction\.add \{ grid-column: 1 \/ -1/, 'no full-width empty tiles');
-  assert.match(html, /\.project-cashier-directions\.four \{ grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(html, /\.project-cashier-directions\.four \.project-cashier-direction\.on \{ background:var\(--direction-color\); color:#fff; \}/);
+  assert.match(html, /\.project-cashier-add-row\.compact \{ display:flex;/);
 });
 
 test('rooms are tiles that open the one measurement window and say базовый or полный', () => {
