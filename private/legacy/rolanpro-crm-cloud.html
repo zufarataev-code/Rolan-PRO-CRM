@@ -1765,6 +1765,8 @@
   .project-cashier-lead > span:last-child { color:#167ca6; font-weight:800; }
   /* «Следующий шаг» stays one compact row, at most 44px. */
   .project-feed-next .order-action-card { max-height:44px; overflow:hidden; }
+  .project-service-progress-inline { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.35rem .9rem .55rem; font-size:.66rem; font-weight:700; color:#526176; }
+  .project-service-progress-inline .flex { margin-top:0 !important; }
   .project-feed-next .order-action-card > span:last-child { display:flex; align-items:baseline; gap:.5rem; min-width:0; }
   .project-feed-next .order-action-card .order-action-title { flex:none; white-space:nowrap; }
   .project-feed-next .order-action-card .order-action-sub { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -29196,8 +29198,24 @@ function projectCardCrewPicker(o, line) {
  * Production: specialist and date in the row too.
  */
 function projectCardSelectLine(oid, key) {
-  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: key };
+  // A second tap on the open service closes it again, including one that opened by itself.
+  const o = getOrder(oid);
+  const current = o ? projectCardExpandedLine(o)?.key : state.projectCardSelection?.[oid];
+  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: current === key ? '' : key };
+  preservePositionForNextRender();
   render();
+}
+
+function projectCardExpandedLine(o, lines = projectLines(o)) {
+  const selection = state.projectCardSelection || {};
+  // '' means the user closed the service; a key of a deleted service is stale and falls through.
+  if (selection[o.id] === '') return null;
+  const picked = selection[o.id] && lines.find(line => line.key === selection[o.id]);
+  if (picked) return picked;
+  const main = lines.filter(line => line.kind !== 'included');
+  // A service still waiting for its measurement is a row on the card too.
+  const pending = typeof projectPendingSizedServices === 'function' ? projectPendingSizedServices(o).length : 0;
+  return main.length === 1 && !pending ? main[0] : null;
 }
 
 function projectCardChosenLine(o, lines = projectLines(o)) {

@@ -113,6 +113,16 @@ function projectStagesHtml(o,key) {
 }
 
 
+// #577 follow-up (Codex review): a collapsed staged service still shows each stage
+// with its status and the same «Начать»/«Выполнено» button as the open card, so a
+// worker does not have to expand every service to move a stage.
+function projectStagesCompactHtml(o,key) {
+  const stages=projectStages(o,key);
+  if(!stages.length||(!projectScopeApproved(o,key)&&projectCardInProduction(o)))return '';
+  const manage=projectCardCanPlan(o),me=currentUser()?.id,live=PROJECT_SCHEDULED_STATUSES.includes(o.status);
+  return `<div class="project-service-progress-inline" data-stages-compact>Этапы${stages.map(s=>`<span class="flex flex-wrap items-center gap-1" data-stage-id="${s.id}"><span class="tag">${academyEsc(s.title)} · ${s.status==='done'?'✓ Выполнен':s.status==='in_progress'?'В работе':'Запланирован'}</span>${s.status!=='done'&&live&&(manage||s.installerIds.includes(me))?`<button class="btn-ghost" onclick="projectSetStageProgress('${o.id}','${s.id}','${s.status==='planned'?'in_progress':'done'}')">${s.status==='planned'?'Начать':'Выполнено'}</button>`:''}</span>`).join('')}</div>`;
+}
+
 function orderInstallerPayoutForUser(o, userId) {
   if (projectStages(o).length && getUser(userId)?.payConfig?.type === 'per_sqft') return projectStages(o).reduce((sum,s) => sum + projectStageEmployeeAmount(o,s,userId),0) * installerSeniorFactor(getUser(userId)) + orderInstallerPayoutForUser(projectStageUnstagedOrder(o),userId);
   const historicalUser = getUser(userId);
@@ -612,7 +622,10 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
   const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
   const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
-  const chosen = projectCardChosenLine(o, lines);
+  // Owner/coordinator, 2026-11-21 (#577 follow-up): with two or more services the card
+  // must fit one 1920 screen, so every service row starts collapsed and opens on
+  // «Настроить». A project with one service still opens it straight away.
+  const chosen = projectCardExpandedLine(o, lines);
   const total = field => lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const row = line => {
     const selected = chosen?.key === line.key;
@@ -646,8 +659,10 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
             <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
           </div>
         </div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">${edit || plan ? 'Настроить' : 'Подробнее'} ›</button>
+        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-expanded="${selected ? 'true' : 'false'}" aria-label="${selected ? 'Свернуть' : 'Открыть'} услугу ${academyEsc(line.name)}">${selected ? 'Свернуть ‹' : `${edit || plan ? 'Настроить' : 'Подробнее'} ›`}</button>
       </div>
+      ${!selected && tracking && (edit || plan) && !projectStages(o,line.key).length ? `<label class="project-service-progress-inline">Ход работ<div class="flex flex-wrap items-center gap-1">${projectServiceProgressCell(o, line)}</div></label>` : ''}
+      ${!selected && tracking ? projectStagesCompactHtml(o,line.key) : ''}
       ${selected ? projectStagesHtml(o,line.key) : ''}
       ${selected && (edit || plan) ? `<div class="project-service-edit">
         ${sizedOffering && typeof projectServiceMeasurementModeHtml === 'function' ? `<div class="project-card-service-measurement">${projectServiceMeasurementModeHtml(o, sizedOffering, projectLineDirectionInfo(line).key, edit)}</div>` : ''}
