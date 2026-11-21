@@ -140,8 +140,14 @@ async function main() {
       } catch (error) {
         throw new Error(`Reloaded project card did not render the selected service. URL=${page.url()} errors=${JSON.stringify(errors)} body=${JSON.stringify((await page.locator('body').innerText()).slice(0,1200))}`,{cause:error});
       }
-      if(await reloadedServiceArrow.getAttribute('aria-expanded')!=='true') await reloadedServiceArrow.click();
-      assert.equal(await page.locator('[data-stage-id]').count(),2,'stages persist after reloading the authenticated workspace');
+      // The reloaded page draws again when the saved workspace arrives, which can close a service
+      // opened a moment earlier; keep it open until the full stage view shows.
+      const stagesShown=await page.waitForFunction(()=>{
+        const arrow=document.querySelector('[data-project-line="offering:solution-a"] .project-service-arrow') as HTMLElement|null;
+        if(arrow&&arrow.getAttribute('aria-expanded')!=='true') arrow.click();
+        return document.querySelectorAll('[data-production-stages] [data-stage-id]').length===2;
+      },null,{timeout:15_000,polling:500}).then(()=>true,()=>false);
+      assert.ok(stagesShown,`stages persist after reloading the authenticated workspace: ${await page.locator('[data-production-stages] [data-stage-id]').count()} shown, expanded=${await reloadedServiceArrow.getAttribute('aria-expanded')}`);
       assert.deepEqual(errors,[]);
       await context.close();console.log(`Solution scheduling components and persisted API: ${width}px passed`);
     }
