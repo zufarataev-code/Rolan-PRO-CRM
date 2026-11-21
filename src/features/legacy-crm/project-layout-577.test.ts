@@ -77,6 +77,32 @@ test('with two or more services every row starts collapsed; one service opens st
   assert.match(render, /const chosen = projectCardExpandedLine\(o, lines\);/);
   assert.match(render, /\$\{selected \? 'Свернуть ‹' :/);
   assert.match(render, /!selected && tracking && \(edit \|\| plan\) && !projectStages\(o,line\.key\)\.length \? `<label class="project-service-progress-inline">Ход работ/, 'progress stays one tap away on a collapsed row');
+  assert.match(render, /!selected && tracking \? projectStagesCompactHtml\(o,line\.key\) : ''/, 'staged services keep their stage buttons when collapsed');
   const e2e = readFileSync('e2e/project-intake-layout.browser.ts', 'utf8');
   assert.match(e2e, /the card is taller than one screen/);
+});
+
+test('a collapsed staged service shows each stage with its start/done button for the assigned worker', () => {
+  const stagesList = [
+    { id: 's1', title: 'Электрика', status: 'done', installerIds: ['w1'] },
+    { id: 's2', title: 'Плёнка', status: 'planned', installerIds: ['w1'] },
+    { id: 's3', title: 'Отделка', status: 'in_progress', installerIds: ['w2'] },
+  ];
+  const context: any = vm.createContext({
+    PROJECT_SCHEDULED_STATUSES: ['scheduled'],
+    projectStages: () => stagesList,
+    projectScopeApproved: () => true,
+    projectCardInProduction: () => true,
+    projectCardCanPlan: () => false,
+    currentUser: () => ({ id: 'w1' }),
+    academyEsc: (value: string) => String(value),
+  });
+  vm.runInContext(fn(stages, 'projectStagesCompactHtml'), context);
+  const html = context.projectStagesCompactHtml({ id: 'o', status: 'scheduled' }, 'smart');
+  assert.match(html, /Электрика · ✓ Выполнен/);
+  assert.match(html, /projectSetStageProgress\('o','s2','in_progress'\)">Начать/);
+  assert.doesNotMatch(html, /'s3'/, 'another crew\'s stage has no button for this worker');
+  assert.doesNotMatch(html, /'s1','/, 'a finished stage has no button');
+  context.projectScopeApproved = () => false;
+  assert.equal(context.projectStagesCompactHtml({ id: 'o', status: 'scheduled' }, 'smart'), '', 'unapproved extra scope stays in the open card');
 });
