@@ -128,12 +128,14 @@ test('the owner close first saves the draft on the server, then closes it in a s
   assert.match(commit, /if \(quickEntryState\(\)\.committing\) return;/, 'a double click does not create two projects');
   const order = [
     commit.indexOf('save();\n    if (cloud && !await cloudPersistConfirmed())'),
-    commit.indexOf('closeQuickProjectAsCompletedWith(o, { requestedPaid: paid, paidDate: lastDate, method'),
+    commit.indexOf('const current = db.orders.find(item => item.id === o.id);'),
+    commit.indexOf('closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method'),
     commit.lastIndexOf('if (cloud && !await cloudPersistConfirmed())'),
     commit.indexOf('db.orders[index] = persistedDraft;'),
   ];
-  assert.ok(order.every(i => i > 0), 'all four steps are present');
-  assert.deepEqual([...order].sort((a, b) => a - b), order, 'draft save → close → confirmed close save → rollback');
+  assert.ok(order.every(i => i > 0), 'all five steps are present');
+  assert.deepEqual([...order].sort((a, b) => a - b), order, 'draft save → reacquire by id after a conflict merge → close → confirmed close save → rollback');
+  assert.doesNotMatch(commit, /closeQuickProjectAsCompletedWith\(o,/, 'never closes the detached pre-save object');
   assert.match(commit, /черновик ещё не сохранён на сервере, проект не закрыт/);
   assert.match(commit, /закрыть проект не удалось/);
   assert.doesNotMatch(commit, /db = cloneCloudWorkspaceValue\(cloudBaseSnapshot\)|db = base;/, 'a refused close never replaces the whole workspace');

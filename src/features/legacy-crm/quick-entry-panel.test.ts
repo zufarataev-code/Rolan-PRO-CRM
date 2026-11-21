@@ -286,7 +286,7 @@ test('one-screen entry: many services in the form, committed through the histori
   assert.match(commit, /line\.hiredExpenseId = expense\.id/);
   assert.match(commit, /projectQuickSyncProjectInstallers\(o\)/, 'line installers become project installers, so payroll sees them');
   assert.match(commit, /const issues = projectQuickCompletionIssues\(o\);/, 'the editor\'s completion checks guard the one-screen path too');
-  assert.match(commit, /closeQuickProjectAsCompletedWith\(o, \{ requestedPaid: paid, paidDate: lastDate, method/, 'closing is the editor\'s own code');
+  assert.match(commit, /closeQuickProjectAsCompletedWith\(current, \{ requestedPaid: paid, paidDate: lastDate, method/, 'closing is the editor\'s own code');
   assert.match(commit, /if \(actor\?\.role !== 'owner' \|\| !closeProject\)[\s\S]*черновик сохранён, закроет владелец/, 'a manager leaves a draft for the owner and the owner may save without posting');
   const build = fn(stages, 'quickEntryBuildLine');
   assert.match(build, /if \(serviceOfferingNeedsSizes\(offering\)\)[\s\S]*quickProjectLine: true[\s\S]*\} else \{[\s\S]*projectOfferingLine\(offering, qty, src\.dir\)/, 'film services become quick lines, size-free ones directory lines');

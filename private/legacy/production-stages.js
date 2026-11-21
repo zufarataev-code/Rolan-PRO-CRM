@@ -4483,8 +4483,17 @@ async function quickEntryCommit({ closeProject = true } = {}) {
       render();
       return;
     }
+    // При конфликте ревизий cloudPersist() заменяет весь db слитой копией,
+    // поэтому берём проект заново по id и закрываем именно текущий экземпляр.
+    const current = db.orders.find(item => item.id === o.id);
+    if (!current) {
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.notice = `${o.number} · ${client.name} — черновик сохранён, но после обновления данных проект не найден, он не закрыт. Проверьте «Не завершён перенос».`;
+      render();
+      return;
+    }
     const persistedDraft = cloud ? cloneCloudWorkspaceValue(cloudBaseSnapshot?.orders?.find(item => item.id === o.id) || null) : null;
-    closeQuickProjectAsCompletedWith(o, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
+    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
     if (cloud && !await cloudPersistConfirmed()) {
       if (persistedDraft) {
         // Сервер не принял закрытие: возвращаем только этот проект к
