@@ -138,7 +138,13 @@ async function main() {
       const columns = await page.evaluate(() => {
         const grid = document.querySelector('.erp-intake-columns') as HTMLElement | null;
         const modal = document.querySelector('.erp-intake-modal') as HTMLElement | null;
-        return {columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0, modalWidth: modal?.getBoundingClientRect().width || 0};
+        // Count the columns that are really side by side: a computed track list is not
+        // reliable when phone CSS turns the grid into a block.
+        const lefts = new Set(Array.from(grid?.querySelectorAll(':scope > .erp-intake-col') || [])
+          .map(col => (col as HTMLElement).getBoundingClientRect())
+          .filter(box => box.width > 0 && box.height > 0)
+          .map(box => Math.round(box.left)));
+        return {columns: lefts.size, modalWidth: modal?.getBoundingClientRect().width || 0};
       });
       report.push(`intake@${label}: ${JSON.stringify(columns)}`);
       if (viewport.width >= 1280 && columns.columns !== 2) failures.push(`intake@${label}: expected two columns, got ${JSON.stringify(columns)}`);

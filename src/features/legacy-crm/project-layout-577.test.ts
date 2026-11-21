@@ -29,6 +29,7 @@ test('the object type is a compact segmented switch, and «+ Услуга» is a
   assert.match(modal, /class="erp-intake-segment-option" data-site-type="COMMERCIAL"/);
   assert.doesNotMatch(modal, /class="order-service-card" style="min-height:58px/);
   assert.match(html, /\.erp-intake-segment-option\.active \{/);
+  assert.match(html, /\.erp-intake-modal button\[aria-label\^="Убрать"\] \{ white-space: nowrap; flex-shrink: 0; \}/, 'a narrow phone row never breaks «Убрать» into two lines');
   assert.match(fn(html, 'renderNewOrderOfferings'), /class="btn-ghost text-sm mt-2 rp-intake-add" data-intake-offering="add" onclick="openServiceCashier\('', 'intake'\)">\+ Услуга</);
 });
 
