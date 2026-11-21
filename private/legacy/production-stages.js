@@ -3959,7 +3959,9 @@ function quickEntryConfirmNewClient() {
 function quickEntryEffectiveQty(line, offering = serviceOffering(line?.offering)) {
   const qty = Math.max(0, Number(line?.qty) || 0);
   if (qty > 0) return qty;
-  return offering && !serviceOfferingNeedsSizes(offering) && Number(line?.price) > 0 ? 1 : 0;
+  // 1 подставляем только в пустое поле; явный 0 или минус остаётся ошибкой.
+  const blank = String(line?.qty ?? '').trim() === '';
+  return blank && offering && !serviceOfferingNeedsSizes(offering) && Number(line?.price) > 0 ? 1 : 0;
 }
 /** Почему строка не попадает в «Итог проекта» — чтобы сумма не пропадала молча. */
 function quickEntryLineSkipReason(line) {

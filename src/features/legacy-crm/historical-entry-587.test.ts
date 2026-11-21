@@ -27,6 +27,9 @@ test('a work-only service with a price and an empty quantity counts as 1, a film
       electric: quickEntryEffectiveQty({ offering: 'electric', qty: '', price: 1500 }),
       electricNoPrice: quickEntryEffectiveQty({ offering: 'electric', qty: '', price: '' }),
       electricTwo: quickEntryEffectiveQty({ offering: 'electric', qty: '2', price: 1500 }),
+      electricZero: quickEntryEffectiveQty({ offering: 'electric', qty: '0', price: 1500 }),
+      electricNegative: quickEntryEffectiveQty({ offering: 'electric', qty: '-1', price: 1500 }),
+      zeroReason: quickEntryLineSkipReason({ offering: 'electric', qty: '0', price: 1500, date: '2026-10-30' }),
       film: quickEntryEffectiveQty({ offering: 'film', qty: '', price: 6000 }),
       filmReason: quickEntryLineSkipReason({ offering: 'film', qty: '', price: 6000, date: '2026-10-30' }),
       electricReason: quickEntryLineSkipReason({ offering: 'electric', qty: '', price: 1500, date: '2026-10-30' }),
@@ -34,7 +37,7 @@ test('a work-only service with a price and an empty quantity counts as 1, a film
       backwards: quickEntryLineSkipReason({ offering: 'electric', qty: '1', price: 1500, date: '2026-10-30', endDate: '2026-10-29' }),
     };`, context);
   assert.deepEqual({ ...context.result }, {
-    electric: 1, electricNoPrice: 0, electricTwo: 2, film: 0,
+    electric: 1, electricNoPrice: 0, electricTwo: 2, electricZero: 0, electricNegative: 0, zeroReason: 'укажите количество', film: 0,
     filmReason: 'укажите sq ft', electricReason: '', emptyReason: '', backwards: 'окончание раньше начала',
   });
   assert.match(fn(stages, 'quickEntryLineCalc'), /const qty = quickEntryEffectiveQty\(line, offering\);/, 'the per-service margin uses the same quantity');
