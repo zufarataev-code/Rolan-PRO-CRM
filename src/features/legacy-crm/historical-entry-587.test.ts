@@ -134,6 +134,7 @@ test('the owner close first saves the draft on the server, then closes it in a s
   assert.match(commit, /закрыть проект не удалось/);
   assert.doesNotMatch(commit, /db = cloneCloudWorkspaceValue\(cloudBaseSnapshot\)|db = base;/, 'a refused close never replaces the whole workspace');
   assert.match(commit, /finally \{\n\s*s\.committing = false;/);
+  assert.match(fn(html, 'cloudPersistConfirmed'), /if \(cloudSaveInFlight\) \{ cloudSaveQueued = true; return false; \}/, 'a timed-out confirmation keeps the draft save queued');
   assert.match(fn(stages, 'cloudPersist'), /Обновите страницу, чтобы вернуться к сохранённой версии/);
 });
 
