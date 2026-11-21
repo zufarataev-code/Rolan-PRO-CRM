@@ -167,7 +167,7 @@ async function main() {
           const empty = await page.evaluate(() => ({
             lead: document.querySelector('.project-cashier-lead')?.textContent?.replace(/\s+/g, ' ').trim() || '',
             add: document.querySelector('.project-cashier-add-toggle')?.textContent?.trim() || '',
-            emptyText: document.querySelector('.project-cashier-empty')?.textContent?.trim() || '',
+            emptyText: document.querySelector('.project-service-list')?.textContent?.trim().slice(0, 40) || '',
             tiles: document.querySelectorAll('.project-cashier-direction.add').length,
             addServicesBar: Array.from(document.querySelectorAll('.project-feed-next')).some(node => /Добавить услуги проекта/.test(node.textContent || '')),
           }));

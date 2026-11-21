@@ -570,7 +570,8 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   const addHtml = money && edit && missing.length
     ? `<button type="button" class="project-cashier-add-toggle" onclick="openProjectDirectionPicker('${o.id}')">+ Направление / услуга</button>`
     : '';
-  const emptyHtml = empty ? '<span class="project-cashier-empty">В проекте пока нет услуг</span>' : '';
+  // The service list below already says «В проекте пока нет услуг», so this row
+  // carries no second copy of it.
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
@@ -583,7 +584,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // colour. This strip keeps only the facts and «+ Добавить направление».
   return `<div class="project-cashier-map ${active ? 'compact' : ''}" data-project-cashier-map>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(1)}</b> sq ft</span></div></div>
-    ${leadHtml || emptyHtml || addHtml ? `<div class="project-cashier-add-row compact">${leadHtml}${emptyHtml}${addHtml}</div>` : ''}
+    ${leadHtml || addHtml ? `<div class="project-cashier-add-row compact">${leadHtml}${addHtml}</div>` : ''}
   </div>`;
 }
 
