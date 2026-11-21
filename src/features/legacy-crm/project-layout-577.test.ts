@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 // #577 (Owner, 2026-11-21): «Новый проект» and the project card fit one screen on a
 // big monitor, services are added with one small button, and a phone never scrolls
@@ -58,4 +59,24 @@ test('CI opens the real CRM at 1920, 1440, 390 and 375 and checks the layout', (
   const e2e = readFileSync('e2e/project-intake-layout.browser.ts', 'utf8');
   assert.match(e2e, /\{width: 1920, height: 1080\}, \{width: 1440, height: 900\}, \{width: 390, height: 844\}, \{width: 375, height: 812\}/);
   assert.match(e2e, /scrolls sideways/);
+});
+
+test('with two or more services every row starts collapsed; one service opens straight away; a second tap closes it', () => {
+  const context: any = vm.createContext({ state: {}, render: () => undefined, preservePositionForNextRender: () => undefined });
+  vm.runInContext(`${fn(html, 'projectCardSelectLine')}; ${fn(html, 'projectCardExpandedLine')};`, context);
+  const two = [{ key: 'a', kind: 'windows' }, { key: 's', kind: 'included' }, { key: 'b', kind: 'quantity' }];
+  const one = [{ key: 'a', kind: 'windows' }, { key: 's', kind: 'included' }];
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, two), null, 'two services: nothing open');
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, one).key, 'a', 'one service: open');
+  context.projectCardSelectLine('o', 'b');
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, two).key, 'b');
+  context.projectCardSelectLine('o', 'b');
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, two), null, 'second tap closes');
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'a closed single service stays closed');
+  const render = fn(stages, 'renderProjectCardServices');
+  assert.match(render, /const chosen = projectCardExpandedLine\(o, lines\);/);
+  assert.match(render, /\$\{selected \? 'Свернуть ‹' :/);
+  assert.match(render, /!selected && tracking && \(edit \|\| plan\) && !projectStages\(o,line\.key\)\.length \? `<label class="project-service-progress-inline">Ход работ/, 'progress stays one tap away on a collapsed row');
+  const e2e = readFileSync('e2e/project-intake-layout.browser.ts', 'utf8');
+  assert.match(e2e, /the card is taller than one screen/);
 });
