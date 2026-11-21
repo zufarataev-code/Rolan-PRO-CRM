@@ -17,6 +17,26 @@ const MOBILE_WORKSPACE_PATCH = `
       margin: 0 !important;
     }
 
+    /* #577: nothing on a phone scrolls sideways — fields never outgrow their box, grid
+       and flex children may shrink, wide tables scroll inside their own wrapper. */
+    @supports (overflow-x: clip) {
+      body { overflow-x: clip !important; }
+    }
+    input,
+    select,
+    textarea {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    .erp-intake-col,
+    .erp-intake-card,
+    .order-clean-shell > *,
+    .project-feed > *,
+    .project-feed-top > * {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+
     #app,
     #app > *,
     main,

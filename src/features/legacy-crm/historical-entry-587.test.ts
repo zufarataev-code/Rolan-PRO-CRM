@@ -55,8 +55,12 @@ test('the summary names a service that is left out of the total and splits the r
   assert.match(renderer, /Прибыль проекта/);
   assert.match(renderer, /Доля постоянных расходов месяца/);
   assert.doesNotMatch(renderer, /Резерв расходов и налога/, 'the lumped reserve line is gone');
-  assert.match(renderer, /Кол-во, \$\{sized \? 'sq ft' : academyEsc\(serviceOfferingUnitShort\(offering\)\)\}/);
-  assert.match(renderer, /Материал не нужен — только работа/);
+  assert.match(renderer, /Кол-во, \$\{sized \? 'sq ft' : academyEsc\(quickEntryQtyUnit\(offering\)\)\}/);
+  assert.match(renderer, /Материал не нужен, только работа/);
+  // #577: a fixed-sum service reads «Кол-во, шт.».
+  const unit: any = vm.createContext({ serviceOfferingUnitShort: (o: any) => o.short });
+  vm.runInContext(`${fn(stages, 'quickEntryQtyUnit')}; result = [quickEntryQtyUnit({ short: 'услуга' }), quickEntryQtyUnit({ short: 'зона' }), quickEntryQtyUnit(null)];`, unit);
+  assert.deepEqual([...unit.result], ['шт.', 'зона', 'шт.']);
 });
 
 test('changing the project start or end moves the matching service dates, and an end before a service start is refused', () => {

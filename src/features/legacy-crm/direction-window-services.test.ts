@@ -16,13 +16,13 @@ test('the card shows one tile per direction and every service stays visible on t
   assert.doesNotMatch(card, /directionLines\.map\(compactRow\)/, 'основная карточка больше не прячет расчёт, материал и монтаж в окне направления');
   assert.doesNotMatch(card, /projectDirectionOfferingPickerHtml\(o,direction\.key\)/, 'no second add button on the card');
   assert.doesNotMatch(card, /> В расчёте<\/label>/, 'the include switch lives in the window');
-  // Owner, 2026-10-26: the card opens on the four direction tiles of the cashier;
-  // a direction not in the project is a tinted «+ добавить» tile that opens its window.
+  // Owner, 2026-11-21 (#577): no direction tiles; one small «+ Направление / услуга»
+  // opens the picker, and the picker opens the direction's own window.
   const map = fn(stages, 'projectCashierMapHtml');
   assert.match(map, /directionOrder\.map\(key =>/);
-  assert.match(map, /class="project-cashier-direction add"[^>]*onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(key\)\}','services'\)"/);
-  assert.match(map, /<span>\+ добавить<\/span>/);
-  assert.doesNotMatch(map, /openProjectDirectionPicker/, 'no picker between the tile and the window');
+  assert.doesNotMatch(map, /<span>\+ добавить<\/span>/);
+  assert.match(map, /openProjectDirectionPicker\('\$\{o\.id\}'\)/);
+  assert.match(fn(stages, 'openProjectDirectionPicker'), /openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(direction\.id\)\}','services'\)/);
   assert.doesNotMatch(map, /project-cashier-flow-actions/, 'the three duplicate buttons are gone');
 });
 
