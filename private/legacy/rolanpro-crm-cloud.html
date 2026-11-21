@@ -29198,8 +29198,9 @@ function projectCardCrewPicker(o, line) {
  * Production: specialist and date in the row too.
  */
 function projectCardSelectLine(oid, key) {
-  // A second tap on the open service closes it again.
-  const current = state.projectCardSelection?.[oid];
+  // A second tap on the open service closes it again, including one that opened by itself.
+  const o = getOrder(oid);
+  const current = o ? projectCardExpandedLine(o)?.key : state.projectCardSelection?.[oid];
   state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: current === key ? '' : key };
   preservePositionForNextRender();
   render();
@@ -29207,7 +29208,10 @@ function projectCardSelectLine(oid, key) {
 
 function projectCardExpandedLine(o, lines = projectLines(o)) {
   const selection = state.projectCardSelection || {};
-  if (Object.prototype.hasOwnProperty.call(selection, o.id)) return lines.find(line => line.key === selection[o.id]) || null;
+  // '' means the user closed the service; a key of a deleted service is stale and falls through.
+  if (selection[o.id] === '') return null;
+  const picked = selection[o.id] && lines.find(line => line.key === selection[o.id]);
+  if (picked) return picked;
   const main = lines.filter(line => line.kind !== 'included');
   return main.length === 1 ? main[0] : null;
 }

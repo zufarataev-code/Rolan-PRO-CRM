@@ -62,17 +62,24 @@ test('CI opens the real CRM at 1920, 1440, 390 and 375 and checks the layout', (
 });
 
 test('with two or more services every row starts collapsed; one service opens straight away; a second tap closes it', () => {
-  const context: any = vm.createContext({ state: {}, render: () => undefined, preservePositionForNextRender: () => undefined });
+  let current: any[] = [];
+  const context: any = vm.createContext({ state: {}, render: () => undefined, preservePositionForNextRender: () => undefined, getOrder: (id: string) => ({ id }), projectLines: () => current });
   vm.runInContext(`${fn(html, 'projectCardSelectLine')}; ${fn(html, 'projectCardExpandedLine')};`, context);
   const two = [{ key: 'a', kind: 'windows' }, { key: 's', kind: 'included' }, { key: 'b', kind: 'quantity' }];
   const one = [{ key: 'a', kind: 'windows' }, { key: 's', kind: 'included' }];
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, two), null, 'two services: nothing open');
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, one).key, 'a', 'one service: open');
+  current = two;
   context.projectCardSelectLine('o', 'b');
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, two).key, 'b');
   context.projectCardSelectLine('o', 'b');
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, two), null, 'second tap closes');
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'a closed single service stays closed');
+  context.state.projectCardSelection = { o: 'b' };
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, one).key, 'a', 'after deleting the open service the only one left opens');
+  current = one;
+  context.projectCardSelectLine('o', 'a');
+  assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'a tap closes a service that opened by itself');
   const render = fn(stages, 'renderProjectCardServices');
   assert.match(render, /const chosen = projectCardExpandedLine\(o, lines\);/);
   assert.match(render, /\$\{selected \? 'Свернуть ‹' :/);
