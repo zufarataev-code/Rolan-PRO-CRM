@@ -78,6 +78,9 @@ async function main() {
     for (const viewport of [{width: 1920, height: 1080}, {width: 1440, height: 900}, {width: 390, height: 844}, {width: 375, height: 812}]) {
       const phone = viewport.width < 500;
       const context = await browser.newContext({viewport, timezoneId: 'America/Los_Angeles', ...(phone ? {isMobile: true, hasTouch: true, deviceScaleFactor: 2} : {})});
+      // tsx wraps named inner functions in __name(); page.evaluate code runs in the
+      // browser, where that helper does not exist.
+      await context.addInitScript('window.__name = window.__name || ((fn) => fn);');
       const login = await context.request.post(base + '/api/v1/auth/login', {data: {email: owner.email, password: testPassword}});
       assert.equal(login.status(), 200);
       // Production builds issue Secure cookies; this disposable CI server is HTTP.
@@ -100,7 +103,7 @@ async function main() {
         state.payload.clients = (state.payload.clients || []).filter((c: any) => c.id !== CLIENT_ID).concat({id: CLIENT_ID, name: 'QA Layout Client', phone: '+13105550177', email: 'qa-layout@example.com', source: 'google', createdAt: now, address: '1200 Wilshire Blvd, Los Angeles, CA 90017'});
         const win = (id: string, scope: string, offeringId: string, name: string, catalogId: string, price: number) => ({id, measureScope: scope, offeringId, offeringName: name, catalogId, width: 254, height: 254, qty: 1, pricePerSqft: price});
         const fromLead = {id: EMPTY_ID, number: 'QA-577-L', clientId: CLIENT_ID, status: 'new', leadSource: 'google', createdAt: now, managerId: state.payload.users.find((u: any) => u.role === 'owner')?.id || null,
-          serviceType: 'solar_film', serviceTypes: ['solar_film'], leadIntentServiceType: 'solar_film', filmChoicePending: true, measurements: {rooms: []}, extraServices: [], extraExpenses: [], installerIds: [], timeline: []};
+          serviceType: 'solar_film', serviceTypes: ['solar_film'], leadIntentServiceType: 'solar_film', leadIntentConfidence: 'from_lead', filmChoicePending: true, measurements: {rooms: []}, extraServices: [], extraExpenses: [], installerIds: [], timeline: []};
         const two = {id: TWO_ID, number: 'QA-577-2', clientId: CLIENT_ID, status: 'measurement_done', createdAt: now, managerId: fromLead.managerId,
           serviceType: 'solar_film', serviceTypes: ['solar_film', 'privacy_film'], installerIds: [], extraServices: [], extraExpenses: [], timeline: [],
           measurements: {rooms: [

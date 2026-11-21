@@ -23,8 +23,15 @@ test('only the directions in the project are cards; one small «+ Направл
   assert.match(map, /onclick="openProjectDirectionPicker\('\$\{o\.id\}'\)">\+ Направление \/ услуга<\/button>/);
   assert.match(map, /<span class="project-cashier-empty">В проекте пока нет услуг<\/span>/);
   // A project made from a lead offers the lead's direction first, «из заявки».
-  assert.match(map, /const leadKey = !o\.quickEntry && typeof orderLeadIntentServiceId === 'function' \? orderLeadIntentServiceId\(o\) : '';/);
-  assert.match(map, /directionOrder\.includes\(leadKey\) && !byKey\.has\(leadKey\)/);
+  // Codex review on #590: only a real lead (canonicalLeadId or the lead → project stamp)
+  // gets «из заявки»; «пусто» counts every direction, general works included.
+  assert.match(map, /const empty = !directions\.length;/);
+  assert.match(map, /const fromLead = !o\.quickEntry && \(Boolean\(o\.canonicalLeadId\) \|\| \['from_lead', 'auto_from_ad'\]\.includes\(o\.leadIntentConfidence\)\);/);
+  assert.match(map, /const leadKey = fromLead \? String\(o\.leadIntentServiceType \|\| ''\) : '';/);
+  assert.match(map, /const leadService = empty && money && edit && directionOrder\.includes\(leadKey\)/);
+  assert.match(map, /const emptyHtml = empty \?/);
+  assert.match(html, /leadIntentConfidence: note \|\| 'captured'/);
+  assert.match(html, /orderDirectionFields\(leadDirection\.id, silent \? 'auto_from_ad' : 'from_lead'\)/);
   assert.match(map, /class="project-cashier-lead" onclick="openProjectDirectionWindow\('\$\{o\.id\}','\$\{jsQuote\(leadKey\)\}','services'\)"/);
   assert.match(map, /из заявки\$\{leadSource/);
   assert.match(fn(stages, 'projectCashierToggleAdd'), /state\.projectCashierAdding = /);

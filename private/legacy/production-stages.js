@@ -559,14 +559,18 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // #577 (Owner, 2026-11-21: «пять больших плиток не нужны, одна маленькая кнопка
   // + услуга»): no tile grid for the missing directions. One small button opens the
   // direction picker; a project made from a lead offers that lead's direction first.
-  const leadKey = !o.quickEntry && typeof orderLeadIntentServiceId === 'function' ? orderLeadIntentServiceId(o) : '';
-  const leadService = !active && money && edit && directionOrder.includes(leadKey) && !byKey.has(leadKey) ? ORDER_PRIMARY_SERVICES.find(item => item.id === leadKey) : null;
+  // «Пусто» counts every direction, general works included, not only the five tiles.
+  const empty = !directions.length;
+  // Only a project really made from a lead (the lead → project path stamps these) gets «из заявки».
+  const fromLead = !o.quickEntry && (Boolean(o.canonicalLeadId) || ['from_lead', 'auto_from_ad'].includes(o.leadIntentConfidence));
+  const leadKey = fromLead ? String(o.leadIntentServiceType || '') : '';
+  const leadService = empty && money && edit && directionOrder.includes(leadKey) ? ORDER_PRIMARY_SERVICES.find(item => item.id === leadKey) : null;
   const leadSource = leadService && typeof sourceDisplayLabel === 'function' && o.leadSource ? sourceDisplayLabel(o.leadSource) : '';
   const leadHtml = leadService ? `<button type="button" class="project-cashier-lead" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(leadKey)}','services')" aria-label="Добавить услуги направления ${academyEsc(leadService.title)}"><span class="project-cashier-lead-kicker">из заявки${leadSource ? ` · ${academyEsc(leadSource)}` : ''}</span><b>${academyEsc(leadService.title)}</b><span>+ выбрать услуги</span></button>` : '';
   const addHtml = money && edit && missing.length
     ? `<button type="button" class="project-cashier-add-toggle" onclick="openProjectDirectionPicker('${o.id}')">+ Направление / услуга</button>`
     : '';
-  const emptyHtml = !active ? '<span class="project-cashier-empty">В проекте пока нет услуг</span>' : '';
+  const emptyHtml = empty ? '<span class="project-cashier-empty">В проекте пока нет услуг</span>' : '';
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
