@@ -164,6 +164,21 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Project intake and card layout (#577)
+        env:
+          E2E_PLAYWRIGHT_MODULE: /tmp/rolanpro-browser/node_modules/playwright
+          E2E_PRINT_SCREENSHOTS: '1'
+        run: node --import tsx e2e/project-intake-layout.browser.ts
+
+      - name: Project layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-intake-layout-screenshots
+          path: test-results/project-intake-layout/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Application log on failure
         if: failure()
         run: tail -200 next.log || true

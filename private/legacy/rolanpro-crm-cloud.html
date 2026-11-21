@@ -823,6 +823,19 @@
     gap: .85rem;
     align-items: start;
   }
+  /* #577: client and object on the left, services and the manager on the right
+     from 1280px; one column below. */
+  .erp-intake-main-grid.erp-intake-columns { grid-template-columns: minmax(0, 1fr); }
+  .erp-intake-col { min-width: 0; display: grid; gap: .85rem; align-content: start; }
+  .erp-intake-modal button[aria-label^="Убрать"] { white-space: nowrap; flex-shrink: 0; }
+  .erp-intake-col > .erp-intake-card + .erp-intake-card { margin-top: 0; }
+  .erp-intake-col + .erp-intake-col { margin-top: .85rem; }
+  .erp-intake-wait { display: none; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 1rem; color: #64748b; font-size: .85rem; line-height: 1.4; background: #fff; }
+  .erp-intake-segment { display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; max-width: 30rem; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff; }
+  .erp-intake-segment-option { min-height: 40px; padding: .45rem .7rem; border: 0; background: transparent; color: #334155; font-size: .84rem; font-weight: 700; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+  .erp-intake-segment-option + .erp-intake-segment-option { border-left: 1px solid #cbd5e1; }
+  .erp-intake-segment-option.active { background: var(--rp-gradient, #1686B0); color: #fff; }
+  .erp-intake-modal .rp-intake-add { min-height: 34px; padding: .3rem .8rem; }
   .erp-intake-side {
     position: sticky;
     top: .75rem;
@@ -1742,6 +1755,39 @@
   .project-feed-services .project-service-footer { padding:.5rem .9rem; }
   .project-feed-services > .project-feed-head { padding:0 14px; }
   .project-feed-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  /* #577 (Owner, 2026-11-21): one small «+ Направление / услуга» instead of five big
+     direction tiles; a lead's direction is offered first as «из заявки». */
+  .project-cashier-add-row.compact { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; min-width:0; }
+  .project-cashier-add-toggle { min-height:34px; padding:.3rem .8rem; border:1px dashed #94a3b8; border-radius:6px; background:#fff; color:#167ca6; font-size:.8rem; font-weight:800; }
+  .project-cashier-add-toggle:hover { border-style:solid; border-color:#167ca6; }
+  .project-cashier-lead { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:.15rem .5rem; min-width:0; max-width:100%; min-height:34px; padding:.35rem .75rem; border:1px solid #9ed4e6; border-left:4px solid #167ca6; border-radius:6px; background:#f2fafd; color:#10213b; text-align:left; font-size:.82rem; }
+  .project-cashier-lead-kicker { color:#167ca6; font-size:.66rem; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
+  .project-cashier-lead > span:last-child { color:#167ca6; font-weight:800; }
+  /* «Следующий шаг» stays one compact row, at most 44px. */
+  .project-feed-next .order-action-card { max-height:44px; overflow:hidden; }
+  .project-feed-next .order-action-card > span:last-child { display:flex; align-items:baseline; gap:.5rem; min-width:0; }
+  .project-feed-next .order-action-card .order-action-title { flex:none; white-space:nowrap; }
+  .project-feed-next .order-action-card .order-action-sub { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:720px) { .project-feed-next .order-action-card { max-height:none; } .project-feed-next .order-action-card > span:last-child { display:block; } .project-feed-next .order-action-card .order-action-sub { white-space:normal; } }
+  /* #577: from 1600px the card is two columns — header, sums, stage strip, next step and
+     documents on the left; «Состав проекта» on the right — so 1–3 services fit 1920×1080. */
+  @media (min-width:1600px) {
+    html body .order-clean-shell:has(> .project-feed) { grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); grid-template-rows:auto auto auto auto auto 1fr; column-gap:14px; row-gap:12px; align-items:start; }
+    html body .order-clean-shell:has(> .project-feed) > .project-feed { display:contents; }
+    html body .order-clean-shell:has(> .project-feed) > :is(.project-command-hero, .project-feed > *) { grid-column:1; min-width:0; }
+    html body .order-clean-shell:has(> .project-feed) > .project-command-hero { grid-row:1; }
+    html body .order-clean-shell:has(> .project-feed) > .project-feed > .project-feed-services { grid-column:2; grid-row:1 / 7; }
+    html body .order-clean-shell:has(> .project-feed) .project-command-hero { padding:.8rem .95rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-command-facts { margin-top:.6rem; gap:.4rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-command-fact { padding:.42rem .55rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-command-hero .order-clean-progress { margin-top:.6rem; padding-top:.55rem; }
+    html body .order-clean-shell:has(> .project-feed) .order-clean-stage-btn { padding:.25rem .35rem; gap:.15rem; max-height:34px; }
+    html body .order-clean-shell:has(> .project-feed) .order-clean-stage-btn-hint { display:none; }
+    html body .order-clean-shell:has(> .project-feed) .order-clean-stage-btn-line { height:.3rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-service-row { padding:.5rem .8rem; gap:.5rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-service-facts { margin-top:.35rem; }
+    html body .order-clean-shell:has(> .project-feed) .project-service-fact { padding:.28rem .4rem; }
+  }
   .project-feed-head h3 { margin:0; font-size:15px; font-weight:800; color:#10213b; display:flex; align-items:center; gap:8px; }
   .project-feed-chip { font-size:11px; font-weight:800; border-radius:6px; padding:2px 8px; background:#EEF1F5; color:#5A6577; white-space:nowrap; }
   .project-feed-chip.good { background:#E7F6EC; color:#15803D; } .project-feed-chip.warn { background:#FEF3C7; color:#92400E; } .project-feed-chip.info { background:#E8EEFC; color:#1D4ED8; }
@@ -5990,6 +6036,13 @@
       width: min(1280px, 96vw);
       max-width: 1280px;
     }
+  }
+  /* #577: the wide two-column intake window from 1280px (after the 841px rule so it wins). */
+  @media (min-width: 1280px) {
+    .modal-content.workspace-modal.erp-intake-modal { width: min(1440px, 96vw); max-width: 1440px; }
+    .erp-intake-main-grid.erp-intake-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+    .erp-intake-col + .erp-intake-col { margin-top: 0; }
+    .erp-intake-wait { display: block; }
   }
   .modal-content.measure-modal {
     /* Замер — самый плотный экран в системе: список комнат, выбор типа
@@ -19436,7 +19489,7 @@ function projectServicesNextAction(o) {
   // Services, estimate and proposal belong to the people who price the
   // project; a measurer keeps the measurement actions.
   if (!orderUserCanSeeMoney(o, currentUser())) return null;
-  if (!projectHasServices(o)) return { icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+  if (!projectHasServices(o)) return { key: 'add_services', icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
   if (!projectMeasurementSettled(o)) {
     // A measurement already booked keeps its own step (the measurer's work);
     // a finished one is completed in the measurement editor, not booked again.
@@ -34610,8 +34663,8 @@ function openOrderModal() {
       </div>
 
       <div class="erp-intake-body">
-        <div class="erp-intake-main-grid" style="grid-template-columns:minmax(0,1fr)">
-          <div>
+        <div class="erp-intake-main-grid erp-intake-columns">
+          <div class="erp-intake-col" data-intake-col="client">
             <section class="erp-intake-card" data-intake-client>
               <div class="erp-intake-card-head">
                 <div>
@@ -34630,13 +34683,16 @@ function openOrderModal() {
               <div class="erp-intake-card-title"><span class="erp-intake-step">2</span> Объект <span class="order-required">*</span></div>
               <div class="mt-3" >
                 <label class="text-xs">Тип объекта <span class="order-required">*</span></label>
-                <div class="grid grid-cols-2 gap-2 mt-1" id="no-site-type-buttons">
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')"><div class="font-semibold text-sm">🏠 Residential · жилой</div><div class="text-xs text-gray-500">Комнаты дома</div></button>
-                  <button type="button" class="order-service-card" style="min-height:58px;padding:10px" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')"><div class="font-semibold text-sm">🏢 Commercial · коммерческий</div><div class="text-xs text-gray-500">Офисы и зоны</div></button>
+                <div class="erp-intake-segment mt-1" id="no-site-type-buttons" role="group" aria-label="Тип объекта">
+                  <button type="button" class="erp-intake-segment-option" data-site-type="RESIDENTIAL" onclick="selectOrderSiteType('RESIDENTIAL')">🏠 Residential · жилой</button>
+                  <button type="button" class="erp-intake-segment-option" data-site-type="COMMERCIAL" onclick="selectOrderSiteType('COMMERCIAL')">🏢 Commercial · коммерческий</button>
                 </div>
                 <input type="hidden" id="no-site-type" value="">
               </div>
             </section>
+          </div>
+          <div class="erp-intake-col" data-intake-col="services">
+            <div class="erp-intake-wait" data-intake-wait>Выберите клиента и тип объекта — здесь появятся услуги проекта и ответственный.</div>
             <section class="erp-intake-card" data-intake-offering style="display:none">
               <div class="erp-intake-card-head">
                 <div>
@@ -34746,7 +34802,7 @@ function renderNewOrderOfferings() {
       <div class="rp-intake-service-main"><div class="rp-intake-service-name">${academyEsc(directionOnly.title)} <span class="rp-intake-service-badge">исходный запрос</span></div><div class="rp-intake-service-meta">Линейку и плёнку выберет замерщик на объекте</div></div>
       <button type="button" class="btn-ghost text-sm text-red-600" aria-label="Убрать направление" onclick="setNewOrderDirectionOnly('')">Убрать</button>
     </div>` : '';
-  node.innerHTML = `${rows || directionOnlyRow || (total ? '<div class="rp-intake-service-empty" data-intake-offering="empty">Услуг пока нет — добавьте через кассу.</div>' : '')}${total ? `<button type="button" class="btn-primary text-sm mt-2" data-intake-offering="add" onclick="openServiceCashier('', 'intake')">+ Услуга</button>` : ''}`;
+  node.innerHTML = `${rows || directionOnlyRow || (total ? '<div class="rp-intake-service-empty" data-intake-offering="empty">Услуг пока нет — добавьте через кассу.</div>' : '')}${total ? `<button type="button" class="btn-ghost text-sm mt-2 rp-intake-add" data-intake-offering="add" onclick="openServiceCashier('', 'intake')">+ Услуга</button>` : ''}`;
   const empty = document.getElementById('no-offering-empty');
   if (empty) empty.style.display = total ? 'none' : '';
 }
@@ -34811,6 +34867,8 @@ function refreshOrderIntakeGates() {
   document.querySelectorAll('[data-intake-site]').forEach(node => { node.style.display = hasClient ? '' : 'none'; });
   document.querySelectorAll('[data-intake-offering]').forEach(node => { node.style.display = hasSite ? '' : 'none'; });
   document.querySelectorAll('[data-new-order-after-client]').forEach(node => { node.style.display = hasSite && validOffering ? '' : 'none'; });
+  // #577: the right column of the wide window says what appears there until the object is chosen.
+  document.querySelectorAll('[data-intake-wait]').forEach(node => { node.style.display = hasSite ? 'none' : ''; });
 }
 function selectOrderSiteType(value) {
   const siteType = value ? normalizeOrderSiteType(value) : '';
@@ -45128,7 +45186,9 @@ async function cloudPersistConfirmed() {
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = null;
   for (let attempt=0;attempt<50&&cloudSaveInFlight;attempt++) await new Promise(resolve=>setTimeout(resolve,100));
-  if (cloudSaveInFlight) return false;
+  // The debounce timer was cleared above: keep the edit queued so the running
+  // save is followed by one that includes it (#588).
+  if (cloudSaveInFlight) { cloudSaveQueued = true; return false; }
   try { return await cloudPersist({throwOnFailure:true}); }
   catch (error) { return false; }
 }

@@ -546,7 +546,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     const icon = typeof rpDirIcon === 'function' ? rpDirIcon(key, 18) : service.icon;
     if (!direction) {
       if (!(money && edit)) return '';
-      missing.push(`<button type="button" class="project-cashier-direction add" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(key)}','services')" aria-label="Добавить направление ${academyEsc(service.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || service.title)}</b><span>+ добавить</span></span></button>`);
+      missing.push(key);
       return '';
     }
     const count = direction.lines.length + direction.pending.length;
@@ -556,10 +556,22 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
     return `<button type="button" class="project-cashier-direction on ${excluded ? 'excluded' : ''}" style="--direction-color:${academyEsc(color)};--direction-tint:${academyEsc(tint)};--direction-deep:${academyEsc(deep)}" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(direction.key)}')" aria-label="Открыть направление ${academyEsc(direction.title)}"><span class="project-cashier-direction-icon">${icon}</span><span><b>${academyEsc(service.short || direction.title)}</b><span>${count} ${projectPlural(count, 'услуга', 'услуги', 'услуг')}${windows ? ` · ${windows} ок.` : ''}${money && total ? ` · ${fmtMoney(total)}` : ''}${excluded ? ' · вне расчёта' : ''}</span></span>${direction.key === primaryKey && included.length > 1 ? '<span class="project-cashier-primary">основное</span>' : ''}</button>`;
   }).join('');
   const active = (tiles.match(/project-cashier-direction on/g) || []).length;
-  const adding = !active || state.projectCashierAdding?.[o.id] === true;
-  const addHtml = !missing.length ? '' : adding
-    ? `<div class="project-cashier-add-row">${missing.join('')}${active ? `<button type="button" class="project-cashier-add-cancel" onclick="projectCashierToggleAdd('${o.id}')">Отмена</button>` : ''}</div>`
-    : `<button type="button" class="project-cashier-add-toggle" onclick="projectCashierToggleAdd('${o.id}')">+ Добавить направление</button>`;
+  // #577 (Owner, 2026-11-21: «пять больших плиток не нужны, одна маленькая кнопка
+  // + услуга»): no tile grid for the missing directions. One small button opens the
+  // direction picker; a project made from a lead offers that lead's direction first.
+  // «Пусто» counts every direction, general works included, not only the five tiles.
+  const empty = !directions.length;
+  // Only a project really made from a lead (the lead → project path stamps these) gets «из заявки».
+  const fromLead = !o.quickEntry && (Boolean(o.canonicalLeadId) || ['from_lead', 'auto_from_ad'].includes(o.leadIntentConfidence));
+  const leadKey = fromLead ? String(o.leadIntentServiceType || '') : '';
+  const leadService = empty && money && edit && directionOrder.includes(leadKey) ? ORDER_PRIMARY_SERVICES.find(item => item.id === leadKey) : null;
+  const leadSource = leadService && typeof sourceDisplayLabel === 'function' && o.leadSource ? sourceDisplayLabel(o.leadSource) : '';
+  const leadHtml = leadService ? `<button type="button" class="project-cashier-lead" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(leadKey)}','services')" aria-label="Добавить услуги направления ${academyEsc(leadService.title)}"><span class="project-cashier-lead-kicker">из заявки${leadSource ? ` · ${academyEsc(leadSource)}` : ''}</span><b>${academyEsc(leadService.title)}</b><span>+ выбрать услуги</span></button>` : '';
+  const addHtml = money && edit && missing.length
+    ? `<button type="button" class="project-cashier-add-toggle" onclick="openProjectDirectionPicker('${o.id}')">+ Направление / услуга</button>`
+    : '';
+  // The service list below already says «В проекте пока нет услуг», so this row
+  // carries no second copy of it.
   const rooms = o.measurements?.rooms?.length || 0;
   const windows = measureAllWindows(o).length;
   const area = orderActualAreaSqft(o);
@@ -572,7 +584,7 @@ function projectCashierMapHtml(o, directions, { money = false, edit = false } = 
   // colour. This strip keeps only the facts and «+ Добавить направление».
   return `<div class="project-cashier-map ${active ? 'compact' : ''}" data-project-cashier-map>
     <div class="project-cashier-flow"><div class="project-cashier-flow-facts"><span><b>${rooms}</b> ${projectPlural(rooms, 'помещение', 'помещения', 'помещений')}</span><span><b>${windows}</b> ${projectWindowsWord(windows)}</span><span><b>${area.toFixed(1)}</b> sq ft</span></div></div>
-    ${!active ? `<div class="project-cashier-directions four count-${Math.min(Math.max(missing.length, 1), 4)}">${missing.join('')}</div>` : addHtml}
+    ${leadHtml || addHtml ? `<div class="project-cashier-add-row compact">${leadHtml}${addHtml}</div>` : ''}
   </div>`;
 }
 
@@ -795,7 +807,7 @@ async function cloudPersist(options = {}) {
       cloudStatus('Связь прервалась — сохранено на устройстве, повторяем автоматически', 'red');
     } else {
       const reason = String(error?.message || '').trim();
-      cloudStatus(`${reason ? `Не сохранено: ${reason}. ` : 'Сервер отклонил сохранение. '}Данные остались на устройстве`, 'red');
+      cloudStatus(`${reason ? `Не сохранено: ${reason}. ` : 'Сервер отклонил сохранение. '}Данные остались на устройстве. Обновите страницу, чтобы вернуться к сохранённой версии`, 'red');
     }
     if (options.throwOnFailure) throw error;
     return false;
@@ -2025,7 +2037,11 @@ function projectOrderShortFilm(oid, catalogId) {
 
 function projectFeedHtml(o, c, u, ctx) {
   setTimeout(() => premiumSyncClientProposal(o.id), 0);
-  const { canManage, canSeeMoney, primary, measureAction, recentTimeline } = ctx;
+  const { canManage, canSeeMoney, measureAction, recentTimeline } = ctx;
+  // #577 (Owner, 2026-11-21): an empty project needs no big «Следующий шаг: Добавить
+  // услуги проекта» bar — «Состав проекта» already says «В проекте пока нет услуг»
+  // and carries the one «+ Направление / услуга» button.
+  const primary = ctx.primary?.key === 'add_services' ? null : ctx.primary;
   const money = canSeeMoney;
   const lines = projectLines(o);
   const rooms = o.measurements?.rooms || [];
@@ -3951,6 +3967,37 @@ function quickEntryConfirmNewClient() {
   render();
   setTimeout(() => document.getElementById('qe-phone')?.focus(), 0);
 }
+/**
+ * Количество строки для расчёта и сохранения. У услуги без размеров (шт., выезд,
+ * услуга) пустое количество при сумме больше нуля — это одна единица; у услуги
+ * по площади sq ft обязательны. Owner, 2026-11-21.
+ */
+/** #577 (Owner, 2026-11-21): the quantity of a fixed-sum service reads «Кол-во, шт.», not «Кол-во, услуга». */
+function quickEntryQtyUnit(offering) {
+  const unit = offering ? serviceOfferingUnitShort(offering) : '';
+  return !unit || unit === 'услуга' ? 'шт.' : unit;
+}
+function quickEntryEffectiveQty(line, offering = serviceOffering(line?.offering)) {
+  const qty = Math.max(0, Number(line?.qty) || 0);
+  if (qty > 0) return qty;
+  // 1 подставляем только в пустое поле; явный 0 или минус остаётся ошибкой.
+  const blank = String(line?.qty ?? '').trim() === '';
+  return blank && offering && !serviceOfferingNeedsSizes(offering) && Number(line?.price) > 0 ? 1 : 0;
+}
+/** Почему строка не попадает в «Итог проекта» — чтобы сумма не пропадала молча. */
+function quickEntryLineSkipReason(line) {
+  const offering = serviceOffering(line?.offering);
+  const anything = offering || Number(line?.price) > 0 || Number(line?.qty) > 0;
+  if (!anything) return '';
+  if (!offering) return 'выберите услугу';
+  if (!(quickEntryEffectiveQty(line, offering) > 0)) return serviceOfferingNeedsSizes(offering) ? 'укажите sq ft' : 'укажите количество';
+  if (!(Number(line.price) > 0)) return 'укажите сумму клиенту';
+  const date = projectQuickDateValue(line.date);
+  const endDate = projectQuickDateValue(line.endDate || line.date);
+  if (!date || !endDate) return 'укажите даты работ';
+  if (endDate < date) return 'окончание раньше начала';
+  return '';
+}
 function quickEntrySetLine(i, field, value) {
   const f = quickEntryReadForm();
   const line = quickEntryLines()[i];
@@ -3962,6 +4009,13 @@ function quickEntrySetLine(i, field, value) {
     // Материал принадлежит услуге, как в кассе: A1 → её плёнка 12 mil, силикон в пакете.
     const offering = serviceOffering(value);
     line.film = offering ? serviceOfferingDefaultFilmId(offering) || '' : '';
+  }
+  // Owner, 2026-11-21: «написал за электрику 1500… сумма не суммировалась» — у услуги
+  // без размеров пустое количество при введённой сумме значит одну единицу.
+  // Подставляем 1 только в пустое поле: явный 0 или минус остаются ошибкой.
+  if (['offering', 'price'].includes(field) && String(line.qty ?? '').trim() === '') {
+    const offering = serviceOffering(line.offering);
+    if (offering && !serviceOfferingNeedsSizes(offering) && (field === 'offering' || Number(line.price) > 0)) line.qty = '1';
   }
   if (field === 'offering' || field === 'qty') {
     const offering = serviceOffering(line.offering);
@@ -3977,6 +4031,45 @@ function quickEntrySetLine(i, field, value) {
     }
   }
   if (f.pricingMode === 'manual' && Number(f.manualTotal) > 0) quickEntryDistributeTotal(f, Number(f.manualTotal), false);
+  preservePositionForNextRender();
+  render();
+}
+/**
+ * Owner, 2026-11-21: «не могу менять даты». Даты проекта — это самое раннее начало
+ * и самое позднее окончание услуг. Новая дата проекта переносит те услуги, у которых
+ * дата совпадала со старой (у единственной услуги — её), и не даёт окончанию стать
+ * раньше начала.
+ */
+function quickEntrySetProjectDate(edge, value) {
+  quickEntryReadForm();
+  const lines = quickEntryLines();
+  const next = projectQuickDateValue(value);
+  if (!lines.length || !next) { preservePositionForNextRender(); render(); return; }
+  const starts = lines.map(l => projectQuickDateValue(l.date)).filter(Boolean).sort();
+  const ends = lines.map(l => projectQuickDateValue(l.endDate || l.date)).filter(Boolean).sort();
+  const oldStart = starts[0] || '', oldEnd = ends[ends.length - 1] || '';
+  const single = lines.length === 1;
+  if (edge === 'start') {
+    // Двигаем услуги, которые начинали проект, и все, что новая граница
+    // «перешагнула» — иначе началом проекта стала бы другая услуга.
+    lines.forEach(l => {
+      const start = projectQuickDateValue(l.date);
+      if (!single && start !== oldStart && !(start && start < next)) return;
+      l.date = next;
+      if (!l.endDate || projectQuickDateValue(l.endDate) < next) l.endDate = next;
+    });
+  } else if (edge === 'end') {
+    const moved = lines.filter(l => {
+      const end = projectQuickDateValue(l.endDate || l.date);
+      return single || end === oldEnd || (end && end > next);
+    });
+    const tooEarly = moved.find(l => projectQuickDateValue(l.date) > next);
+    if (tooEarly) {
+      alert(`Дата завершения раньше начала услуги ${lines.indexOf(tooEarly) + 1}. Сначала поменяйте её начало.`);
+      preservePositionForNextRender(); render(); return;
+    }
+    moved.forEach(l => { l.endDate = next; });
+  }
   preservePositionForNextRender();
   render();
 }
@@ -4026,7 +4119,7 @@ function quickEntryLineCalc(line, complexity = quickEntryState().form.complexity
   const offering = serviceOffering(offeringId);
   const sized = offering ? serviceOfferingNeedsSizes(offering) : true;
   const catalogId = line.catalogId || (line.film && line.film !== '__manual' ? line.film : '') || '';
-  const qty = Number(line.qty) || 0;
+  const qty = quickEntryEffectiveQty(line, offering);
   const price = Number(line.price) || 0;
   const installers = [...new Set(line.installerIds || line.installers || [])].filter(Boolean);
   const ref = { offeringId, catalogId, serviceType: line.serviceType || line.dir, unit: sized ? 'sqft' : serviceOfferingUnit(offering) };
@@ -4071,7 +4164,7 @@ function quickEntryDistributeTotal(f, value, warn = true) {
   if (!(target > 0) || !rows.length) { if (warn) alert('Введите итог проекта больше нуля.'); return false; }
   const bases = rows.map(line => Math.max(0, Number(line.price) || quickEntryLineBasePrice(line)));
   const basis = bases.reduce((sum, price) => sum + price, 0);
-  if (!(basis > 0) || rows.some(line => !(Number(line.qty) > 0) || !serviceOffering(line.offering))) {
+  if (!(basis > 0) || rows.some(line => !(quickEntryEffectiveQty(line) > 0) || !serviceOffering(line.offering))) {
     if (warn) alert('Сначала выберите услуги и укажите объём каждой услуги.');
     return false;
   }
@@ -4116,6 +4209,17 @@ function quickEntryOrders(month = quickEntryState().month) {
     const at = new Date(o.installationDoneAt || o.installationAt || o.paidAt || o.createdAt);
     return at >= start && at <= end;
   }).sort((a, b) => new Date(b.installationDoneAt || b.installationAt || b.createdAt) - new Date(a.installationDoneAt || a.installationAt || a.createdAt));
+}
+/**
+ * Кнопка «удалить» в таблице выполненных проектов (Owner, 2026-11-21: функции не было,
+ * кнопка не работала). Проект не стирается, а уходит в архив тем же окном, что и
+ * черновики: он пропадает из денег и аналитики и восстанавливается из «Архива».
+ */
+function quickEntryRemove(oid) {
+  if (currentUser()?.role !== 'owner') return;
+  const o = getOrder(oid);
+  if (!o || !o.quickEntry) return;
+  openArchiveProjectModal(o.id);
 }
 function quickEntryDraftOrders() {
   // A historical draft may be older than the twelve-month analytics picker.
@@ -4186,8 +4290,20 @@ function quickEntryFindOrCreateClient(f) {
     return { client: selected, address: addr || clientAddressById(selected, selected.primaryAddressId) || prepareExistingClientForOrder(selected) };
   }
   if (!f.clientNewConfirmed) {
-    alert('Выберите существующего клиента из найденных контактов или нажмите «Создать нового клиента».');
-    return null;
+    // Owner, 2026-11-21: «ввёл нового клиента — кнопки создать не видно». Если в CRM
+    // нет похожего контакта ни по имени, ни по телефону, клиент создаётся сам; спрашиваем
+    // только когда есть из кого выбрать, и сразу открываем список под полем.
+    const name = String(f.client || '').trim();
+    const phoneQuery = String(f.phone || '').trim();
+    const candidates = [...new Map([...searchClientsFuzzy(name), ...(phoneQuery ? clientsMatchingContact(phoneQuery, '') : [])].map(c => [c.id, c])).values()];
+    if (candidates.length) {
+      alert(`Похожие клиенты уже есть в CRM: ${candidates.slice(0, 3).map(c => c.name || 'без имени').join(', ')}${candidates.length > 3 ? '…' : ''}. Выберите существующего клиента из найденных контактов или нажмите «Создать нового клиента».`);
+      const input = document.getElementById('qe-client');
+      if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); }
+      quickEntryClientInput(name);
+      return null;
+    }
+    f.clientNewConfirmed = true;
   }
   const phone = String(f.phone || '').trim();
   const matches = phone ? clientsMatchingContact(phone, '') : [];
@@ -4288,8 +4404,9 @@ function quickEntryBuildLine(p) {
   if (hired > 0) line.hiredAmount = hired;
   return line;
 }
-function quickEntryCommit({ closeProject = true } = {}) {
+async function quickEntryCommit({ closeProject = true } = {}) {
   if (!quickEntryCanUse()) return;
+  if (quickEntryState().committing) return;
   const f = quickEntryReadForm();
   const actor = currentUser();
   const managerId = actor?.role === 'owner' ? f.manager : actor?.id;
@@ -4305,7 +4422,7 @@ function quickEntryCommit({ closeProject = true } = {}) {
     const date = projectQuickDateValue(line.date);
     const endDate = projectQuickDateValue(line.endDate || line.date);
     const offering = serviceOffering(line.offering);
-    const qty = Number(line.qty) || 0, price = Number(line.price) || 0;
+    const qty = quickEntryEffectiveQty(line, offering), price = Number(line.price) || 0;
     const installers = [...new Set(line.installers || [])].filter(Boolean);
     const hired = Math.max(0, Number(line.hired) || 0);
     if (!date) problems.push(`${n}: дата начала работ`);
@@ -4374,7 +4491,49 @@ function quickEntryCommit({ closeProject = true } = {}) {
     alert('Нельзя внести проект: ' + issues.join(', ') + '.');
     return;
   }
-  closeQuickProjectAsCompletedWith(o, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
+  // #587: сервер разрешает закрыть только тот исторический черновик, который
+  // у него уже есть. Поэтому сначала подтверждённо сохраняем черновик и лишь
+  // потом отдельным сохранением закрываем проект.
+  const cloud = typeof cloudReady !== 'undefined' && cloudReady && typeof cloudPersistConfirmed === 'function';
+  s.committing = true;
+  try {
+    save();
+    if (cloud && !await cloudPersistConfirmed()) {
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.notice = `${o.number} · ${client.name} — черновик ещё не сохранён на сервере, проект не закрыт. Когда вверху появится «Сохранено», закройте его в «Не завершён перенос».`;
+      render();
+      return;
+    }
+    // При конфликте ревизий cloudPersist() заменяет весь db слитой копией,
+    // поэтому берём проект заново по id и закрываем именно текущий экземпляр.
+    const current = db.orders.find(item => item.id === o.id);
+    if (!current) {
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.notice = `${o.number} · ${client.name} — черновик сохранён, но после обновления данных проект не найден, он не закрыт. Проверьте «Не завершён перенос».`;
+      render();
+      return;
+    }
+    const persistedDraft = cloud ? cloneCloudWorkspaceValue(cloudBaseSnapshot?.orders?.find(item => item.id === o.id) || null) : null;
+    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
+    if (cloud && !await cloudPersistConfirmed()) {
+      if (persistedDraft) {
+        // Сервер не принял закрытие: возвращаем только этот проект к
+        // сохранённому черновику. Остальные правки, сделанные за это время,
+        // не трогаем.
+        const index = db.orders.findIndex(item => item.id === o.id);
+        if (index >= 0) db.orders[index] = persistedDraft;
+        else db.orders.push(persistedDraft);
+        save();
+      }
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.openProject = o.id;
+      s.notice = `${o.number} · ${client.name} — черновик сохранён, но закрыть проект не удалось. Откройте его в «Не завершён перенос» и нажмите «Закрыть выполненный проект» ещё раз.`;
+      render();
+      return;
+    }
+  } finally {
+    s.committing = false;
+  }
   s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
   s.openProject = o.id;
   s.notice = `${o.number} · ${client.name} · ${prepared.length} ${projectPlural(prepared.length, 'услуга', 'услуги', 'услуг')} · ${fmtMoney(total)} — внесён`;
@@ -4390,7 +4549,7 @@ function quickEntryCommit({ closeProject = true } = {}) {
 function quickEntryPreviewOrder(f = quickEntryState().form) {
   const prepared = quickEntryLines().map(line => {
     const offering = serviceOffering(line.offering);
-    const qty = Math.max(0, Number(line.qty) || 0);
+    const qty = quickEntryEffectiveQty(line, offering);
     const price = Math.max(0, Number(line.price) || 0);
     const date = projectQuickDateValue(line.date);
     const endDate = projectQuickDateValue(line.endDate || line.date);
@@ -4509,9 +4668,9 @@ function renderQuickEntry() {
           <label>Окончание<input id="qe-l${i}-endDate" type="date" min="${academyEsc(line.date)}" value="${academyEsc(line.endDate || line.date)}" onchange="quickEntrySetLine(${i}, 'endDate', this.value)"></label>
           <label>Направление<select id="qe-l${i}-dir" onchange="quickEntrySetLine(${i}, 'dir', this.value)">${dirs.map(d => opt(d.id, d.title, line.dir)).join('')}</select></label>
           <label>Услуга<select id="qe-l${i}-offering" onchange="quickEntrySetLine(${i}, 'offering', this.value)"><option value="">${offerings.length ? 'Выберите услугу' : 'В направлении нет услуг — добавьте в «Услуги и цены»'}</option>${offerings.map(item => opt(item.id, `${item.name} · ${fmtMoney(Number(item.pricePerSqft) || 0)}/${serviceOfferingNeedsSizes(item) ? 'sq ft' : serviceOfferingUnitShort(item)}`, line.offering)).join('')}</select></label>
-          ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'без материала'))}"></label>`}
+          ${sized && offering && serviceOfferingNoFilm(offering) ? `<label>Материал услуги<input readonly value="без плёнки · работа по площади${serviceOfferingHasSupplies(offering) ? ', расходники ниже' : ''}"></label>` : sized ? `<label>${offering ? `Материал услуги${serviceOfferingIncludes(offering).length ? ` · в пакете: ${academyEsc(serviceOfferingIncludes(offering).map(c => c.name).join(', '))}` : ''}` : 'Материал'}<select id="qe-l${i}-film" onchange="quickEntrySetLine(${i}, 'film', this.value)" ${offering ? '' : 'disabled'}><option value="">${offering ? 'выберите плёнку' : 'сначала услуга'}</option>${films.map(film => { const st = warehouseCatalogStockStats(film.id); return opt(film.id, `${catalogLabel(film)}${st.availableSqft > 0 ? ` · ${st.availableSqft.toFixed(0)} sq ft на складе` : ' · под заказ'}`, line.film); }).join('')}${opt('__manual', 'Другая — вписать название', line.film)}</select></label>` : `<label>Материал услуги<input readonly value="${academyEsc(offering && serviceOfferingIncludes(offering).length ? `в пакете: ${serviceOfferingIncludes(offering).map(c => c.name).join(', ')}` : (Number(offering?.materialCostPerUnit) > 0 ? `себестоимость ${fmtMoney(Number(offering.materialCostPerUnit))} / ${serviceOfferingUnitShort(offering)}` : 'Материал не нужен, только работа'))}"></label>`}
           ${line.film === '__manual' ? `<label>Название плёнки<input id="qe-l${i}-filmManual" value="${academyEsc(line.filmManual)}" placeholder="например, 3M Prestige 70"></label>` : ''}
-          <label>${sized ? 'sq ft' : academyEsc(serviceOfferingUnitShort(offering))}<input id="qe-l${i}-qty" type="number" min="0" step="0.1" value="${academyEsc(line.qty)}" onchange="quickEntrySetLine(${i}, 'qty', this.value)"></label>
+          <label>Кол-во, ${sized ? 'sq ft' : academyEsc(quickEntryQtyUnit(offering))}<input id="qe-l${i}-qty" type="number" min="0" step="0.1" value="${academyEsc(line.qty)}" placeholder="${sized ? '' : '1'}" onchange="quickEntrySetLine(${i}, 'qty', this.value)"></label>
           <label>Сумма клиенту, $<input id="qe-l${i}-price" type="number" min="0" step="1" value="${academyEsc(line.price)}" onchange="quickEntrySetLine(${i}, 'price', this.value)"><span class="qe-hint">${unitHint}</span></label>
         </div>
         <button type="button" class="qe-x" title="Убрать услугу" onclick="quickEntryRemoveLine(${i})">×</button>
@@ -4537,7 +4696,17 @@ function renderQuickEntry() {
   const managerPay = previewPss.manager;
   const projectExpenses = previewPss.gas + previewPss.rent + previewPss.manual + previewPss.marketing;
   const previewMargin = previewProfitability.grossProfit;
-  const reserve = previewProfitability.fixedAllocation + previewProfitability.taxAllocation;
+  // Owner, 2026-11-21: «резерв $10 287 при выручке $6 000». Постоянные расходы месяца
+  // делятся между проектами месяца по выручке; первый внесённый проект месяца несёт их
+  // целиком. Поэтому главная цифра — прибыль проекта, а доля постоянных показана
+  // отдельно, с основанием, и считается неточной, пока в месяце мало проектов.
+  const fixedShare = previewProfitability.fixedAllocation;
+  const taxShare = previewProfitability.taxAllocation;
+  const projectProfit = previewMargin - taxShare;
+  const monthProjects = previewProfitability.projectCount;
+  const fewMonthProjects = monthProjects < 3;
+  const fixedBasis = `${previewProfitability.monthLabel}: постоянные ${fmtMoney(previewProfitability.fixedPool)} делятся между ${monthProjects} ${projectPlural(monthProjects, 'проектом', 'проектами', 'проектами')} месяца по выручке, доля этого проекта ${Math.round((previewProfitability.revenueShare || 0) * 100)} %`;
+  const skippedLines = lines.map((l, i) => ({ i, reason: quickEntryLineSkipReason(l) })).filter(x => x.reason);
   const estimatedNet = previewProfitability.netProfit;
   const dates = lines.map(l => projectQuickDateValue(l.date)).filter(Boolean).sort();
   const endDates = lines.map(l => projectQuickDateValue(l.endDate || l.date)).filter(Boolean).sort();
@@ -4551,7 +4720,7 @@ function renderQuickEntry() {
       <input id="qe-client" value="${academyEsc(f.client)}" placeholder="Начните вводить имя, телефон или компанию" autocomplete="off" oninput="quickEntryClientInput(this.value)" onfocus="if(this.value.trim()) quickEntryClientInput(this.value)">
       <input id="qe-clientId" type="hidden" value=""><input id="qe-clientNewConfirmed" type="hidden" value="${f.clientNewConfirmed ? '1' : '0'}">
       <div id="qe-client-results" class="qe-client-results" style="display:none"></div>
-      <div id="qe-client-new-state">${f.clientNewConfirmed ? '<span class="qe-client-new">Новый клиент · CRM проверит телефон перед сохранением</span>' : '<span class="qe-client-help">Выберите контакт из CRM. Если его нет — явно создайте нового.</span>'}</div>
+      <div id="qe-client-new-state">${f.clientNewConfirmed ? '<span class="qe-client-new">Новый клиент · CRM проверит телефон перед сохранением</span>' : String(f.client || '').trim() ? `<button type="button" class="qe-client-create" onclick="quickEntryConfirmNewClient()">+ Создать нового клиента «${academyEsc(String(f.client).trim())}»</button>` : '<span class="qe-client-help">Выберите контакт из CRM. Если его нет — создайте нового или просто впишите имя: без похожих контактов клиент создастся сам.</span>'}</div>
     </label>`;
   const form = `<section class="qe-form" onkeydown="if(event.key==='Enter'&&event.target.tagName==='INPUT'&&event.target.id!=='qe-client'){event.preventDefault();quickEntryCommit({ closeProject: false });}">
     <div class="qe-section-head"><b>1. Проект и клиент</b><span>Один проект — много услуг</span></div>
@@ -4563,8 +4732,8 @@ function renderQuickEntry() {
       <label>Откуда лид<select id="qe-source">${quickEntrySources().map(([id, label]) => opt(id, label, f.source)).join('')}</select></label>
       <label>Объект<select id="qe-site">${opt('RESIDENTIAL', 'Жилой', f.site)}${opt('COMMERCIAL', 'Коммерческий', f.site)}</select></label>
       <label>Менеджер<select id="qe-manager" ${owner ? '' : 'disabled title="Менеджер создаёт исторический проект только на себя"'} onchange="quickEntrySet('manager', this.value)">${managerChoices.map(u => opt(u.id, `${u.name}${u.payConfig?.type === 'commission' ? ` · ${u.payConfig.commissionPct || 0} %` : u.payConfig?.type === 'salary' ? ' · оклад' : ''}`, f.manager)).join('')}</select></label>
-      <label>Дата начала проекта<input id="qe-projectStart" type="date" value="${academyEsc(dates[0] || '')}" readonly></label>
-      <label>Дата завершения<input id="qe-projectEnd" type="date" value="${academyEsc(endDates[endDates.length - 1] || '')}" readonly></label>
+      <label>Дата начала проекта<input id="qe-projectStart" type="date" value="${academyEsc(dates[0] || '')}" onchange="quickEntrySetProjectDate('start', this.value)"><span class="qe-hint">Меняет даты услуг ниже. У каждой услуги можно поставить свои</span></label>
+      <label>Дата завершения<input id="qe-projectEnd" type="date" min="${academyEsc(dates[0] || '')}" value="${academyEsc(endDates[endDates.length - 1] || '')}" onchange="quickEntrySetProjectDate('end', this.value)"></label>
     </div>
     <div class="qe-section-head"><b>2. Как вводим сумму клиенту</b><span>В CRM остаётся одна итоговая цена</span></div>
     <div class="qe-pricing">
@@ -4662,9 +4831,13 @@ function renderQuickEntry() {
     <div class="qe-row"><span>Расходы проекта и реклама</span><b>− ${fmtMoney(projectExpenses)}</b></div>
     <div class="qe-summary-profit">
       <div class="qe-row"><span>Валовая прибыль</span><b>${fmtMoney(previewMargin)}</b></div>
-      <div class="qe-row"><span>Резерв расходов и налога</span><b>− ${fmtMoney(reserve)}</b></div>
-      <div class="qe-row qe-total"><span>Расчётная чистая</span><b>${fmtMoney(estimatedNet)}</b></div>
+      <div class="qe-row"><span>Налог (резерв)</span><b>− ${fmtMoney(taxShare)}</b></div>
+      <div class="qe-row qe-total"><span>Прибыль проекта</span><b>${fmtMoney(projectProfit)}</b></div>
+      <div class="qe-row qe-summary-fixed" style="${fewMonthProjects ? 'opacity:.6' : ''}"><span>Доля постоянных расходов месяца</span><b>− ${fmtMoney(fixedShare)}</b></div>
+      <div class="qe-row qe-summary-fixed" style="${fewMonthProjects ? 'opacity:.6' : ''}"><span>Чистая после постоянных расходов</span><b>${fmtMoney(estimatedNet)}</b></div>
+      <div class="qe-muted" style="font-size:.75rem">${academyEsc(fixedBasis)}${fewMonthProjects ? '. Пока в месяце меньше трёх проектов, эта цифра неточная' : ''}.</div>
     </div>
+    ${skippedLines.length ? `<div class="qe-summary-warn qe-summary-skipped">${skippedLines.map(x => `Услуга ${x.i + 1} не входит в сумму: ${academyEsc(x.reason)}`).join('<br>')}</div>` : ''}
     <div class="qe-summary-warn">Перед закрытием CRM проверит даты, исполнителей, ставки, материал и оплату. Только после закрытия проект попадёт в склад, зарплату и аналитику.</div>
     <div class="qe-summary-actions">
       <button type="button" class="btn-ghost" onclick="quickEntryCommit({ closeProject: false })">Сохранить черновик</button>
