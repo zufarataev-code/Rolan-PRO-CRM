@@ -1,4 +1,4 @@
-import { canonicalFilmCategory, serviceGroupIds, serviceGroupScope, serviceGroupName, projectServicesFinished } from './service-solutions';
+import { canonicalFilmCategory, projectDirectionMoves, rekeyDirectionRecords, serviceGroupIds, serviceGroupScope, serviceGroupName, projectServicesFinished } from './service-solutions';
 import { serviceScopeApproved } from './service-scope-approvals';
 import { createHash } from 'node:crypto';
 
@@ -111,10 +111,14 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
   const now = new Date().toISOString();
   for (const order of rows(next.orders)) {
     const before = rows(current.orders).find(value => value.id === order.id) || {};
+    // #592: a closed project or a TintWiz import moved to another direction keeps
+    // its done services under the new id; they are not newly completed work.
+    const moved = closed.includes(String(before.status)) || before._importSource === 'wiz'
+      ? rekeyDirectionRecords(before, projectDirectionMoves(before, order)) : before;
     // A service completed without a multi-stage plan is one complete stage.
     // Field progress was already merged and authorized before this preparation.
     for (const serviceId of serviceGroupIds(order)) {
-      if (order.serviceProgress?.[serviceId]?.status !== 'done' || before.serviceProgress?.[serviceId]?.status === 'done'
+      if (order.serviceProgress?.[serviceId]?.status !== 'done' || moved.serviceProgress?.[serviceId]?.status === 'done'
         || productionStages(order, serviceId).length) continue;
       const assignment = rows(order.serviceSchedules).find(plan => plan.id === serviceId);
       const installerIds = assignment?.installerIds || order.installerIds || [];

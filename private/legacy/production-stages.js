@@ -5253,8 +5253,9 @@ function wizDirectionBulkMove(ids, toKey, by = state.currentUserId, { wantSkippe
     const results = projectMainDirectionKeys(o).filter(key => key !== toKey)
       .map(key => projectDirectionMoveApply(o, key, toKey, by, 'массовая правка импорта TintWiz', { keepMoney: true }))
       .filter(Boolean);
-    if (results.some(result => result.skipped)) {
-      // Part of the project is still in the old direction: it stays on the list to fix by hand.
+    if (results.some(result => result.skipped || result.kept)) {
+      // Part of the project is still in the old direction (finished work with stages,
+      // a paid service of the old direction): it stays on the list to fix by hand.
       delete o._directionCheckedAt;
       skipped++; return;
     }
@@ -5279,7 +5280,7 @@ function wizDirectionBulkApply() {
   save();
   state._wizBulk = { ...s, picked: [] };
   renderWizDirectionBulk();
-  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}» или этапы с начислениями, а выплаты по выполненной работе не меняются.` : '';
+  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}», этапы с начислениями или оплаченная услуга справочника, а выплаты по выполненной работе не меняются. Эти проекты остались в списке непроверенных.` : '';
   setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.${rest}`), 0);
 }
 

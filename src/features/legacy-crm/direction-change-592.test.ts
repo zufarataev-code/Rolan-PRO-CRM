@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import { prepareServiceScopeApprovals, serviceScopeApproved } from './service-scope-approvals';
+import { prepareProductionStages } from './production-stages';
 import { prepareServiceSolutions, projectDirectionMoves } from './service-solutions';
 
 // Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
@@ -289,6 +290,18 @@ test('the bulk fix never merges finished work into a direction the project alrea
   assert.equal(o._directionCheckedAt, undefined, 'a partly fixed project stays on the unchecked list');
 });
 
+test('the bulk fix leaves a project unchecked while a paid service of the old direction stays', () => {
+  const ctx = sandbox();
+  const o: any = wizProject('k', { serviceType: 'solar_film', serviceTypes: ['solar_film'] });
+  o.measurements.rooms[0].windows[0].measureScope = 'solar_film';
+  o.measurements.rooms[0].windows[0].offeringId = 'solar_install';
+  ctx.db.orders.push(o);
+  const result = ctx.wizDirectionBulkMove(['k'], 'privacy_film', 'owner', { wantSkipped: true });
+  assert.deepEqual({ ...result }, { projects: 0, skipped: 1 });
+  assert.equal(o.measurements.rooms[0].windows[0].measureScope, 'solar_film');
+  assert.equal(o._directionCheckedAt, undefined);
+});
+
 test('a project that already has the right direction gets a history entry from the bulk fix', () => {
   const ctx = sandbox();
   const o: any = wizProject('ok', { serviceType: 'privacy_film', serviceTypes: ['privacy_film'] });
@@ -381,6 +394,10 @@ test('a closed project keeps its crew, dates and progress when the owner moves i
     return next;
   };
   assert.equal(prepareServiceSolutions(payload(before), payload(move()), true), null);
+  // The stage check runs first: the moved done service is not new finished work.
+  const staged = move();
+  assert.equal(prepareProductionStages(payload(before), payload(staged), true, []), null);
+  assert.equal(staged.productionStages, undefined, 'no second paid stage for the same work');
   // Only the rename passes: a new crew on a closed project is still refused.
   const recrewed = move();
   recrewed.serviceSchedules[0].installerIds = ['i2'];
