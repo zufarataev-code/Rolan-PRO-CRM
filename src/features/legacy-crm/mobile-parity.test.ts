@@ -3,12 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const route = readFileSync("app/legacy-crm/route.ts", "utf8");
+// The page is composed once per release in static-shell.ts (2026-11-22); the route reads it from there.
+const shell = readFileSync("src/features/legacy-crm/static-shell.ts", "utf8");
 const legacy = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
 
 test("phone and desktop use the same complete CRM document", () => {
   assert.doesNotMatch(route, /buildMobileCrmShell|mobile-shell|mobileUi/);
   assert.doesNotMatch(legacy, /rolanpro-mobile-crm/);
-  assert.match(route, /replaceLegacyBootstrapLogin/);
+  assert.match(route, /legacyStaticShell\(\)/);
+  assert.match(shell, /replaceLegacyBootstrapLogin/);
+  assert.doesNotMatch(shell, /buildMobileCrmShell|mobile-shell|mobileUi/);
   assert.match(legacy, /\$\{renderView\(\)\}/);
 });
 
