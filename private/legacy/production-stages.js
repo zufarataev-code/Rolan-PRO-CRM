@@ -5253,7 +5253,11 @@ function wizDirectionBulkMove(ids, toKey, by = state.currentUserId, { wantSkippe
     const results = projectMainDirectionKeys(o).filter(key => key !== toKey)
       .map(key => projectDirectionMoveApply(o, key, toKey, by, 'массовая правка импорта TintWiz', { keepMoney: true }))
       .filter(Boolean);
-    if (results.some(result => result.skipped)) { skipped++; return; }
+    if (results.some(result => result.skipped)) {
+      // Part of the project is still in the old direction: it stays on the list to fix by hand.
+      delete o._directionCheckedAt;
+      skipped++; return;
+    }
     if (!results.length) {
       // Already right: the owner's check is written to the history like a move.
       o._directionCheckedAt = new Date().toISOString();

@@ -203,7 +203,8 @@ export function renameProjectDirections(before: Row, moves: Map<string, string>,
 /**
  * #592: the directions the owner moved on this project (solar → privacy after
  * the TintWiz import). A move counts only when it is a pure rename: the same
- * windows with the same sizes, into a direction the project did not have.
+ * windows with the same sizes, into a direction the project did not have, and
+ * no other direction moved into it in the same save.
  */
 export function projectDirectionMoves(before: Row, order: Row): Map<string, string> {
   const moves = new Map<string, string>();
@@ -217,6 +218,10 @@ export function projectDirectionMoves(before: Row, order: Row): Map<string, stri
   }
   const fromType = String(before.serviceType || 'solar_film'), toType = String(order.serviceType || 'solar_film');
   if (fromType !== toType && !moves.has(fromType)) moves.set(fromType, toType);
+  // Two directions merged into one are not a rename: their crews and progress
+  // would collide under one id.
+  const targets = [...moves.values()];
+  for (const [from, to] of [...moves]) if (targets.filter(key => key === to).length > 1) moves.delete(from);
   if (!moves.size) return moves;
   const renamed = renameProjectDirections(before, moves, order.serviceType);
   const groupsBefore = new Set(serviceGroupIds(before)), groupsNow = new Set(serviceGroupIds(order));

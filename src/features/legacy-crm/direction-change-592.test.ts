@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import { prepareServiceScopeApprovals, serviceScopeApproved } from './service-scope-approvals';
-import { prepareServiceSolutions } from './service-solutions';
+import { prepareServiceSolutions, projectDirectionMoves } from './service-solutions';
 
 // Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
 // неправильно: там солнцезащитные, а по факту приватная — нужна возможность
@@ -286,6 +286,7 @@ test('the bulk fix never merges finished work into a direction the project alrea
   assert.deepEqual(ids.sort(), ['direction:decorative_film', 'direction:privacy_film']);
   assert.equal(o.measurements.rooms[0].windows[1].measureScope, 'decorative_film', 'the second direction is left for the owner');
   assert.equal(ctx.orderRevenue(o), revenueBefore);
+  assert.equal(o._directionCheckedAt, undefined, 'a partly fixed project stays on the unchecked list');
 });
 
 test('a project that already has the right direction gets a history entry from the bulk fix', () => {
@@ -410,6 +411,28 @@ test('an open TintWiz import with a finished service saves after the bulk fix mo
   const plain = structuredClone(before); delete plain._importSource;
   const plainNext = structuredClone(next); delete plainNext._importSource;
   assert.match(String(prepareServiceSolutions(payload(plain), payload(plainNext), true)), /Услуга выполнена/);
+});
+
+test('the server refuses two directions of a closed project merged into one', () => {
+  const done = { status: 'done', doneAt: '2026-10-23T22:00:00Z', doneBy: 'i1' };
+  const before: any = {
+    id: 'merge', status: 'completed', serviceType: 'solar_film',
+    measurements: { rooms: [{ id: 'r', windows: [
+      { id: 'a', measureScope: 'solar_film', width: 1000, height: 1000, qty: 1 },
+      { id: 'b', measureScope: 'decorative_film', width: 1000, height: 1000, qty: 1 },
+    ] }] },
+    extraServices: [],
+    serviceSchedules: [{ id: 'direction:solar_film', installerIds: ['i1'] }, { id: 'direction:decorative_film', installerIds: ['i2'] }],
+    serviceProgress: { 'direction:solar_film': done, 'direction:decorative_film': done },
+  };
+  const payload = (order: any) => ({ settings: {}, users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }], orders: [order] });
+  const next = structuredClone(before);
+  next.serviceType = 'privacy_film';
+  next.measurements.rooms[0].windows.forEach((win: any) => { win.measureScope = 'privacy_film'; });
+  next.serviceSchedules.forEach((plan: any) => { plan.id = 'direction:privacy_film'; });
+  next.serviceProgress = { 'direction:privacy_film': done };
+  assert.equal(projectDirectionMoves(before, next).size, 0, 'a merge is not a rename');
+  assert.notEqual(prepareServiceSolutions(payload(before), payload(next), true), null);
 });
 
 test('a manager without the owner grant cannot move the direction of a closed project', () => {
