@@ -11208,7 +11208,22 @@ function filmCutOptimizePieces(pieces, rollWidths) {
   );
   return candidates[0];
 }
+// Owner, 2026-11-22: «CRM не должна тормозить». The project card asked for the
+// same film plan seven times per screen (sum, cost, margin, PSS…) — ~80 ms on a Mac,
+// several times more on a phone, on every keystroke. During one screen render the
+// project does not change, so the plan is computed once per project per render.
+let __filmPlanRenderCache = null;
 function calcFilmPlan(o) {
+  if (__filmPlanRenderCache && o && typeof o === 'object') {
+    const hit = __filmPlanRenderCache.get(o);
+    if (hit) return hit;
+    const plan = calcFilmPlanCompute(o);
+    __filmPlanRenderCache.set(o, plan);
+    return plan;
+  }
+  return calcFilmPlanCompute(o);
+}
+function calcFilmPlanCompute(o) {
   const pieces = filmCutCreatePiecesForOrder(o);
   const byCatalog = {};
   pieces.forEach(piece => {
@@ -20145,7 +20160,10 @@ function renderNow() {
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
 
-  const html = renderAppShell();
+  // One film plan per project for the whole screen (see calcFilmPlan).
+  __filmPlanRenderCache = new WeakMap();
+  let html;
+  try { html = renderAppShell(); } finally { __filmPlanRenderCache = null; }
 
   // Тридцать обработчиков вызывают render() при каждом изменении поля,
   // но большинство изменений не меняют то, что на экране: ввод размера
