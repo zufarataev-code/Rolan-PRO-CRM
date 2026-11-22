@@ -46,14 +46,25 @@ function sandbox(user: any = { id: 'owner', role: 'owner' }) {
     },
   };
   ctx.projectEstimateMarkChanged = (_o: unknown, reason: string) => ctx.marks.push(reason);
+  // Windows group by their service or direction, rows by themselves — as the card does.
+  ctx.projectServiceGroups = (o: any) => {
+    const scope = ctx.orderMeasureScope(o);
+    const groups = new Map<string, any>();
+    const group = (id: string) => { if (!groups.has(id)) groups.set(id, { id, windows: [], lines: [] }); return groups.get(id); };
+    ctx.measureAllWindows(o).forEach(({ win }: any) => group(win.offeringId ? `offering:${win.offeringId}` : `direction:${win.measureScope || scope}`).windows.push(win));
+    (o.extraServices || []).forEach((line: any) => group(`line:${line.id}`).lines.push(line));
+    return [...groups.values()];
+  };
   vm.createContext(ctx);
   const code = [
     constant(html, 'ORDER_PRIMARY_SERVICES', '\n];'),
     constant(html, 'CLOSED_PROJECT_STATUSES', '];'),
+    constant(html, 'PROJECT_SCOPE_WINDOW_FIELDS', '];'),
+    constant(html, 'PROJECT_SCOPE_LINE_FIELDS', '];'),
     ...['orderMeasureScope', 'measureAllWindows', 'primaryServiceInfo', 'canonicalServiceDirection', 'serviceOfferingDirection',
       'projectPlural', 'projectWindowsWord', 'windowActualAreaSqft', 'windowCatalog', 'windowRetailPrice', 'windowFilmCost',
       'windowServiceInstallerRate', 'serviceOfferingInstallerRate', 'orderFilmRevenue', 'orderExtraServicesRevenue', 'orderRevenue'].map(name => fn(html, name)),
-    ...['projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectIsWizImport', 'projectMainDirectionKeys',
+    ...['projectServiceScope', 'projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectIsWizImport', 'projectMainDirectionKeys',
       'wizImportOrders', 'wizDirectionBulkMove'].map(name => fn(stages, name)),
   ].join('\n');
   vm.runInContext(code.replace(/^const (\w+) = /gm, 'var $1 = '), ctx);
@@ -199,4 +210,59 @@ test('the importer no longer adds the window price on top of the TintWiz total',
   const o = { status: 'completed', measurements: { rooms: [{ windows: [placeholder] }] }, extraServices: [{ type: 'custom', qty: 1, price: 7500 }] };
   assert.equal(ctx.orderRevenue(o), 7500);
   assert.equal(ctx.windowServiceInstallerRate(placeholder), 0);
+});
+
+test('finished stages and client approvals follow the moved direction, so pay is not counted twice', () => {
+  const ctx = sandbox();
+  const o: any = {
+    id: 's', status: 'completed', serviceType: 'solar_film', serviceTypes: ['solar_film'],
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'a', measureScope: 'solar_film', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 }] }] },
+    extraServices: [{ id: 'q', quickProjectLine: true, serviceType: 'solar_film', unit: 'sqft', qty: 40, price: 600, label: 'Солнцезащитная плёнка' }],
+    productionStages: [{ id: 'st1', serviceId: 'direction:solar_film', status: 'done', installerIds: ['i1'] }],
+    serviceSchedules: [{ id: 'direction:solar_film', installerIds: ['i1'] }],
+    serviceScopeApprovals: [] as any[],
+  };
+  const groups = ctx.projectServiceGroups(o);
+  o.serviceScopeApprovals = groups.map((group: any) => ({ serviceId: group.id, scope: ctx.projectServiceScope(o, group) }));
+  const approved = (order: any) => ctx.projectServiceGroups(order).filter((group: any) => order.serviceScopeApprovals.some((a: any) => a.serviceId === group.id && a.scope === ctx.projectServiceScope(order, group))).map((group: any) => group.id).sort();
+  assert.deepEqual(approved(o), ['direction:solar_film', 'line:q']);
+  ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
+  assert.equal(o.productionStages[0].serviceId, 'direction:privacy_film', 'the done stage moves with its windows');
+  assert.equal(o.serviceSchedules[0].id, 'direction:privacy_film');
+  assert.deepEqual(approved(o), ['direction:privacy_film', 'line:q'], 'what the client approved stays approved');
+});
+
+test('the bulk fix never merges finished work into a direction the project already has', () => {
+  const ctx = sandbox();
+  const o: any = wizProject('m', {
+    serviceType: 'solar_film', serviceTypes: ['solar_film', 'decorative_film'],
+    measurements: { rooms: [{ id: 'r', windows: [
+      { id: 'a', measureScope: 'solar_film', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 },
+      { id: 'b', measureScope: 'decorative_film', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 },
+    ] }] },
+    extraServices: [],
+    serviceSchedules: [{ id: 'direction:solar_film', installerIds: ['i1'] }, { id: 'direction:decorative_film', installerIds: ['i2'] }],
+  });
+  ctx.db.orders.push(o);
+  const revenueBefore = ctx.orderRevenue(o);
+  const result = ctx.wizDirectionBulkMove(['m'], 'privacy_film', 'owner', { wantSkipped: true });
+  assert.deepEqual({ ...result }, { projects: 0, skipped: 1 });
+  const ids = o.serviceSchedules.map((plan: any) => plan.id);
+  assert.equal(new Set(ids).size, ids.length, 'no two crews under one service');
+  assert.deepEqual(ids.sort(), ['direction:decorative_film', 'direction:privacy_film']);
+  assert.equal(o.measurements.rooms[0].windows[1].measureScope, 'decorative_film', 'the second direction is left for the owner');
+  assert.equal(ctx.orderRevenue(o), revenueBefore);
+});
+
+test('a project that already has the right direction gets a history entry from the bulk fix', () => {
+  const ctx = sandbox();
+  const o: any = wizProject('ok', { serviceType: 'privacy_film', serviceTypes: ['privacy_film'] });
+  o.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+  ctx.db.orders.push(o);
+  assert.equal(ctx.wizDirectionBulkMove(['ok'], 'privacy_film', 'owner'), 1);
+  const entry = o.timeline.at(-1);
+  assert.equal(entry.key, 'direction_checked');
+  assert.equal(entry.by, 'owner');
+  assert.match(entry.note, /^Направление проверено: Приватная плёнка · массовая правка импорта TintWiz/);
+  assert.ok(o._directionCheckedAt);
 });

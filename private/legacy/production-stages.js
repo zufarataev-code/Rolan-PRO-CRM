@@ -4999,6 +4999,22 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
   const closed = keepMoney || CLOSED_PROJECT_STATUSES.includes(o.status);
   const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
   const fromTitle = from?.title || fromKey;
+  const fromId = `direction:${fromKey}`, toId = `direction:${toKey}`;
+  if (closed) {
+    // Finished work is never merged into a direction the project already has:
+    // two crews, stages or approvals under one service would change the pay.
+    // Such a direction stays where it is and the owner moves it by hand.
+    const keyed = id => (o.serviceSchedules || []).some(plan => plan.id === id)
+      || (o.productionStages || []).some(stage => stage.serviceId === id)
+      || !!o.serviceProgress?.[id];
+    if (projectDirectionGroups(o).some(direction => direction.key === toKey) || keyed(toId)) {
+      return { fromKey, toKey, fromTitle, toTitle: to.title, windows: 0, lines: 0, kept: 0, closed, skipped: 'target_exists' };
+    }
+  }
+  // Approvals that matched before the move are kept matching after it.
+  const approvedBefore = closed && Array.isArray(o.serviceScopeApprovals) && typeof projectServiceGroups === 'function'
+    ? (() => { const groups = projectServiceGroups(o); return o.serviceScopeApprovals.filter(approval => { const group = groups.find(item => item.id === approval.serviceId); return !!group && approval.scope === projectServiceScope(o, group); }); })()
+    : [];
   const fromDir = serviceOfferingDirection(fromKey);
   const ownOffering = id => !!id && serviceOffering(id)?.direction === fromDir;
   let windowsMoved = 0, linesMoved = 0, kept = 0;
@@ -5063,9 +5079,21 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
   o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
   if (closed) {
     // Finished work keeps its dates, crew and progress under the new direction.
-    const rekey = key => (key === fromKey ? toKey : key === `direction:${fromKey}` ? `direction:${toKey}` : key);
+    const rekey = key => (key === fromKey ? toKey : key === fromId ? toId : key);
     if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).map(([key, value]) => [rekey(key), value]));
     if (Array.isArray(o.serviceSchedules)) o.serviceSchedules.forEach(plan => { plan.id = rekey(plan.id); });
+    // Stages keep their paid work under the new service id, so it is not counted twice.
+    if (Array.isArray(o.productionStages)) o.productionStages.forEach(stage => { stage.serviceId = rekey(stage.serviceId); });
+    if (Array.isArray(o.serviceScopeApprovals)) {
+      o.serviceScopeApprovals.forEach(approval => { approval.serviceId = rekey(approval.serviceId); });
+      if (approvedBefore.length) {
+        const groups = projectServiceGroups(o);
+        approvedBefore.forEach(approval => { const group = groups.find(item => item.id === approval.serviceId); if (group) approval.scope = projectServiceScope(o, group); });
+      }
+    }
+    // This CRM's memory of done services follows the move, so nothing reopens.
+    if (typeof projectDoneScopes !== 'undefined') projectDoneScopes.delete(o.id);
+    if (typeof projectServiceSignatures !== 'undefined') projectServiceSignatures.delete(o.id);
   } else {
     if (o.serviceProgress) delete o.serviceProgress[fromKey];
     syncProjectIncludedServices(o);
@@ -5203,18 +5231,24 @@ function wizDirectionBulkHtml() {
   </div></div>`;
 }
 /** Moves every picked project into the chosen direction; one history entry per project. */
-function wizDirectionBulkMove(ids, toKey, by = state.currentUserId) {
-  let projects = 0;
+function wizDirectionBulkMove(ids, toKey, by = state.currentUserId, { wantSkipped = false } = {}) {
+  let projects = 0, skipped = 0;
   ids.forEach(id => {
     const o = getOrder(id);
     if (!o || !projectIsWizImport(o)) return;
     const results = projectMainDirectionKeys(o).filter(key => key !== toKey)
       .map(key => projectDirectionMoveApply(o, key, toKey, by, 'массовая правка импорта TintWiz', { keepMoney: true }))
       .filter(Boolean);
-    if (!results.length) o._directionCheckedAt = new Date().toISOString(); // already right
+    if (results.some(result => result.skipped)) { skipped++; return; }
+    if (!results.length) {
+      // Already right: the owner's check is written to the history like a move.
+      o._directionCheckedAt = new Date().toISOString();
+      o.timeline = o.timeline || [];
+      o.timeline.push({ at: o._directionCheckedAt, key: 'direction_checked', by: by || null, note: `Направление проверено: ${projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.title || key).join(', ')} · массовая правка импорта TintWiz` });
+    }
     projects++;
   });
-  return projects;
+  return wantSkipped ? { projects, skipped } : projects;
 }
 function wizDirectionBulkApply() {
   const s = state._wizBulk;
@@ -5223,11 +5257,12 @@ function wizDirectionBulkApply() {
   const to = primaryServiceInfo(s.toKey);
   if (!ids.length) { alert('Отметьте проекты, которым нужно сменить направление.'); return; }
   if (!confirm(`Сменить направление у ${ids.length} ${projectPlural(ids.length, 'проекта', 'проектов', 'проектов')} на «${to.title}»?\n\nСумма, оплаты, акт и выплаты не изменятся. У каждого проекта в истории будет запись.`)) return;
-  const n = wizDirectionBulkMove(ids, s.toKey);
+  const { projects: n, skipped } = wizDirectionBulkMove(ids, s.toKey, state.currentUserId, { wantSkipped: true });
   save();
   state._wizBulk = { ...s, picked: [] };
   renderWizDirectionBulk();
-  setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.`), 0);
+  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}», а выполненную работу двух направлений нельзя слить без изменения выплат. Поправьте их в карточке проекта.` : '';
+  setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.${rest}`), 0);
 }
 
 // ---------- ВАРИАНТЫ ПЛЁНКИ В КП: «КЛИЕНТ ВЫБИРАЕТ» (Owner, 2026-11-12) ----------
