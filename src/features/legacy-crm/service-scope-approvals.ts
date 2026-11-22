@@ -1,4 +1,5 @@
 import { projectDirectionMoves, renameProjectDirections, serviceGroupIds, serviceGroupScope } from './service-solutions';
+const KEEP_MONEY_STATUSES = ['installation_done','act_signed','payment_received','completed','review_received'];
 type Row = Record<string, any>;
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value : [];
 const approvedStatuses = ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'];
@@ -38,6 +39,9 @@ export function prepareServiceScopeApprovals(current: Row, next: Row, owner: boo
  * still needs the client's approval.
  */
 function followDirectionMoves(before: Row, order: Row, baseline: Row[]): void {
+  // Only a closed project or a TintWiz import keeps its money through a move. An open
+  // project picks the new direction's services again, and the client approves them.
+  if (!KEEP_MONEY_STATUSES.includes(String(before.status)) && before._importSource !== 'wiz') return;
   const moves = projectDirectionMoves(before, order);
   if (!moves.size) return;
   const groupsNow = new Set(serviceGroupIds(order));

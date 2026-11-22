@@ -335,6 +335,32 @@ test('the server keeps the client approvals of a closed project whose direction 
   assert.equal(serviceScopeApproved(resized, 'line:l'), false);
 });
 
+test('an open project does not carry the client approval over to the new direction', () => {
+  const open = (extra: Record<string, unknown> = {}) => ({
+    id: 'op', status: 'installation_scheduled', serviceType: 'solar_film', ...extra,
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 2000, height: 2000, qty: 1 }] }] },
+    extraServices: [],
+  });
+  const move = (order: any) => {
+    const next = structuredClone(order);
+    next.serviceType = 'privacy_film'; next.serviceTypes = ['privacy_film'];
+    next.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+    return next;
+  };
+  const approved = open();
+  assert.equal(prepareServiceScopeApprovals({ orders: [open()] }, { orders: [approved] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(approved, 'direction:solar_film'), true);
+  const next = move(approved);
+  assert.equal(prepareServiceScopeApprovals({ orders: [approved] }, { orders: [next] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(next, 'direction:privacy_film'), false, 'the new direction waits for the client');
+  // An open TintWiz import keeps its revenue through the owner's fix.
+  const wiz = open({ _importSource: 'wiz' });
+  assert.equal(prepareServiceScopeApprovals({ orders: [open({ _importSource: 'wiz' })] }, { orders: [wiz] }, true, [], 'owner'), null);
+  const wizNext = move(wiz);
+  assert.equal(prepareServiceScopeApprovals({ orders: [wiz] }, { orders: [wizNext] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(wizNext, 'direction:privacy_film'), true);
+});
+
 test('a closed project keeps its crew, dates and progress when the owner moves its direction', () => {
   const done = { status: 'done', doneAt: '2026-10-23T22:00:00Z', doneBy: 'i1' };
   const before: any = {
