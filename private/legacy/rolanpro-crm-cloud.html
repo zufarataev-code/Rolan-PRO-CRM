@@ -5999,6 +5999,62 @@
     color: #94a3b8;
     font-size: 0.82rem;
   }
+  /* Компактная доска проектов (2026-11-22): все стадии на одном экране,
+     у карточки три строки — номер, клиент, деньги. «Подробно» возвращает прежний вид. */
+  .kanban-board-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(148,163,184,0.24);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+  }
+  .kanban-board-toolbar-label { font-size: .72rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+  .kanban-board-toolbar .kanban-density-toggle { margin-left: auto; }
+  .kanban-fullscreen-bar .kanban-board-toolbar { position: static; margin: 0; padding: 0; border: 0; background: none; backdrop-filter: none; }
+  .kanban-compact-line { display: none; }
+  .kanban-funnel.is-compact {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(7, minmax(158px, 1fr));
+    grid-auto-columns: unset;
+    gap: 8px;
+  }
+  .kanban-funnel.is-compact .kanban-column { min-width: 0; min-height: 220px; max-height: calc(100vh - 215px); }
+  .kanban-fullscreen .kanban-funnel.is-compact .kanban-column { min-height: calc(100svh - 120px); max-height: calc(100svh - 120px); }
+  .kanban-funnel.is-compact .kanban-col-head { padding: 8px 9px 7px; }
+  .kanban-funnel.is-compact .kanban-col-head .text-xs.mt-2 { display: none; }
+  .kanban-funnel.is-compact .kanban-card { margin: 6px; box-shadow: 0 3px 10px rgba(15,23,42,0.06); animation: none; }
+  .kanban-funnel.is-compact .kanban-card:hover { transform: none; }
+  .kanban-funnel.is-compact .kanban-card-top { height: 3px; }
+  .kanban-funnel.is-compact .kanban-card-main { padding: 6px 8px 0 10px; }
+  .kanban-funnel.is-compact .kanban-title { -webkit-line-clamp: 1; font-size: .86rem; }
+  .kanban-funnel.is-compact .kanban-card-main .mt-2 { margin-top: 4px; }
+  .kanban-funnel.is-compact .kanban-card-main .status-badge,
+  .kanban-funnel.is-compact .kanban-card-main .kanban-chip { font-size: .62rem; padding: .1rem .38rem; }
+  .kanban-funnel.is-compact .kanban-card-stripes,
+  .kanban-funnel.is-compact .kanban-card-details,
+  .kanban-funnel.is-compact .kanban-card-meta,
+  .kanban-funnel.is-compact .kanban-extra-action { display: none; }
+  .kanban-funnel.is-compact .kanban-compact-line {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+    margin-top: 4px; font-size: .76rem; color: #475569;
+  }
+  .kanban-funnel.is-compact .kanban-card-actions { gap: 4px; padding: 5px 8px 7px; flex-wrap: nowrap; }
+  .kanban-funnel.is-compact .kanban-drag-handle,
+  .kanban-funnel.is-compact .kanban-icon-btn { min-height: 24px; font-size: .7rem; padding: 0 6px; }
+  .kanban-funnel.is-compact .kanban-drag-handle { flex: 1 1 auto; }
+  .kanban-funnel.is-compact .kanban-empty { margin: 6px; padding: 12px 8px; font-size: .74rem; }
+  @media (max-width: 900px) {
+    .kanban-funnel.is-compact { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: min(78vw, 260px); }
+    .kanban-board-toolbar .kanban-density-toggle { margin-left: 0; }
+  }
   @keyframes kanbanRise {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -8682,6 +8738,7 @@ let state = {
   ordersView: null, // Phone defaults to cards; desktop to the existing kanban.
   ordersPeriod: 'all',
   ordersKanbanFullscreen: false,
+  ordersKanbanDensity: null, // 'compact' (default) | 'detailed'; remembered per device.
   proposalsRegistry: null,
   proposalsRegistryLoading: false,
   proposalsRegistryError: '',
@@ -22223,15 +22280,59 @@ function renderOrdersPeriodToggle(compact = false) {
     ${items.map(([id, label]) => `<button class="${active===id?'active':''}" onclick="setOrdersPeriod('${id}')">${label}</button>`).join('')}
   </div>`;
 }
+// Owner, 2026-11-22: «карточки растянуты, не вижу всех проектов — в одном окне
+// должны быть видны все карточки, сверху фильтр день/неделя/месяц и режим на весь
+// экран». Compact cards are the default; the choice is remembered on the device.
+function ordersKanbanDensity() {
+  if (state.ordersKanbanDensity) return state.ordersKanbanDensity;
+  try { state.ordersKanbanDensity = localStorage.getItem('rp.ordersKanbanDensity') === 'detailed' ? 'detailed' : 'compact'; }
+  catch (_) { state.ordersKanbanDensity = 'compact'; }
+  return state.ordersKanbanDensity;
+}
+function setOrdersKanbanDensity(density) {
+  state.ordersKanbanDensity = density === 'detailed' ? 'detailed' : 'compact';
+  try { localStorage.setItem('rp.ordersKanbanDensity', state.ordersKanbanDensity); } catch (_) {}
+  render();
+}
+function renderOrdersKanbanToolbar(fullscreen = false) {
+  const density = ordersKanbanDensity();
+  return `<div class="kanban-board-toolbar">
+    <span class="kanban-board-toolbar-label">Период</span>
+    ${renderOrdersPeriodToggle(true)}
+    <div class="orders-view-toggle kanban-density-toggle" role="group" aria-label="Вид карточек">
+      <button class="${density==='compact'?'active':''}" onclick="setOrdersKanbanDensity('compact')" title="Все проекты на одном экране">▤ Компактно</button>
+      <button class="${density==='detailed'?'active':''}" onclick="setOrdersKanbanDensity('detailed')" title="Карточки со всеми деталями">▣ Подробно</button>
+    </div>
+    ${fullscreen
+      ? `<button class="btn-ghost" onclick="closeOrdersKanbanFullscreen()">✕ Закрыть</button>`
+      : `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>`}
+  </div>`;
+}
 function openOrdersKanbanFullscreen() {
   state.ordersView = 'kanban';
   state.ordersKanbanFullscreen = true;
   render();
+  // Real browser full screen when allowed; the overlay works without it too.
+  try {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  } catch (_) {}
 }
 function closeOrdersKanbanFullscreen() {
   state.ordersKanbanFullscreen = false;
+  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (_) {}
   render();
 }
+document.addEventListener('fullscreenchange', () => {
+  // Esc in browser full screen also closes the board overlay.
+  if (!document.fullscreenElement && state.ordersKanbanFullscreen) {
+    state.ordersKanbanFullscreen = false;
+    render();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && state.ordersKanbanFullscreen && !state.modal) closeOrdersKanbanFullscreen();
+});
 function orderKanbanDebt(o) {
   return Math.max(0, orderKanbanRevenue(o) - (Number(o.paid) || 0));
 }
@@ -22499,7 +22600,7 @@ function renderOrdersKanban(filtered, opts = {}) {
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Остаток к оплате</div><div class="text-xl font-black ${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</div></div>
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Средний чек</div><div class="text-xl font-black">${fmtMoney(filtered.length ? totalRevenue / filtered.length : 0)}</div></div>
     </div>`}
-    <div class="kanban-funnel" data-scroll-key="kanban">
+    <div class="kanban-funnel ${ordersKanbanDensity() === 'compact' ? 'is-compact' : ''}" data-scroll-key="kanban">
       ${ORDER_KANBAN_FUNNEL.map(col => {
         const orders = filtered.filter(o => col.statuses.includes(o.status));
         const colRevenue = orders.reduce((s,o) => s + orderKanbanRevenue(o), 0);
@@ -22538,14 +22639,13 @@ function renderOrdersKanbanFullscreen(filtered, meta = {}) {
             <div class="text-xs text-gray-500 font-semibold">ROLANPRO CRM · Канбан проектов</div>
             <div class="text-2xl font-black text-slate-900">${meta.periodLabel || ordersPeriodLabel()}</div>
           </div>
-          ${renderOrdersPeriodToggle(true)}
           <div class="hidden md:flex items-center gap-2 text-sm">
             <span class="kanban-chip dark">${filtered.length} проектов</span>
             <span class="kanban-chip">Потенциал ${fmtMoney(meta.totalSum || 0)}</span>
             <span class="kanban-chip ${totalDebt>0?'bg-rose-50 text-rose-700 border-rose-100':''}">Долг ${fmtMoney(totalDebt)}</span>
             <span class="kanban-chip">${(meta.totalArea || 0).toFixed(0)} sqft</span>
           </div>
-          <button class="btn-ghost" onclick="closeOrdersKanbanFullscreen()">Закрыть</button>
+          ${renderOrdersKanbanToolbar(true)}
         </div>
       </div>
       ${renderOrdersKanban(filtered, { hideStats: true })}
@@ -22586,8 +22686,13 @@ function renderOrderKanbanCard(o) {
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
           ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
-        ${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}
-        <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div class="kanban-card-stripes">${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}</div>
+        <div class="kanban-compact-line">
+          <b class="text-emerald-700">${fmtMoney(revenue)}</b>
+          <span>${sqft.toFixed(0)} sqft</span>
+          ${debt > 0 ? `<b class="text-red-600">долг ${fmtMoney(debt)}</b>` : ''}
+        </div>
+        <div class="kanban-card-details mt-3 grid grid-cols-2 gap-2 text-sm">
           <div>
             <div class="text-xs text-gray-500">Сумма</div>
             <div class="font-black text-emerald-700">${fmtMoney(revenue)}</div>
@@ -22605,7 +22710,7 @@ function renderOrderKanbanCard(o) {
             <div class="font-semibold">${rooms} / ${windows}</div>
           </div>
         </div>
-        <div class="mt-3 text-xs text-gray-600 space-y-1">
+        <div class="kanban-card-meta mt-3 text-xs text-gray-600 space-y-1">
           <div class="kanban-meta-line"><span>📍</span><span>${premiumEsc(projectAddress || 'Адрес не указан')}</span></div>
           <div class="kanban-meta-line"><span>📅</span><span>${fmtDateTime(o.installationAt)}</span></div>
           <div class="kanban-meta-line"><span>👤</span><span>${premiumEsc(manager)}${installers ? ` · 🔧 ${premiumEsc(installers)}` : ''}</span></div>
@@ -22615,9 +22720,9 @@ function renderOrderKanbanCard(o) {
           <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить проект"
             onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕ Этап</button>
           <button class="kanban-icon-btn" title="Открыть проект" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
-          <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
-          <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
-          <button class="kanban-icon-btn" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
+          <a class="kanban-icon-btn kanban-extra-action" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
+          <a class="kanban-icon-btn kanban-extra-action" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
+          <button class="kanban-icon-btn kanban-extra-action" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
           <button class="kanban-icon-btn" title="${next ? 'Перевести дальше: ' + T(next) : 'Финальный этап'}" onclick="orderKanbanAdvance('${o.id}', event)" ${next ? '' : 'disabled'}>→</button>
         </div>
       </div>
@@ -22772,6 +22877,7 @@ function renderOrders() {
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
   const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
   const periodLabel = ordersPeriodLabel();
+  const totalDebt = filtered.reduce((s,o)=>s+orderKanbanDebt(o),0);
 
   return `
   <div class="orders-command-panel mb-4">
@@ -22782,7 +22888,6 @@ function renderOrders() {
       </div>
       <div class="orders-primary-actions">
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
-        ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
         ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
@@ -22801,7 +22906,7 @@ function renderOrders() {
           <button class="${ordersView==='list'?'active':''}" onclick="state.ordersView='list'; render();">Список</button>
         </div>
       </div>
-      <details class="pulse-order-filters" ${isCompactViewport() ? '' : 'open'}><summary>Период и фильтры${hasFilters ? ' · активны' : ''}</summary><div class="pulse-order-filter-grid">
+      <details class="pulse-order-filters" ${isCompactViewport() || ordersView === 'kanban' ? '' : 'open'}><summary>Период и фильтры${hasFilters ? ' · активны' : ''}</summary><div class="pulse-order-filter-grid">
       <div class="orders-filter-field compact">
         <label>Период</label>
         ${renderOrdersPeriodToggle()}
@@ -22839,20 +22944,21 @@ function renderOrders() {
       <span>${T('area')}: <b class="text-slate-800">${totalArea.toFixed(0)} sqft</b></span>
       <span class="orders-summary-dot"></span>
       <span>${T('sum')}: <b class="text-emerald-600">${fmtMoney(totalSum)}</b></span>
+      ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Долг: <b class="${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</b></span>` : ''}
       ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Перетащите карточку или нажмите «Этап»</span>` : ''}
     </div>
   </div>
 
-  <div class="orders-kpi-grid">
+  ${ordersView === 'kanban' ? '' : `<div class="orders-kpi-grid">
     <div class="orders-kpi-card"><div class="orders-kpi-label">В воронке</div><div class="orders-kpi-value">${filtered.length}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Потенциал</div><div class="orders-kpi-value text-emerald-700">${fmtMoney(totalSum)}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Остаток к оплате</div><div class="orders-kpi-value ${filtered.reduce((s,o)=>s+orderKanbanDebt(o),0)>0?'text-red-600':'text-slate-800'}">${fmtMoney(filtered.reduce((s,o)=>s+orderKanbanDebt(o),0))}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Средний чек</div><div class="orders-kpi-value">${fmtMoney(filtered.length ? totalSum / filtered.length : 0)}</div></div>
-  </div>
+  </div>`}
 
   ${state.ordersKanbanFullscreen && ordersView === 'kanban' ? renderOrdersKanbanFullscreen(filtered, { totalSum, totalArea, periodLabel }) : ''}
 
-  ${ordersView === 'kanban' ? renderOrdersKanban(filtered, { hideStats: true }) : `
+  ${ordersView === 'kanban' ? renderOrdersKanbanToolbar(false) + renderOrdersKanban(filtered, { hideStats: true }) : `
   <div class="card p-0 overflow-hidden">
     <table class="w-full">
       <thead class="bg-gray-50 border-b">
@@ -31297,7 +31403,10 @@ function renderOrderDetails(id) {
       </div>
     </div>`;
   }
-  const canManage = orderUserCanManage(u);
+  // Owner, 2026-11-22: a closed project is read-only for a manager until the owner approves his request.
+  const editLocked = typeof projectEditLocked === 'function' && projectEditLocked(o, u);
+  const editBanner = typeof projectEditBanner === 'function' ? projectEditBanner(o, u) : '';
+  const canManage = orderUserCanManage(u) && !editLocked;
   const canMeasure = orderUserCanMeasure(o, u);
   const canSeeMoney = orderUserCanSeeMoney(o, u);
   const visibleTimeline = orderTimelineForUser(o, u);
@@ -31306,9 +31415,9 @@ function renderOrderDetails(id) {
     return renderInstallerTechnicalWorkspace(o, c, u);
   }
   // «Кабинет проекта» — пробный вид владельца (private/legacy/project-cabinet.js).
-  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u)) return projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
+  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u)) return editBanner + projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
   if (!state.orderClassicMode || u.role !== 'owner') {
-    return (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
+    return editBanner + (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 
   return `

@@ -308,7 +308,7 @@ function projectCabinetHtml(o, c, u, opts = {}) {
       <button type="button" class="rpc-btn small ghost" onclick="state.view='orders'; location.hash=''; render();">← Проекты</button>
       <h1>Проект ${academyEsc(o.number || '')}<small>${academyEsc(c?.name || 'Клиент')}${address ? ' · ' + academyEsc(address) : ''}</small></h1>
       <span class="rpc-chip">${academyEsc(statusLabel(o.status))}</span>
-      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(false)">Обычная карточка</button>
+      <button type="button" class="rpc-btn small" onclick="projectEditStart('${oid}')">✏️ Редактировать проект</button>
     </header>
     <section class="rpc-g4">
       ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
@@ -329,4 +329,108 @@ function projectCabinetHtml(o, c, u, opts = {}) {
     ${projectCabinetTourHtml(o, model, canManage)}
     <p class="rpc-note" style="text-align:center">Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
   </div>`;
+}
+
+// ---------- Редактирование проекта и запрос менеджера (Owner, 2026-11-22) ----------
+// «В понятной карточке нужна кнопка „Редактировать“, а у менеджера — запрос на
+// редактирование: без меня он не может редактировать». The owner edits at once:
+// the button opens the working card. A manager edits freely while the project is
+// in work; once it is closed (act / payment / done) the card turns read-only for
+// him and he asks the owner. An approval opens editing for 24 hours.
+const PROJECT_EDIT_LOCKED_STATUSES = ['act_signed', 'payment_received', 'completed', 'review_received'];
+const PROJECT_EDIT_GRANT_HOURS = 24;
+
+function projectEditGrantActive(o, u) {
+  const grant = o?.editAccess;
+  return !!grant && !!u && grant.userId === u.id && new Date(grant.until).getTime() > Date.now();
+}
+
+/** True when this user may not change the project without the owner's approval. */
+function projectEditLocked(o, u) {
+  if (!o || !u || u.role !== 'manager') return false;
+  if (!PROJECT_EDIT_LOCKED_STATUSES.includes(o.status)) return false;
+  return !projectEditGrantActive(o, u);
+}
+
+function projectEditPendingRequest(o, userId) {
+  return (o?.editRequests || []).find(r => r.status === 'pending' && (!userId || r.by === userId)) || null;
+}
+
+/** Owner (or a manager with access): leave the overview and open the editable working card. */
+function projectEditStart(oid) {
+  const o = getOrder(oid);
+  const u = currentUser();
+  if (!o || !u) return;
+  if (projectEditLocked(o, u)) { projectEditRequest(oid); return; }
+  try { localStorage.removeItem('rp_project_cabinet'); } catch (error) { /* full view stays off */ }
+  state.view = 'orderDetails';
+  state.openOrderId = o.id;
+  render();
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { /* old browser */ }
+}
+
+function projectEditRequest(oid) {
+  const o = getOrder(oid);
+  const u = currentUser();
+  if (!o || !u || u.role !== 'manager') return;
+  if (projectEditPendingRequest(o, u.id)) {
+    if (typeof cloudStatus === 'function') cloudStatus('Запрос уже отправлен владельцу', 'blue');
+    return;
+  }
+  const reason = String(prompt('Что нужно изменить в проекте? Владелец увидит это в запросе.', '') || '').trim().slice(0, 300);
+  const now = new Date().toISOString();
+  o.editRequests = o.editRequests || [];
+  o.editRequests.push({ id: uid(), by: u.id, at: now, reason, status: 'pending' });
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now, key: 'edit_requested', by: u.id, note: reason ? `Запрос на редактирование: ${reason}` : 'Запрос на редактирование' });
+  (db.users || []).filter(x => x.role === 'owner' && x.active !== false).forEach(owner => {
+    pushInAppNotification(owner.id, `✏️ Запрос на редактирование · ${o.number || ''}`,
+      `${u.name || 'Менеджер'} просит изменить проект${reason ? ': ' + reason : ''}`, `#/order/${o.id}`);
+  });
+  save();
+  render();
+  if (typeof cloudStatus === 'function') cloudStatus('Запрос отправлен владельцу', 'green');
+}
+
+function projectEditDecide(oid, requestId, allow) {
+  const o = getOrder(oid);
+  const u = currentUser();
+  if (!o || !u || u.role !== 'owner') return;
+  const request = (o.editRequests || []).find(r => r.id === requestId);
+  if (!request || request.status !== 'pending') return;
+  const now = new Date();
+  request.status = allow ? 'approved' : 'declined';
+  request.decidedAt = now.toISOString();
+  request.decidedBy = u.id;
+  if (allow) {
+    o.editAccess = { userId: request.by, by: u.id, at: now.toISOString(), until: new Date(now.getTime() + PROJECT_EDIT_GRANT_HOURS * 3600000).toISOString() };
+  }
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: now.toISOString(), key: allow ? 'edit_approved' : 'edit_declined', by: u.id, note: allow ? `Редактирование разрешено на ${PROJECT_EDIT_GRANT_HOURS} ч` : 'Редактирование отклонено' });
+  pushInAppNotification(request.by, allow ? `✅ Можно редактировать · ${o.number || ''}` : `⛔ Редактирование отклонено · ${o.number || ''}`,
+    allow ? `Владелец разрешил изменить проект на ${PROJECT_EDIT_GRANT_HOURS} ч.` : 'Владелец не разрешил изменения.', `#/order/${o.id}`);
+  save();
+  render();
+}
+
+/** One line above the card: the owner sees requests, a manager sees why he cannot edit. */
+function projectEditBanner(o, u) {
+  if (!o || !u) return '';
+  const oid = jsQuote(o.id);
+  const box = (tone, body) => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px;padding:10px 14px;border-radius:12px;border:1px solid ${tone[0]};background:${tone[1]};color:${tone[2]};font-size:.88rem">${body}</div>`;
+  if (u.role === 'owner') {
+    return (o.editRequests || []).filter(r => r.status === 'pending').map(r => {
+      const who = getUser(r.by)?.name || 'Менеджер';
+      return box(['#fcd34d', '#fffbeb', '#92400e'], `<span style="flex:1;min-width:220px">✏️ <b>${academyEsc(who)}</b> просит редактировать проект${r.reason ? `: «${academyEsc(r.reason)}»` : ''}</span>
+        <button type="button" class="btn-primary text-sm" onclick="projectEditDecide('${oid}','${jsQuote(r.id)}',true)">Разрешить на ${PROJECT_EDIT_GRANT_HOURS} ч</button>
+        <button type="button" class="btn-ghost text-sm" onclick="projectEditDecide('${oid}','${jsQuote(r.id)}',false)">Отклонить</button>`);
+    }).join('');
+  }
+  if (u.role !== 'manager' || !PROJECT_EDIT_LOCKED_STATUSES.includes(o.status)) return '';
+  if (projectEditGrantActive(o, u)) {
+    return box(['#86efac', '#f0fdf4', '#166534'], `✅ Владелец разрешил редактирование до <b>${fmtDateTime(o.editAccess.until)}</b>`);
+  }
+  const pending = projectEditPendingRequest(o, u.id);
+  return box(['#cbd5e1', '#f8fafc', '#334155'], `<span style="flex:1;min-width:220px">🔒 Проект закрыт — изменения только с разрешения владельца.</span>
+    ${pending ? `<span class="tag">Запрос отправлен ${fmtDateTime(pending.at)}</span>` : `<button type="button" class="btn-primary text-sm" onclick="projectEditRequest('${oid}')">✏️ Запросить редактирование</button>`}`);
 }
