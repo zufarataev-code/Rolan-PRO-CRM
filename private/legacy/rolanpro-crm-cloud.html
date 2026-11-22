@@ -11208,7 +11208,22 @@ function filmCutOptimizePieces(pieces, rollWidths) {
   );
   return candidates[0];
 }
+// Owner, 2026-11-22: «CRM не должна тормозить». The project card asked for the
+// same film plan seven times per screen (sum, cost, margin, PSS…) — ~80 ms on a Mac,
+// several times more on a phone, on every keystroke. During one screen render the
+// project does not change, so the plan is computed once per project per render.
+let __filmPlanRenderCache = null;
 function calcFilmPlan(o) {
+  if (__filmPlanRenderCache && o && typeof o === 'object') {
+    const hit = __filmPlanRenderCache.get(o);
+    if (hit) return hit;
+    const plan = calcFilmPlanCompute(o);
+    __filmPlanRenderCache.set(o, plan);
+    return plan;
+  }
+  return calcFilmPlanCompute(o);
+}
+function calcFilmPlanCompute(o) {
   const pieces = filmCutCreatePiecesForOrder(o);
   const byCatalog = {};
   pieces.forEach(piece => {
@@ -20145,7 +20160,10 @@ function renderNow() {
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
 
-  const html = renderAppShell();
+  // One film plan per project for the whole screen (see calcFilmPlan).
+  __filmPlanRenderCache = new WeakMap();
+  let html;
+  try { html = renderAppShell(); } finally { __filmPlanRenderCache = null; }
 
   // Тридцать обработчиков вызывают render() при каждом изменении поля,
   // но большинство изменений не меняют то, что на экране: ввод размера
@@ -27840,12 +27858,14 @@ function serviceCashierSteps(offering) {
 
 function openServiceCashier(oid, returnTo = 'card') {
   if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
-  const mode = ['estimate', 'intake', 'direction'].includes(returnTo) ? returnTo : 'card';
+  const mode = ['estimate', 'intake', 'direction', 'editor'].includes(returnTo) ? returnTo : 'card';
   if (mode === 'intake') {
     if (!orderUserCanManage()) return;
   } else {
     const o = getOrder(oid);
-    if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+    // The «Редактировать проект» window lets the owner add to a closed project (Owner, 2026-11-22).
+    const editorMayEditClosed = mode === 'editor' && typeof projectEditorCanEdit === 'function' && projectEditorCanEdit(o);
+    if (!o || !orderUserCanSeeMoney(o, currentUser()) || (CLOSED_PROJECT_STATUSES.includes(o.status) && !editorMayEditClosed)) return;
   }
   state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [], clientChoice: false, variantIds: [] };
   renderServiceCashier();
@@ -27855,6 +27875,7 @@ function serviceCashierReturn(oid, returnTo) {
   if (returnTo === 'intake') { serviceCashierLayer()?.remove(); return; }
   state.modal = null;
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  else if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   else if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function' && returnToProjectDirectionWindow()) return;
   else { preservePositionForNextRender(); render(); }
 }
@@ -27986,7 +28007,7 @@ function serviceCashierCommit() {
     addons.forEach(item => projectAddOfferingLine(oid, item.id, directionId));
     if (film) save();
   };
-  if (returnTo === 'card' || returnTo === 'direction') projectCardEdit(apply); else apply();
+  if (returnTo === 'card' || returnTo === 'direction' || returnTo === 'editor') projectCardEdit(apply); else apply();
   // A per-sq-ft service in a project with measured windows: choose the windows now,
   // otherwise it would wait for a measurement that already happened ($0).
   if (serviceOfferingNeedsSizes(offering) && typeof openOfferingWindowsPicker === 'function'
@@ -27995,6 +28016,7 @@ function serviceCashierCommit() {
     return;
   }
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
 }
 

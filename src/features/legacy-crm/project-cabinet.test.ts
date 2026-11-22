@@ -82,8 +82,10 @@ test('the working card has no second set of rings on top — only a link to the 
   const { context } = load(o, 'owner', '');
   assert.equal(context.projectCabinetEnabled({ role: 'owner' }), false, 'the full view replaces the card only by the owner\'s choice');
   assert.equal(load(o, 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
-  assert.equal(context.projectCabinetEntryBar(o, { role: 'manager' }), '');
+  assert.ok(context.projectCabinetEntryBar(o, { role: 'manager' }).includes('Редактировать проект'), 'a manager gets the edit button');
+  assert.equal(context.projectCabinetEntryBar(o, { role: 'installer' }), '');
   const strip = context.projectCabinetEntryBar(o, { role: 'owner' });
+  assert.ok(strip.includes('Редактировать проект'));
   assert.ok(!strip.includes('этапов пройдено'), 'no rings above the working card');
   assert.ok(!strip.includes('Фото объекта'), 'no tour above the working card');
   assert.ok(strip.includes('projectCabinetToggle(true)'), 'one link opens the overview');
