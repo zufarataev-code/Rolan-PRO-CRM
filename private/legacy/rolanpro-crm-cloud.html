@@ -18375,6 +18375,7 @@ function ensurePaidForStatus(o, newStatus, open = true) {
  * проект получит, когда поступления покроют всю сумму.
  */
 function openPaymentModal(orderId, opts = {}) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   if (!o) return;
   const c = getClient(o.clientId);
@@ -18976,6 +18977,7 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 }
 
 function changeStatus(orderId, newStatus, by, opts = {}) {
+  if (!opts?.system && typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return false; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   if (!o) return false;
   if (o?.quickEntryDraft === true && o?.quickProjectImportedCompleted !== true) {
@@ -22386,6 +22388,7 @@ function projectKanbanNextStatus(o) {
   return next;
 }
 function orderKanbanAdvance(orderId, event) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) { event?.stopPropagation?.(); return; } // Owner, 2026-11-22: closed project needs the owner's approval.
   if (event) event.stopPropagation();
   const o = getOrder(orderId);
   const next = o ? projectKanbanNextStatus(o) : null;
@@ -22405,6 +22408,7 @@ function kanbanColumnForStatus(status) {
   return ORDER_KANBAN_FUNNEL.find(column => column.statuses.includes(status)) || null;
 }
 function kanbanMoveOrder(orderId, targetStatus) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return false; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   const viewer = currentUser();
   if (!o || !targetStatus) return false;
@@ -26442,6 +26446,7 @@ function projectSiteSummary(o, c = null) {
   ].filter(Boolean).join(' · ');
 }
 function updateProjectSiteInfo(oid, field, value) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanManage(currentUser())) return;
   const allowed = ['gateCode','parkingAvailable','customerParking','parkingInstructions','accessRestrictions','loadingInstructions','contactName','contactPhone','notes'];
@@ -27809,6 +27814,7 @@ function serviceCashierSteps(offering) {
 }
 
 function openServiceCashier(oid, returnTo = 'card') {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const mode = ['estimate', 'intake', 'direction'].includes(returnTo) ? returnTo : 'card';
   if (mode === 'intake') {
     if (!orderUserCanManage()) return;
@@ -29454,6 +29460,7 @@ function projectConfirmServicesDone(o, lines) {
   return !warnings.length || confirm(`Проверьте перед закрытием:\n\n• ${warnings.join('\n• ')}\n\nВсё равно отметить выполненным?`);
 }
 function projectSetServiceProgress(oid, key, status) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const user = currentUser();
   const line = projectLines(o).find(item => item.key === key);
@@ -31106,6 +31113,7 @@ function renderProjectEstimateWorkspace(o) {
 }
 
 function openProjectEstimateWorkspace(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o) return;
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Расчёт проекта доступен только владельцу и назначенному менеджеру.'); return; }
@@ -33045,6 +33053,7 @@ function managerMeasureDetailsToggle(oid, key, open) {
   state._managerMeasureDetails[oid][key] = open;
 }
 function openManagerMeasureModal(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
@@ -33631,6 +33640,7 @@ async function saveManagerFilmReceipt(oid, rid, serviceCategory) {
 }
 
 function scheduleConsultationPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const measurers = usersByRole('measurer');
   const opts = measurers.map(m => `<option value="${m.id}" ${o?.measurerId===m.id?'selected':''}>${m.name}</option>`).join('');
@@ -33664,6 +33674,7 @@ function confirmScheduleConsultation(oid) {
 }
 
 function scheduleMeasurementPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const measurers = usersByRole('measurer');
   const opts = measurers.map(m => `<option value="${m.id}" ${o?.measurerId===m.id?'selected':''}>${m.name}</option>`).join('');
@@ -33885,6 +33896,7 @@ function addWorkType(oid) {
 }
 
 function openProjectProductionWorkspace(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanManage(currentUser())) return;
   const blockingIssues = projectProductionReadiness(o, { requireReady: false });
@@ -33942,6 +33954,7 @@ function confirmProjectProductionReady(oid) {
 }
 
 function scheduleInstallationPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   // Owner, 2026-10-25: one window, services in order, each planned on its own.
@@ -34021,6 +34034,7 @@ function confirmScheduleInstallation(oid) {
 }
 
 function openAssignTeam(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const viewer = currentUser();
   if (!orderUserOwns(o, viewer)) { alert('Нет доступа к этому заказу'); return; }
@@ -34613,6 +34627,7 @@ function renderClientPortal() {
 }
 
 function markDepositReceived(orderId) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   // The deposit is a payment like any other: amount, method and date are
   // recorded, so «получено» and «долг» agree everywhere (Owner, 2026-10-23).
   if (!getOrder(orderId)) return;
@@ -36487,6 +36502,7 @@ function addWindowMeasurementPhoto(oid, roomId, windowId) {
   inp.click();
 }
 function addOrderPhoto(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const cat = state.photoCategory || 'measurement';
   const inp = document.createElement('input');
   const useStorage = __crmStorageEnabled === true;

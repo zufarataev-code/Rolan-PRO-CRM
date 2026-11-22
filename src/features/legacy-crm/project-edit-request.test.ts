@@ -23,7 +23,9 @@ function sandbox(users: any[], current: string) {
   ctx.uid = (() => { let n = 0; return () => `id${++n}`; })();
   ctx.save = () => {};
   ctx.render = () => { ctx.rendered += 1; };
-  ctx.prompt = () => "поменять адрес";
+  ctx.prompt = () => ctx.promptAnswer;
+  ctx.promptAnswer = "поменять адрес";
+  ctx.confirm = () => true;
   ctx.jsQuote = (v: string) => v;
   ctx.academyEsc = (v: string) => v;
   ctx.fmtDateTime = (v: string) => v;
@@ -46,7 +48,7 @@ test("a manager is locked only on a closed project", () => {
 
 test("request notifies the owner and approval unlocks for 24 hours", () => {
   const ctx = sandbox(users, "mgr");
-  const order = { id: "o1", number: "R-1", status: "completed" };
+  const order: any = { id: "o1", number: "R-1", status: "completed" };
   ctx.orders.push(order);
   ctx.projectEditRequest("o1");
   assert.equal(order.editRequests.length, 1);
@@ -76,4 +78,27 @@ test("the card hides editing for a locked manager and shows the edit button", ()
   assert.match(html, /const canManage = orderUserCanManage\(u\) && !editLocked;/);
   assert.match(html, /return editBanner \+ projectCabinetHtml/);
   assert.match(cabinet, /onclick="projectEditStart\('\$\{oid\}'\)">✏️ Редактировать проект<\/button>/);
+});
+
+test("cancelling the prompt sends nothing", () => {
+  const ctx = sandbox(users, "mgr");
+  ctx.promptAnswer = null;
+  const order: any = { id: "o3", status: "completed" };
+  ctx.orders.push(order);
+  ctx.projectEditRequest("o3");
+  assert.equal(order.editRequests, undefined);
+  assert.equal(ctx.db.notifications.length, 0);
+});
+
+test("every mutating handler of a locked project is guarded", () => {
+  const ctx = sandbox(users, "mgr");
+  ctx.promptAnswer = null;
+  ctx.orders.push({ id: "o4", status: "payment_received" }, { id: "o5", status: "proposal_sent" });
+  assert.equal(ctx.projectEditBlocked("o4"), true);
+  assert.equal(ctx.projectEditBlocked("o5"), false);
+  const stages = readFileSync(join(process.cwd(), "private/legacy/production-stages.js"), "utf8");
+  for (const name of ["changeStatus", "openPaymentModal", "markDepositReceived", "kanbanMoveOrder", "orderKanbanAdvance", "openManagerMeasureModal", "openProjectEstimateWorkspace", "scheduleInstallationPrompt", "openServiceCashier", "projectSetServiceProgress"]) {
+    assert.match(html, new RegExp(`function ${name}\\([^)]*\\) \\{\\n[^\\n]*projectEditBlocked\\(`), name);
+  }
+  assert.match(stages, /function openProjectInvoice\(oid\) \{\n[^\n]*projectEditBlocked\(oid\)/);
 });

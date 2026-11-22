@@ -352,6 +352,19 @@ function projectEditLocked(o, u) {
   return !projectEditGrantActive(o, u);
 }
 
+/** Guard for every action that changes a project: a locked manager gets the request offer instead. */
+function projectEditBlocked(oid) {
+  const o = getOrder(oid);
+  const u = currentUser();
+  if (!projectEditLocked(o, u)) return false;
+  if (projectEditPendingRequest(o, u.id)) {
+    if (typeof cloudStatus === 'function') cloudStatus('Проект закрыт — запрос владельцу уже отправлен', 'red');
+  } else if (confirm('Проект закрыт. Изменить его можно только с разрешения владельца. Отправить запрос?')) {
+    projectEditRequest(oid);
+  }
+  return true;
+}
+
 function projectEditPendingRequest(o, userId) {
   return (o?.editRequests || []).find(r => r.status === 'pending' && (!userId || r.by === userId)) || null;
 }
@@ -377,7 +390,9 @@ function projectEditRequest(oid) {
     if (typeof cloudStatus === 'function') cloudStatus('Запрос уже отправлен владельцу', 'blue');
     return;
   }
-  const reason = String(prompt('Что нужно изменить в проекте? Владелец увидит это в запросе.', '') || '').trim().slice(0, 300);
+  const answer = prompt('Что нужно изменить в проекте? Владелец увидит это в запросе.', '');
+  if (answer === null) return; // cancelled: no request
+  const reason = String(answer).trim().slice(0, 300);
   const now = new Date().toISOString();
   o.editRequests = o.editRequests || [];
   o.editRequests.push({ id: uid(), by: u.id, at: now, reason, status: 'pending' });
