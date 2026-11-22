@@ -3825,6 +3825,8 @@ function quickEntryDefaultForm(keep = {}) {
     date: keep.date || localDateKey(), measurementDate: keep.measurementDate || '', manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
     client: '', clientId: '', clientNewConfirmed: false, phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '', paid: '', complexity: 'standard',
+    // Owner, 2026-11-22: оплата подтверждается и попадает на счёт — баланс и прибыль считаются верно.
+    account: keep.account || '', paidConfirmed: false,
     pricingMode: keep.pricingMode || 'auto', manualTotal: keep.manualTotal || '',
     lines: [quickEntryNewLine(keep)],
     // Owner, 2026-11-06: прямые расходы проекта — аренда, доставка, бензин, другое — списываются в этот проект.
@@ -3881,8 +3883,10 @@ function quickEntryReadForm() {
   const s = quickEntryState();
   const v = id => document.getElementById(id)?.value;
   const f = s.form;
-  const keys = ['date','measurementDate','manager','method','client','clientId','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
+  const keys = ['date','measurementDate','manager','method','account','client','clientId','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
   keys.forEach(k => { const val = v('qe-' + k); if (val != null) f[k] = val; });
+  const confirmedBox = document.getElementById('qe-paidConfirmed');
+  if (confirmedBox) f.paidConfirmed = !!confirmedBox.checked;
   const clientNewConfirmed = v('qe-clientNewConfirmed');
   if (clientNewConfirmed != null) f.clientNewConfirmed = clientNewConfirmed === '1';
   quickEntryLines().forEach((line, i) => {
@@ -4375,7 +4379,7 @@ function quickEntryCreateDraft() {
   db.orders.push(o);
   save();
   const s = quickEntryState();
-  s.form = quickEntryDefaultForm({ date: f.date, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: f.date, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
   s.notice = `${o.number} · ${client.name} — черновик создан`;
   openQuickProjectEntry(o.id);
 }
@@ -4442,6 +4446,11 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const total = prepared.reduce((sum, p) => sum + p.price, 0);
   const paid = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
+  if (closeProject && paid > 0 && !f.paidConfirmed) {
+    alert(`Подтвердите оплату ${fmtMoney(paid)}: отметьте «Деньги получены» и выберите счёт. Если денег не было — поставьте «Оплачено» 0, проект закроется с долгом.`);
+    return;
+  }
+  if (closeProject && paid > 0 && !f.account) { alert('Выберите счёт, на который пришли деньги.'); return; }
   const starts = prepared.map(p => p.date).sort();
   const ends = prepared.map(p => p.endDate).sort();
   const firstDate = starts[0], lastDate = ends[ends.length - 1];
@@ -4465,7 +4474,8 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     const amount = Math.max(0, Number(e.amount) || 0);
     if (!amount) return;
     const typeLabel = (quickEntryExpenseTypes().find(([value]) => value === e.type) || ['other', 'Другое'])[1];
-    o.extraExpenses.push({ id: uid(), type: quickEntryExpenseTypes().some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now });
+    // Перенос задним числом: расход уже оплачен — уменьшает кассу того же счёта.
+    o.extraExpenses.push({ id: uid(), type: quickEntryExpenseTypes().some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now, actual: true, paidAt: firstDate, accountId: f.account || null });
   });
   syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
@@ -4480,7 +4490,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     // Менеджер всегда оставляет черновик. Владелец может явно сохранить
     // заполненную карточку, не проводя склад, зарплату и финансовый результат.
     save();
-    s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+    s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
     s.notice = actor?.role === 'owner'
       ? `${o.number} · ${client.name} · ${fmtMoney(total)} — черновик сохранён; склад и зарплата ещё не проведены`
       : `${o.number} · ${client.name} · ${fmtMoney(total)} — черновик сохранён, закроет владелец`;
@@ -4501,7 +4511,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   try {
     save();
     if (cloud && !await cloudPersistConfirmed()) {
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.notice = `${o.number} · ${client.name} — черновик ещё не сохранён на сервере, проект не закрыт. Когда вверху появится «Сохранено», закройте его в «Не завершён перенос».`;
       render();
       return;
@@ -4510,13 +4520,13 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     // поэтому берём проект заново по id и закрываем именно текущий экземпляр.
     const current = db.orders.find(item => item.id === o.id);
     if (!current) {
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.notice = `${o.number} · ${client.name} — черновик сохранён, но после обновления данных проект не найден, он не закрыт. Проверьте «Не завершён перенос».`;
       render();
       return;
     }
     const persistedDraft = cloud ? cloneCloudWorkspaceValue(cloudBaseSnapshot?.orders?.find(item => item.id === o.id) || null) : null;
-    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
+    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', accountId: f.account || null, confirmed: !!f.paidConfirmed, silent: true });
     if (cloud && !await cloudPersistConfirmed()) {
       if (persistedDraft) {
         // Сервер не принял закрытие: возвращаем только этот проект к
@@ -4527,7 +4537,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
         else db.orders.push(persistedDraft);
         save();
       }
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.openProject = o.id;
       s.notice = `${o.number} · ${client.name} — черновик сохранён, но закрыть проект не удалось. Откройте его в «Не завершён перенос» и нажмите «Закрыть выполненный проект» ещё раз.`;
       render();
@@ -4536,7 +4546,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   } finally {
     s.committing = false;
   }
-  s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
   s.openProject = o.id;
   s.notice = `${o.number} · ${client.name} · ${prepared.length} ${projectPlural(prepared.length, 'услуга', 'услуги', 'услуг')} · ${fmtMoney(total)} — внесён`;
   render();
@@ -4766,6 +4776,8 @@ function renderQuickEntry() {
       <label>Сложность объекта<select id="qe-complexity" onchange="quickEntrySet('complexity', this.value)">${Object.entries(coefs).map(([k, v]) => opt(k, `${coefName(k)} ×${v}`, f.complexity)).join('')}</select><span class="qe-hint">умножает оплату монтажа плёнки</span></label>
       <label>Оплачено, $<input id="qe-paid" type="number" min="0" step="1" value="${academyEsc(f.paid)}" placeholder="= ${fmtMoney(total)}" onchange="quickEntrySet('paid', this.value)"></label>
       <label>Как<select id="qe-method">${PAYMENT_METHODS.map(m => opt(m.id, m.label, f.method)).join('')}</select></label>
+      <label>Куда пришли деньги<select id="qe-account"><option value="">выберите счёт</option>${financePaymentAccounts().map(a => opt(a.id, a.name, f.account)).join('')}</select></label>
+      <label class="qe-confirm"><input id="qe-paidConfirmed" type="checkbox" ${f.paidConfirmed ? 'checked' : ''} onchange="quickEntrySet('paidConfirmed', this.checked)"> Деньги получены — подтверждаю</label>
       <label>Заметка<input id="qe-notes" value="${academyEsc(f.notes)}" placeholder="необязательно"></label>
     </div>
     ${s.notice ? `<div class="qe-notice">✓ ${academyEsc(s.notice)}</div>` : ''}

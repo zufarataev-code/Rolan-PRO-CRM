@@ -6022,7 +6022,7 @@
   .kanban-compact-line { display: none; }
   .kanban-funnel.is-compact {
     grid-auto-flow: row;
-    grid-template-columns: repeat(7, minmax(158px, 1fr));
+    grid-template-columns: var(--kanban-cols, repeat(7, minmax(158px, 1fr)));
     grid-auto-columns: unset;
     gap: 8px;
   }
@@ -6038,6 +6038,15 @@
   .kanban-funnel.is-compact .kanban-card-main .mt-2 { margin-top: 4px; }
   .kanban-funnel.is-compact .kanban-card-main .status-badge,
   .kanban-funnel.is-compact .kanban-card-main .kanban-chip { font-size: .62rem; padding: .1rem .38rem; }
+  .kanban-funnel.is-compact .kanban-col-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    align-content: start;
+    gap: 0;
+  }
+  .kanban-funnel.is-compact .kanban-col-cards > .kanban-empty { grid-column: 1 / -1; }
+  /* The stage is the column itself; the status chip repeated it. Urgency stays in the money line colour. */
+  .kanban-funnel.is-compact .kanban-card-chips,
   .kanban-funnel.is-compact .kanban-card-stripes,
   .kanban-funnel.is-compact .kanban-card-details,
   .kanban-funnel.is-compact .kanban-card-meta,
@@ -18305,6 +18314,7 @@ function addOrderPayment(orderId, data) {
     date: data.date || paymentLocalDate(),
     method: data.method || 'zelle',
     note: data.note || '',
+    accountId: data.accountId || null,
     recordedBy: state.currentUserId || null,
     recordedAt: new Date().toISOString(),
   });
@@ -18398,6 +18408,9 @@ function openPaymentModal(orderId, opts = {}) {
         ${PAYMENT_METHODS.map(m => `<option value="${m.id}" ${kpOnlinePaymentMethod(o.kpOnline?.method) === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}
       </select>
 
+      <label class="mt-3">На какой счёт пришли деньги</label>
+      ${typeof financePaymentAccountSelect === 'function' ? financePaymentAccountSelect('pay-account') : ''}
+
       <label class="mt-3">Дата поступления</label>
       <input id="pay-date" type="date" value="${paymentLocalDate()}">
 
@@ -18442,6 +18455,7 @@ function confirmPayment(orderId) {
     method: document.getElementById('pay-method')?.value,
     date: document.getElementById('pay-date')?.value,
     note: document.getElementById('pay-note')?.value || (flow.kind === 'deposit' ? 'Аванс' : ''),
+    accountId: document.getElementById('pay-account')?.value || null,
   });
   const o = getOrder(orderId);
   // A payment that covers the KP deposit is the deposit, whichever button
@@ -22594,6 +22608,15 @@ function moveKanbanOrderFromPicker(orderId, targetStatus) {
   state.modal = null;
   kanbanMoveOrder(orderId, targetStatus);
 }
+// Owner, 2026-11-22 09:09: «в рамках недели не вижу все заказы, уходят за горизонт».
+// In compact mode a busy stage takes the width the empty stages do not need, and
+// its cards lay out in several rows-of-columns inside it, so a week fits one screen.
+function ordersKanbanCompactColumns(filtered) {
+  return ORDER_KANBAN_FUNNEL.map(col => {
+    const count = filtered.filter(o => col.statuses.includes(o.status)).length;
+    return count ? `minmax(190px, ${Math.min(count, 8)}fr)` : 'minmax(120px, 0.6fr)';
+  }).join(' ');
+}
 function renderOrdersKanban(filtered, opts = {}) {
   const totalRevenue = filtered.reduce((s,o) => s + orderKanbanRevenue(o), 0);
   const totalDebt = filtered.reduce((s,o) => s + orderKanbanDebt(o), 0);
@@ -22604,7 +22627,7 @@ function renderOrdersKanban(filtered, opts = {}) {
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Остаток к оплате</div><div class="text-xl font-black ${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</div></div>
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Средний чек</div><div class="text-xl font-black">${fmtMoney(filtered.length ? totalRevenue / filtered.length : 0)}</div></div>
     </div>`}
-    <div class="kanban-funnel ${ordersKanbanDensity() === 'compact' ? 'is-compact' : ''}" data-scroll-key="kanban">
+    <div class="kanban-funnel ${ordersKanbanDensity() === 'compact' ? 'is-compact' : ''}" data-scroll-key="kanban" ${ordersKanbanDensity() === 'compact' ? `style="--kanban-cols:${ordersKanbanCompactColumns(filtered)}"` : ''}>
       ${ORDER_KANBAN_FUNNEL.map(col => {
         const orders = filtered.filter(o => col.statuses.includes(o.status));
         const colRevenue = orders.reduce((s,o) => s + orderKanbanRevenue(o), 0);
@@ -22624,7 +22647,7 @@ function renderOrdersKanban(filtered, opts = {}) {
               </div>
               ${colDebt > 0 ? `<div class="text-xs text-red-600 mt-2">Долг: ${fmtMoney(colDebt)}</div>` : `<div class="text-xs text-gray-400 mt-2">Без просроченного долга</div>`}
             </div>
-            <div class="py-1">
+            <div class="py-1 kanban-col-cards">
               ${orders.length ? orders.map(o => renderOrderKanbanCard(o)).join('') : `<div class="kanban-empty">Перетащите проект сюда</div>`}
             </div>
           </section>
@@ -22686,7 +22709,7 @@ function renderOrderKanbanCard(o) {
             <span class="kanban-chip" style="background:${accent.soft};border-color:${accent.soft};color:${accent.color}">${premiumEsc(accent.label)}</span>
           </div>
         </div>
-        <div class="mt-2 flex flex-wrap gap-1">
+        <div class="kanban-card-chips mt-2 flex flex-wrap gap-1">
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
           ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
@@ -30721,19 +30744,21 @@ function closeQuickProjectAsCompleted(oid) {
   const range = projectQuickDateRange(o);
   const paidDate = projectQuickDateValue(document.getElementById('quick-close-paid-date')?.value || range.endDate);
   const method = document.getElementById('quick-close-payment-method')?.value || 'zelle';
+  const accountId = document.getElementById('quick-close-account')?.value || null;
   const revenue = orderRevenue(o);
   const requestedPaid = Math.min(revenue, Math.max(0, Number(document.getElementById('quick-close-paid-amount')?.value) || 0));
   if (requestedPaid > 0 && !paidDate) { alert('Укажите дату оплаты.'); return; }
   const willBePaidInFull = requestedPaid >= revenue - 0.5;
-  if (!confirm(`Закрыть ${o.number} как выполненный? Оплачено ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
-  closeQuickProjectAsCompletedWith(o, { requestedPaid, paidDate, method });
+  if (requestedPaid > 0 && !accountId) { alert('Выберите счёт, на который пришли деньги.'); return; }
+  if (!confirm(`Закрыть ${o.number} как выполненный? Подтверждаю оплату ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${requestedPaid > 0 ? ` на счёт «${financePaymentAccounts().find(a => a.id === accountId)?.name || ''}»` : ''}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
+  closeQuickProjectAsCompletedWith(o, { requestedPaid, paidDate, method, accountId, confirmed: true });
   closeModal(); openOrder(oid);
 }
 /**
  * Закрытие исторического проекта по уже проверенным фактам (projectQuickCompletionIssues).
  * Тот же код для кнопки в редакторе и для панели быстрого ввода в одно окно (Owner, 2026-11-05).
  */
-function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '', method = 'zelle' } = {}) {
+function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '', method = 'zelle', accountId = null, confirmed = false } = {}) {
   if (!o || currentUser()?.role !== 'owner') return;
   const range = projectQuickDateRange(o);
   const revenue = orderRevenue(o);
@@ -30751,7 +30776,7 @@ function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '',
   }
   const remainingToRecord = Math.max(0, requestedPaid - orderPaidTotal(o));
   if (remainingToRecord > 0) {
-    payments.push({ id: 'pay_' + uid(), amount: remainingToRecord, date: paidDate, method, note: 'Фактическая оплата при переносе проекта', recordedBy: state.currentUserId || null, recordedAt });
+    payments.push({ id: 'pay_' + uid(), amount: remainingToRecord, date: paidDate, method, note: 'Фактическая оплата при переносе проекта', accountId: accountId || null, confirmed: !!confirmed, confirmedBy: confirmed ? (state.currentUserId || null) : null, confirmedAt: confirmed ? recordedAt : null, recordedBy: state.currentUserId || null, recordedAt });
   }
   syncOrderPaid(o);
   o.paid = orderPaidTotal(o);
@@ -30865,6 +30890,7 @@ function renderQuickProjectEntry(o) {
       <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number.isFinite(Number(o.paid)) ? Math.max(0, Number(o.paid)) : 0}"></div>
       <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
       <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
+      <div><label>Куда пришли деньги</label>${financePaymentAccountSelect('quick-close-account')}</div>
       <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>
     </div>
     ${!availableInstallers.length ? '<div class="text-xs text-amber-700 mt-2">Сначала добавьте Рината и Нурика в «Сотрудники» с ролью «Монтажник» и схемой оплаты — после этого они появятся у каждой услуги.</div>' : ''}
@@ -39612,6 +39638,16 @@ const FINANCE_CATEGORY_OPTIONS = [
   ['utilities', 'Коммунальные'], ['other', 'Прочее'],
 ];
 
+/** Счета, на которые клиент может заплатить (без «Не распределено»). Owner, 2026-11-22. */
+function financePaymentAccounts() {
+  try { return financeData().accounts.filter(a => a.active !== false && a.id !== 'fin_unallocated'); }
+  catch (error) { return []; }
+}
+function financePaymentAccountSelect(id, selected = '') {
+  const accounts = financePaymentAccounts();
+  return `<select id="${id}"><option value="">не распределено</option>${accounts.map(a => `<option value="${academyEsc(a.id)}" ${selected === a.id ? 'selected' : ''}>${academyEsc(a.name || 'Счёт')}</option>`).join('')}</select>`;
+}
+
 function financeData() {
   db.finance = db.finance || { version: 1, accounts: [], transactions: [], importedSources: [] };
   db.finance.accounts = Array.isArray(db.finance.accounts) ? db.finance.accounts : [];
@@ -39728,7 +39764,22 @@ function financeSystemRows() {
   (db.orders || []).forEach(o => {
     const paid = Math.max(0, Number(o.paid) || 0);
     const linked = financeLinkedAmount(manual, t => t.type === 'income' && t.orderId === o.id);
-    const remainder = Math.max(0, paid - linked);
+    // Owner, 2026-11-22: a payment recorded with its account goes straight to that
+    // account's balance; only the rest waits in «Не распределено».
+    let allocated = 0;
+    (Array.isArray(o.payments) ? o.payments : []).forEach(p => {
+      const amount = Math.max(0, Number(p.amount) || 0);
+      if (!p.accountId || !amount || allocated + linked + amount > paid + 0.005) return;
+      allocated += amount;
+      rows.push({
+        id: `sys_order_payment_${p.id}`, type: 'income', amount,
+        date: p.date || p.recordedAt || o.paidAt || o.createdAt,
+        accountId: p.accountId, category: 'client_payment', orderId: o.id,
+        scope: 'business', costBehavior: 'variable', tags: ['клиент', 'заказ'],
+        note: `Оплата клиента · ${o.number || o.id}${p.confirmed ? ' · подтверждена' : ''}`, source: 'orders', sourceLabel: 'Заказы', editable: false,
+      });
+    });
+    const remainder = Math.max(0, paid - linked - allocated);
     if (remainder > 0) rows.push({
       id: `sys_order_${o.id}`, type: 'income', amount: remainder,
       date: o.paidAt || o.stripe?.paidAt || o.depositReceivedAt || o.updatedAt || o.createdAt,
@@ -39788,7 +39839,18 @@ function financeSystemRows() {
   // Расчёт проекта хранит плановые прямые расходы. В денежный журнал попадают
   // только явно отмеченные как оплаченные — план не должен уменьшать кассу.
   (db.orders || []).forEach(o => {
-    const actualExpenses = (o.extraExpenses || []).filter(e => e.actual === true || e.paid === true || e.paidAt);
+    const allActual = (o.extraExpenses || []).filter(e => e.actual === true || e.paid === true || e.paidAt);
+    // Expenses paid from a known account (historical entry) reduce that account.
+    allActual.filter(e => e.accountId).forEach(e => {
+      const amount = Math.max(0, Number(e.amount) || 0);
+      if (amount) rows.push({
+        id: `sys_expense_item_${e.id}`, type: 'expense', amount,
+        date: e.paidAt || e.date || e.createdAt, accountId: e.accountId, category: 'project_expense', orderId: o.id,
+        scope: 'business', costBehavior: 'variable', tags: ['заказ'],
+        note: `${e.label || 'Расход'} · ${o.number || o.id}`, source: 'orders', sourceLabel: 'Заказы', editable: false,
+      });
+    });
+    const actualExpenses = allActual.filter(e => !e.accountId);
     const total = actualExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.orderId === o.id && t.category === 'project_expense');
     const remainder = Math.max(0, total - linked);

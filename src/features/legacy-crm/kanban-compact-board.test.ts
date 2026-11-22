@@ -17,7 +17,7 @@ test("compact cards are the default and the choice is remembered", () => {
 });
 
 test("compact board shows all seven stages side by side", () => {
-  assert.match(html, /\.kanban-funnel\.is-compact \{\s*grid-auto-flow: row;\s*grid-template-columns: repeat\(7, minmax\(158px, 1fr\)\);/);
+  assert.match(html, /\.kanban-funnel\.is-compact \{\s*grid-auto-flow: row;\s*grid-template-columns: var\(--kanban-cols, repeat\(7, minmax\(158px, 1fr\)\)\);/);
   assert.match(html, /\.kanban-funnel\.is-compact \.kanban-card-details,/);
   assert.match(html, /class="kanban-compact-line"/);
 });
@@ -36,4 +36,10 @@ test("full screen uses the browser full screen and Esc closes it", () => {
   assert.match(html, /el\.requestFullscreen\(\)\.catch/);
   assert.match(html, /document\.addEventListener\('fullscreenchange'/);
   assert.match(html, /event\.key === 'Escape' && state\.ordersKanbanFullscreen && !state\.modal/);
+});
+
+test("a busy stage takes the free width and wraps its cards (week fits one screen)", () => {
+  assert.match(html, /function ordersKanbanCompactColumns\(filtered\)/);
+  assert.match(html, /count \? `minmax\(190px, \$\{Math\.min\(count, 8\)\}fr\)` : 'minmax\(120px, 0\.6fr\)'/);
+  assert.match(html, /\.kanban-funnel\.is-compact \.kanban-col-cards \{\s*display: grid;\s*grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\);/);
 });

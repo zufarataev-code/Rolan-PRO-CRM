@@ -389,6 +389,6 @@ test('the one-screen form takes direct project expenses — rent, delivery, gas,
   assert.match(renderer, /const previewProfitability = projectProfitability\(previewOrder\);/);
   assert.match(renderer, /const previewMargin = previewProfitability\.grossProfit;/);
   assert.match(fn(stages, 'renderQuickEntry'), /<div class="qe-expenses">/);
-  assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: quickEntryExpenseTypes\(\)\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now \}\)/);
+  assert.match(fn(stages, 'quickEntryCommit'), /o\.extraExpenses\.push\(\{ id: uid\(\), type: quickEntryExpenseTypes\(\)\.some\(\(\[value\]\) => value === e\.type\) \? e\.type : 'other', label: String\(e\.label \|\| ''\)\.trim\(\) \|\| typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now, actual: true, paidAt: firstDate, accountId: f\.account \|\| null \}\)/);
   assert.match(fn(stages, 'renderQuickEntry'), /⭐ старшему \+/, 'the crew line says when the senior bonus is in the payout');
 });

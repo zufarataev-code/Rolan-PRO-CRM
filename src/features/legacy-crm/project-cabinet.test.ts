@@ -77,21 +77,16 @@ function order(): Row {
   };
 }
 
-test('the owner\'s working card opens with the rings and the tour above it; other roles are unchanged', () => {
+test('the working card has no second set of rings on top — only a link to the overview (Owner, 2026-11-22)', () => {
   const o = order();
   const { context } = load(o, 'owner', '');
   assert.equal(context.projectCabinetEnabled({ role: 'owner' }), false, 'the full view replaces the card only by the owner\'s choice');
   assert.equal(load(o, 'owner', '1').context.projectCabinetEnabled({ role: 'owner' }), true);
   assert.equal(context.projectCabinetEntryBar(o, { role: 'manager' }), '');
   const strip = context.projectCabinetEntryBar(o, { role: 'owner' });
-  assert.ok(strip.includes('этапов пройдено') && strip.includes('$400'), 'rings from the working functions');
-  assert.ok(strip.includes('Фото объекта'), 'a project with photos shows the tour straight away');
-  assert.ok(strip.includes('Весь кабинет'));
-  const empty = order(); empty.photos = [];
-  const emptyContext = load(empty, 'owner', '').context;
-  assert.ok(!emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes('Фото объекта пока нет'), 'no photos: the tour stays folded');
-  emptyContext.projectCabinetToggleTour(true);
-  assert.ok(emptyContext.projectCabinetEntryBar(empty, { role: 'owner' }).includes("addOrderPhoto('o1')"), 'opened by hand, it offers to add a photo');
+  assert.ok(!strip.includes('этапов пройдено'), 'no rings above the working card');
+  assert.ok(!strip.includes('Фото объекта'), 'no tour above the working card');
+  assert.ok(strip.includes('projectCabinetToggle(true)'), 'one link opens the overview');
 });
 
 test('stages, services, windows and money come from the working CRM functions', () => {
