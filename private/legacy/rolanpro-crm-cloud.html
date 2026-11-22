@@ -15506,7 +15506,79 @@ function inboundMessageVisibleToUser(message, user = currentUser()) {
   if (!message || message.direction !== 'in' || !user) return false;
   if (user.role === 'owner') return true;
   const order = getOrder(message.orderId);
+  // A new WhatsApp lead from an ad has no project yet: managers must see it
+  // to answer it (Owner, 2026-11-22).
+  if (!order && message.channel === 'whatsapp' && user.role === 'manager') return true;
   return !!order && orderUserCanAccess(order, user);
+}
+function whatsappThreadPhone(message) {
+  return String((message?.direction === 'in' ? message?.meta?.from : message?.meta?.to) || '').trim();
+}
+function whatsappPhoneThreadMessages(phone) {
+  const digits = String(phone || '').replace(/\D/g, '').slice(-10);
+  if (digits.length < 10) return [];
+  return twilioRemoteMessages
+    .filter(x => x.channel === 'whatsapp')
+    .filter(x => String(x.direction === 'in' ? x.meta?.from : x.meta?.to).replace(/\D/g, '').slice(-10) === digits)
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+function renderWhatsAppPhoneThread(phone) {
+  const items = whatsappPhoneThreadMessages(phone);
+  if (!items.length) return '<div class="text-center text-sm text-slate-500">Сообщений пока нет.</div>';
+  return items.map(x => {
+    const mine = x.direction !== 'in';
+    const who = !mine ? 'Клиент' : x.kind === 'whatsapp_bot' ? '🤖 Бот' : (getUser(x.by)?.name || 'Менеджер');
+    return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${mine ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border'}">${academyEsc(x.body || '')}<div class="text-[10px] mt-1 ${mine ? 'text-emerald-100' : 'text-slate-400'}">${academyEsc(who)} · ${fmtDateTime(x.at)}${x.status === 'failed' || x.status === 'undelivered' ? ' · не доставлено' : ''}</div></div></div>`;
+  }).join('');
+}
+function openWhatsAppPhoneThread(phone) {
+  state.whatsappThreadPhone = phone;
+  state.modal = `
+    <div class="modal-backdrop" onclick="if(event.target===this) closeWhatsAppPhoneThread()">
+      <div class="modal-content workspace-modal overflow-hidden p-0" style="max-width:44rem;height:min(760px,92vh);display:flex;flex-direction:column;">
+        <div class="flex items-start justify-between gap-3 px-5 py-4 border-b bg-white">
+          <div class="min-w-0"><div class="text-xs font-black text-emerald-700 uppercase">WhatsApp · новый клиент</div><h3 class="text-xl font-black truncate">${academyEsc(phone)}</h3><div class="text-xs text-slate-500 mt-1">После вашего ответа бот молчит 12 часов</div></div>
+          <button class="btn-ghost" onclick="closeWhatsAppPhoneThread()">✕</button>
+        </div>
+        <div id="whatsapp-phone-thread" class="flex-1 overflow-y-auto bg-slate-100 p-4 space-y-2">${renderWhatsAppPhoneThread(phone)}</div>
+        <div class="border-t bg-white p-4">
+          <div id="whatsapp-phone-thread-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
+          <textarea id="whatsapp-phone-thread-text" rows="3" class="w-full" placeholder="Ответ клиенту в WhatsApp…" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();sendWhatsAppPhoneThreadMessage();}"></textarea>
+          <div class="flex items-center gap-2 mt-3"><div class="flex-1"></div><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
+        </div>
+      </div>
+    </div>`;
+  render();
+  setTimeout(() => { const el = document.getElementById('whatsapp-phone-thread'); if (el) el.scrollTop = el.scrollHeight; }, 30);
+}
+function closeWhatsAppPhoneThread() {
+  state.whatsappThreadPhone = null;
+  closeModal();
+}
+function refreshWhatsAppPhoneThread() {
+  const el = document.getElementById('whatsapp-phone-thread');
+  if (!el || !state.whatsappThreadPhone) return;
+  el.innerHTML = renderWhatsAppPhoneThread(state.whatsappThreadPhone);
+  el.scrollTop = el.scrollHeight;
+}
+async function sendWhatsAppPhoneThreadMessage() {
+  const phone = state.whatsappThreadPhone;
+  const input = document.getElementById('whatsapp-phone-thread-text');
+  const button = document.getElementById('whatsapp-phone-thread-send');
+  const notice = document.getElementById('whatsapp-phone-thread-notice');
+  const body = input?.value.trim() || '';
+  if (!phone || !body) return;
+  if (button) { button.disabled = true; button.textContent = 'Отправляю…'; }
+  try {
+    await sendWhatsAppViaTwilio(phone, body, {});
+    if (input) input.value = '';
+    await syncTwilioMessages();
+    refreshWhatsAppPhoneThread();
+  } catch (e) {
+    if (notice) { notice.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; notice.textContent = 'Не отправилось: ' + e.message; }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Отправить в WhatsApp'; }
+  }
 }
 function visibleInboundClientMessages() {
   return twilioRemoteMessages
@@ -15559,7 +15631,7 @@ function openInboundMessagesInbox() {
                 <div class="text-xs text-slate-400 whitespace-nowrap">${fmtDateTime(message.at)}</div>
               </div>
               <div class="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">${academyEsc(message.body || '')}</div>
-              ${order ? `<button class="btn-primary text-sm mt-3" onclick="openClientConversation('${order.id}','${message.channel === 'whatsapp' ? 'whatsapp' : 'sms'}')">Открыть весь диалог</button>` : `<div class="text-xs text-amber-700 mt-3">Сообщение можно прочитать здесь, но ответ привязать нельзя: исходного заказа уже нет в текущей базе.</div>`}
+              ${order ? `<button class="btn-primary text-sm mt-3" onclick="openClientConversation('${order.id}','${message.channel === 'whatsapp' ? 'whatsapp' : 'sms'}')">Открыть весь диалог</button>` : message.channel === 'whatsapp' && whatsappThreadPhone(message) ? `<button class="btn-primary text-sm mt-3" onclick="openWhatsAppPhoneThread('${academyEsc(whatsappThreadPhone(message))}')">💬 Открыть переписку и ответить</button>` : `<div class="text-xs text-amber-700 mt-3">Сообщение можно прочитать здесь, но ответ привязать нельзя: исходного заказа уже нет в текущей базе.</div>`}
             </div>`;
           }).join('') : `<div class="card text-center text-gray-500">Входящих сообщений по вашим заказам пока нет.</div>`}
         </div>
@@ -42034,6 +42106,8 @@ async function syncTwilioMessages() {
         const recipients = new Set([
           o?.managerId,
           ...(db.users || []).filter(u => u.role === 'owner').map(u => u.id),
+          // New WhatsApp lead without a project: every manager can pick it up.
+          ...(!o && message.channel === 'whatsapp' ? (db.users || []).filter(u => u.role === 'manager' && u.active !== false).map(u => u.id) : []),
         ].filter(Boolean));
         recipients.forEach(userId => db.notifications.push({
           id: 'client_message_notice_' + message.id + '_' + userId,
@@ -42052,6 +42126,7 @@ async function syncTwilioMessages() {
     }
     if (before !== after) {
       if (state.clientConversationOrderId) refreshClientConversationDialog();
+      else if (state.whatsappThreadPhone) refreshWhatsAppPhoneThread();
       else renderBackground();
     }
   } catch (e) {

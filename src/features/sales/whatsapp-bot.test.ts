@@ -77,3 +77,15 @@ test("Twilio inbound route hands WhatsApp messages to the bot without blocking T
   const legacy = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
   assert.match(legacy, /whatsapp: \{ label: 'WhatsApp'/);
 });
+
+test("inbox lets managers open and answer a new WhatsApp lead without a project", () => {
+  const legacy = readFileSync("private/legacy/rolanpro-crm-cloud.html", "utf8");
+  assert.match(legacy, /if \(!order && message\.channel === 'whatsapp' && user\.role === 'manager'\) return true;/);
+  assert.match(legacy, /function openWhatsAppPhoneThread\(phone\)/);
+  assert.match(legacy, /💬 Открыть переписку и ответить/);
+  assert.match(legacy, /await sendWhatsAppViaTwilio\(phone, body, \{\}\)/);
+  assert.match(legacy, /x\.kind === 'whatsapp_bot' \? '🤖 Бот'/);
+  assert.match(legacy, /else if \(state\.whatsappThreadPhone\) refreshWhatsAppPhoneThread\(\);/);
+  const service = readFileSync("src/features/twilio/service.ts", "utf8");
+  assert.match(service, /kind: typeof asObject\(message\.raw_payload\)\?\.kind === "string"/);
+});
