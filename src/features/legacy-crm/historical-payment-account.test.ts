@@ -73,3 +73,16 @@ test("ordinary payment modal records the account too", () => {
   assert.match(fn(html, "addOrderPayment"), /accountId: data\.accountId \|\| null/);
   assert.match(fn(html, "confirmPayment"), /accountId: document\.getElementById\('pay-account'\)\?\.value \|\| null/);
 });
+
+test("draft expenses stay plan; closing marks them paid from the chosen account", () => {
+  assert.doesNotMatch(fn(stages, "quickEntryCommit"), /actual: true, paidAt: firstDate/);
+  const close = fn(html, "closeQuickProjectAsCompletedWith");
+  assert.match(close, /if \(accountId && !e\.accountId\) e\.accountId = accountId;/);
+  assert.match(close, /note: 'Оплата из старой CRM', accountId: accountId \|\| null/);
+});
+
+test("compact cards keep the urgency warning", () => {
+  const card = fn(html, "renderOrderKanbanCard");
+  const line = card.slice(card.indexOf('class="kanban-compact-line"'), card.indexOf('class="kanban-card-details'));
+  assert.match(line, /urgency \? `<span class="kanban-chip \$\{urgency\.cls\}">/);
+});

@@ -22718,6 +22718,7 @@ function renderOrderKanbanCard(o) {
           <b class="text-emerald-700">${fmtMoney(revenue)}</b>
           <span>${sqft.toFixed(0)} sqft</span>
           ${debt > 0 ? `<b class="text-red-600">долг ${fmtMoney(debt)}</b>` : ''}
+          ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
         <div class="kanban-card-details mt-3 grid grid-cols-2 gap-2 text-sm">
           <div>
@@ -30772,7 +30773,7 @@ function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '',
   const existingLegacyPaid = Math.max(0, Number(o.paid) || 0);
   const payments = orderPayments(o);
   if (!payments.length && existingLegacyPaid > 0) {
-    payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', recordedBy: state.currentUserId || null, recordedAt });
+    payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', accountId: accountId || null, confirmed: !!confirmed, confirmedBy: confirmed ? (state.currentUserId || null) : null, confirmedAt: confirmed ? recordedAt : null, recordedBy: state.currentUserId || null, recordedAt });
   }
   const remainingToRecord = Math.max(0, requestedPaid - orderPaidTotal(o));
   if (remainingToRecord > 0) {
@@ -30780,6 +30781,14 @@ function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '',
   }
   syncOrderPaid(o);
   o.paid = orderPaidTotal(o);
+  // Owner, 2026-11-22: only when the historical project is closed do its direct
+  // expenses become paid cash — from the account the money came to. A draft stays plan.
+  (o.extraExpenses || []).forEach(e => {
+    if (e.actual === true || e.paid === true || e.paidAt) return;
+    e.actual = true;
+    e.paidAt = e.date || range.endDate;
+    if (accountId && !e.accountId) e.accountId = accountId;
+  });
   const full = o.paid >= revenue - 0.5;
   o.depositReceived = o.paid > 0;
   o.depositReceivedAt = o.paid > 0 ? (o.depositReceivedAt || paidAt) : null;

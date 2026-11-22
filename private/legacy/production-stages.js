@@ -4474,8 +4474,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     const amount = Math.max(0, Number(e.amount) || 0);
     if (!amount) return;
     const typeLabel = (quickEntryExpenseTypes().find(([value]) => value === e.type) || ['other', 'Другое'])[1];
-    // Перенос задним числом: расход уже оплачен — уменьшает кассу того же счёта.
-    o.extraExpenses.push({ id: uid(), type: quickEntryExpenseTypes().some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now, actual: true, paidAt: firstDate, accountId: f.account || null });
+    o.extraExpenses.push({ id: uid(), type: quickEntryExpenseTypes().some(([value]) => value === e.type) ? e.type : 'other', label: String(e.label || '').trim() || typeLabel, amount, projectDirect: true, date: firstDate, createdAt: now });
   });
   syncProjectIncludedServices(o);
   projectEstimateSyncQuickServices(o);
