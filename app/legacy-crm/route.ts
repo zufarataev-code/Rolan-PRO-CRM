@@ -1,12 +1,8 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/auth/server";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { getEnv } from "@/lib/env";
-import { replaceLegacyBootstrapLogin } from "@/features/legacy-crm/html-shell";
 import { BEFORE_PAINT_SCRIPT } from "@/features/legacy-crm/before-paint";
 import { ROLE_TESTING_HTML } from "@/features/legacy-crm/role-testing";
 import { PULSE_THEME_HTML } from "@/features/legacy-crm/pulse-theme";
@@ -14,7 +10,7 @@ import { DESIGN_THEME_HTML } from "@/features/legacy-crm/design-theme";
 import { INTERFACE_LAYER_HTML } from "@/features/legacy-crm/interface-layer";
 import { EMBED_FRAME_HTML } from "@/features/legacy-crm/embed-frame";
 import { ENTITY_TOKENS_HTML } from "@/features/legacy-crm/entity-tokens";
-import { composeProductionHtml } from "@/features/legacy-crm/production-ui";
+import { legacyStaticShell } from "@/features/legacy-crm/static-shell";
 import { currentReleaseId } from "@/features/legacy-crm/release";
 
 export const dynamic = "force-dynamic";
@@ -49,17 +45,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/change-password", publicAppUrl));
   }
 
-  const html = await readFile(
-    path.join(process.cwd(), "private", "legacy", "rolanpro-crm-cloud.html"),
-    "utf8",
-  );
-
-  const productionUi = await readFile(path.join(process.cwd(), "private", "legacy", "production-stages.js"), "utf8");
-  // «Кабинет проекта»: a separate module so the trial view never grows the legacy file.
-  const cabinetUi = await readFile(path.join(process.cwd(), "private", "legacy", "project-cabinet.js"), "utf8");
-  // «Пульт владельца»: the trial main screen, same rule — its own module.
-  const boardUi = await readFile(path.join(process.cwd(), "private", "legacy", "owner-board.js"), "utf8");
-  const cloudHtml = replaceLegacyBootstrapLogin(composeProductionHtml(composeProductionHtml(composeProductionHtml(html, productionUi), cabinetUi), boardUi));
+  // Composed once per release and reused (src/features/legacy-crm/static-shell.ts).
+  const cloudHtml = await legacyStaticShell();
   const employeeLoginUrl = new URL("/login", publicAppUrl).toString();
   const googleMapsBootstrapPatch = `
     <script>
