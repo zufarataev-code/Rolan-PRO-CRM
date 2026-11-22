@@ -72,3 +72,24 @@ test("the edit button opens the window, and the cashier returns to it", () => {
   assert.match(html, /\['estimate', 'intake', 'direction', 'editor'\]\.includes\(returnTo\)/);
   assert.match(html, /returnTo === 'editor' && typeof openProjectEditor === 'function'\) openProjectEditor\(oid\)/);
 });
+
+test("a manager cannot delete a completed service; the owner can", () => {
+  const o: any = order("installation_in_progress");
+  o.serviceProgress = { k1: { status: "done" } };
+  const mgr = sandbox("manager", o);
+  mgr.projectEditorRemove("o1", "k1");
+  assert.equal(o.extraServices.length, 1);
+  sandbox("owner", o).projectEditorRemove("o1", "k1");
+  assert.equal(o.extraServices.length, 0);
+});
+
+test("manager price stays inside the corridor; sized services return to the window", () => {
+  const o: any = order("proposal_sent");
+  const ctx = sandbox("manager", o);
+  ctx.serviceOffering = () => ({ name: "Силикон" });
+  ctx.projectServicePriceRange = () => ({ min: 10, max: 60 });
+  ctx.projectEditorSetPrice("o1", "k1", "200"); // 100 per unit > max
+  assert.equal(o.extraServices[0].price, 100);
+  const stages = readFileSync(join(process.cwd(), "private/legacy/production-stages.js"), "utf8");
+  assert.match(stages, /returnTo === 'editor' && typeof openProjectEditor === 'function'\) openProjectEditor\(oid\);/);
+});

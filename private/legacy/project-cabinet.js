@@ -574,7 +574,10 @@ function projectEditorSetPrice(oid, key, value) {
   if (currentUser()?.role !== 'owner') {
     const offering = serviceOffering(line.offeringId);
     const range = projectServicePriceRange(offering);
-    if (range && range.min > 0 && unit < range.min - 0.005) { alert(`Цена «${offering.name}» не ниже ${fmtMoney(range.min)}.`); return; }
+    if (range && ((range.min > 0 && unit < range.min - 0.005) || (range.max > 0 && unit > range.max + 0.005))) {
+      alert(`Цена «${offering.name}»: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}.`);
+      return;
+    }
   }
   if (!projectApplyLineUnitPrice(line, unit)) return;
   if (line.kind === 'quick') projectEstimateSyncQuickServices(o);
@@ -585,6 +588,9 @@ function projectEditorRemove(oid, key) {
   const { o, line } = projectEditorLine(oid, key);
   if (!o || !line) return;
   const done = projectServiceProgress(o, line.key).status === 'done';
+  // A completed service is history (revenue, schedule, installer pay). Only the
+  // owner may deliberately correct it; for everyone else it stays (as in the card).
+  if (done && currentUser()?.role !== 'owner') { alert(`«${line.name}»: услуга выполнена — её не удаляют. Попросите владельца.`); return; }
   if (!confirm(`Удалить «${line.name}» из проекта?${done ? ' Услуга отмечена выполненной — зарплата и списание по ней пересчитаются.' : ''}`)) return;
   if (line.kind === 'windows') {
     measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });

@@ -28011,7 +28011,7 @@ function serviceCashierCommit() {
   // otherwise it would wait for a measurement that already happened ($0).
   if (serviceOfferingNeedsSizes(offering) && typeof openOfferingWindowsPicker === 'function'
     && projectPendingSizedServices(o).some(item => item.id === offering.id) && offeringWindowCandidates(o, offering).length) {
-    openOfferingWindowsPicker(oid, offering.id, returnTo === 'estimate' || returnTo === 'editor' ? 'card' : returnTo);
+    openOfferingWindowsPicker(oid, offering.id, returnTo === 'estimate' ? 'card' : returnTo);
     return;
   }
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
