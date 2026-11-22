@@ -432,10 +432,13 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
   }
   for (const order of rows(next.orders)) {
     const savedOrder = rows(current.orders).find(item=>item.id===order.id) || {};
-    // #592: a closed project moved to another direction keeps its crew, dates and
-    // progress under the new service id; compared as such, they are unchanged.
-    const oldOrder = CLOSED_PROJECT_STATUSES.includes(String(savedOrder.status))
-      ? rekeyDirectionRecords(savedOrder, projectDirectionMoves(savedOrder, order)) : savedOrder;
+    // #592: a closed project or a TintWiz import moved to another direction keeps
+    // its windows, crew, dates and progress under the new direction; compared with
+    // the saved project renamed the same way, a pure move is no change at all.
+    const moves = CLOSED_PROJECT_STATUSES.includes(String(savedOrder.status)) || savedOrder._importSource === 'wiz'
+      ? projectDirectionMoves(savedOrder, order) : new Map<string, string>();
+    const oldOrder = moves.size
+      ? rekeyDirectionRecords(renameProjectDirections(savedOrder, moves, order.serviceType), moves) : savedOrder;
     const manualTotalChanged = ['manualProjectTotal', 'manualProjectTotalBase'].some(field =>
       stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null));
     const pricingModeChanged = order.quickEntryPricingMode !== oldOrder.quickEntryPricingMode;

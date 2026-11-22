@@ -390,6 +390,28 @@ test('a closed project keeps its crew, dates and progress when the owner moves i
   assert.match(String(prepareServiceSolutions(payload(before), payload(resized), true)), /Проект закрыт/);
 });
 
+test('an open TintWiz import with a finished service saves after the bulk fix moves it', () => {
+  const done = { status: 'done', doneAt: '2026-11-20T22:00:00Z', doneBy: 'i1' };
+  const before: any = {
+    id: 'wizopen', status: 'installation_in_progress', serviceType: 'solar_film', _importSource: 'wiz',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 2000, height: 2000, qty: 1 }] }] },
+    extraServices: [],
+    serviceSchedules: [{ id: 'direction:solar_film', installationAt: '2026-11-20T16:00:00Z', installerIds: ['i1'] }],
+    serviceProgress: { 'direction:solar_film': done },
+  };
+  const payload = (order: any) => ({ settings: {}, users: [{ id: 'i1', role: 'installer' }], orders: [order] });
+  const next = structuredClone(before);
+  next.serviceType = 'privacy_film';
+  next.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+  next.serviceSchedules[0].id = 'direction:privacy_film';
+  next.serviceProgress = { 'direction:privacy_film': done };
+  assert.equal(prepareServiceSolutions(payload(before), payload(next), true), null);
+  // An ordinary open project gets no such rename: the finished service may not vanish.
+  const plain = structuredClone(before); delete plain._importSource;
+  const plainNext = structuredClone(next); delete plainNext._importSource;
+  assert.match(String(prepareServiceSolutions(payload(plain), payload(plainNext), true)), /Услуга выполнена/);
+});
+
 test('a manager without the owner grant cannot move the direction of a closed project', () => {
   const ctx: any = sandbox();
   const o = { id: 'lock', status: 'completed' };
