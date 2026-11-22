@@ -164,6 +164,7 @@ export async function sendWhatsApp(input: {
   orderId?: string | null;
   clientId?: string | null;
   actorUserId?: string | null;
+  rawPayload?: Record<string, unknown> | null;
 }) {
   const config = getTwilioConfig();
   if (!config.whatsappReady) throw new Error("Twilio WhatsApp sender is not configured on the CRM server.");
@@ -199,10 +200,10 @@ export async function sendWhatsApp(input: {
       legacy_order_id: input.orderId ?? null,
       legacy_client_id: input.clientId ?? null,
       actor_user_id: input.actorUserId ?? null,
-      raw_payload: { channel: "whatsapp" },
+      raw_payload: input.rawPayload ? { ...input.rawPayload, channel: "whatsapp" } : { channel: "whatsapp" },
       sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
     },
-    update: { status, raw_payload: { channel: "whatsapp" } },
+    update: { status, raw_payload: input.rawPayload ? { ...input.rawPayload, channel: "whatsapp" } : { channel: "whatsapp" } },
   });
   return { sid, status, to, channel: "whatsapp" };
 }
