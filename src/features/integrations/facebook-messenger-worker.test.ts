@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+
+// The Worker prompt is split between index.ts and the shared knowledge module.
+function workerSource() {
+  return ["index.ts", "knowledge.ts"]
+    .map((file) => readFileSync(`integrations/facebook-messenger-worker/src/${file}`, "utf8"))
+    .join("\n");
+}
 import test from "node:test";
 
 import {
@@ -153,7 +160,7 @@ test("Worker restarts a booked conversation when AI tries to create another book
 
 
 test("Worker only promises SMS when CRM reports it", () => {
-  const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
+  const source = workerSource();
   assert.match(source, /smsStatus === "sent" \|\| smsStatus === "already_sent"/);
   assert.match(source, /Подтверждение отправлено SMS/);
   assert.match(source, /SMS сейчас не отправилось/);
@@ -275,7 +282,7 @@ test("Worker answers a same-delivery message burst once and never shows a techni
   assert.equal(grouped[0].eventId, "b");
   assert.match(grouped[0].text, /Can I book an appointment\?\n[\s\S]*Full name: Wesley Elsea/);
 
-  const source = readFileSync("integrations/facebook-messenger-worker/src/index.ts", "utf8");
+  const source = workerSource();
   assert.doesNotMatch(source, /couldn't load|не загрузилось|No pude cargar/i);
   assert.match(source, /Do not announce or repeat that you are an AI/);
   assert.match(source, /answer honestly/);

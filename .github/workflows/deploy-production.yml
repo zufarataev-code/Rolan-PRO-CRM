@@ -145,6 +145,30 @@ jobs:
           REMOTE
           } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
 
+      - name: Sync WhatsApp sender number
+        env:
+          # Public business number registered as the Twilio WhatsApp sender (not a secret).
+          TWILIO_WHATSAPP_FROM: "+14243250512"
+        run: |
+          set -euo pipefail
+          [[ "$TWILIO_WHATSAPP_FROM" =~ ^\+[0-9]{11,15}$ ]]
+          {
+            printf 'set -euo pipefail\n'
+            printf 'whatsapp_from=%q\n' "$TWILIO_WHATSAPP_FROM"
+            cat <<'REMOTE'
+          env_file=/home/runcloud/.rolanpro-crm.env.production.local
+          test -f "$env_file"
+          if grep -qx "TWILIO_WHATSAPP_FROM=$whatsapp_from" "$env_file"; then exit 0; fi
+          temporary_file="$(mktemp /home/runcloud/.rolanpro-crm.env.production.local.XXXXXX)"
+          trap 'rm -f "$temporary_file"' EXIT
+          awk '!/^TWILIO_WHATSAPP_FROM=/' "$env_file" > "$temporary_file"
+          printf 'TWILIO_WHATSAPP_FROM=%q\n' "$whatsapp_from" >> "$temporary_file"
+          chmod 600 "$temporary_file"
+          mv "$temporary_file" "$env_file"
+          trap - EXIT
+          REMOTE
+          } | ssh -i "$HOME/.ssh/rolanpro_production" -o BatchMode=yes -o IdentitiesOnly=yes runcloud@143.110.136.211 'bash -s'
+
       - name: Advance production to verified main commit
         env:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
