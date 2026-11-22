@@ -15543,8 +15543,8 @@ function openWhatsAppPhoneThread(phone) {
         <div id="whatsapp-phone-thread" class="flex-1 overflow-y-auto bg-slate-100 p-4 space-y-2">${renderWhatsAppPhoneThread(phone)}</div>
         <div class="border-t bg-white p-4">
           <div id="whatsapp-phone-thread-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
-          <textarea id="whatsapp-phone-thread-text" rows="3" class="w-full" placeholder="Ответ клиенту в WhatsApp…" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();sendWhatsAppPhoneThreadMessage();}"></textarea>
-          <div class="flex items-center gap-2 mt-3"><div class="flex-1"></div><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
+          <textarea id="whatsapp-phone-thread-text" rows="3" class="w-full" placeholder="Ответ клиенту в WhatsApp…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendWhatsAppPhoneThreadMessage();}"></textarea>
+          <div class="flex items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
         </div>
       </div>
     </div>`;
@@ -15693,8 +15693,8 @@ function openClientConversation(orderId, preferredChannel = 'sms') {
         <div id="client-conversation-history" class="flex-1 overflow-y-auto bg-slate-100 p-5">${renderClientConversationMessages(orderId)}</div>
         <div class="border-t bg-white p-4">
           <div id="client-conversation-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
-          <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
-          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">⌘/Ctrl + Enter — отправить</span><div class="flex-1"></div><button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
+          <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
+          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
         </div>
       </div>
     </div>`;

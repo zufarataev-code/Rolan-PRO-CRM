@@ -7,7 +7,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Owner, 2026-11-22 11:13–11:19: хочет вести 424 с телефона; приложение WhatsApp Business на API-номере невозможно (coexistence только для номеров из приложения, Twilio его не предлагает) → «делай как правильно»: CRM на телефоне как приложение. Прямое поручение; проверка Codex — в PR, мердж владельцем.
 - Branch `claude/whatsapp-inbox-reply`, based on `origin/main` after #596.
 - «Входящие»: менеджеры видят WhatsApp без проекта (новые лиды из рекламы), кнопка «💬 Открыть переписку и ответить» открывает ленту по номеру (клиент / 🤖 бот / менеджер) с полем ответа через `sendWhatsAppViaTwilio`; лента обновляется при синхронизации (15 с). Уведомление о новом WhatsApp без проекта получают все активные менеджеры. `listSmsMessages` отдаёт `kind` (бот помечен `whatsapp_bot`).
-- Verification: `whatsapp-bot.test.ts` 7/7, `legacy-sms-ui.test.ts`; inline-скрипты legacy компилируются.
+- Enter отправляет сообщение в «Диалоге с клиентом» и в ленте WhatsApp, Shift+Enter — новая строка (Owner, 12:59: «с Enter не отправляет»).
+- Verification: `whatsapp-bot.test.ts` 8/8, `legacy-sms-ui.test.ts`; inline-скрипты legacy компилируются.
 - Next action: ревью/мердж; затем настоящие пуш-уведомления на телефон (Web Push: VAPID-ключи, подписка, обработчик в `sw.js`).
 
 ## 2026-11-22 — WhatsApp-бот: номер (424) 325-0512 в Twilio, лиды и авто-ответ в CRM (Claude)
