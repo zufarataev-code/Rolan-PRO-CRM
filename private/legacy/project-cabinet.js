@@ -23,26 +23,12 @@ function projectCabinetToggle(on) {
   render();
 }
 
-/** Above the owner's working card: the cabinet's rings and the tour. The card below is untouched. */
+/** Above the owner's working card (Owner, 2026-11-22: «новый дизайн поверх старого — зачем?»):
+ * no second set of rings and no tour on top of the card any more — only a light
+ * link to the overview. Nothing is computed here, so the card opens faster. */
 function projectCabinetEntryBar(o, u) {
   if (!o || !u || u.role !== 'owner') return '';
-  let model = null;
-  try { model = projectCabinetModel(o, null, u, { canSeeMoney: true }); } catch (error) { model = null; }
-  if (!model) return '';
-  const open = projectCabinetUi().tourOpen === true || (projectCabinetUi().tourOpen !== false && model.photos.length > 0);
-  return `${projectCabinetCss()}<div class="rpc" style="margin-bottom:12px">
-    <section class="rpc-g4">
-      ${projectCabinetRing(model.stagePct, `${model.stageDone} из ${model.stageTotal}`, 'этапов пройдено', '#178a52')}
-      ${projectCabinetRing(model.workPct, `${model.doneLines} из ${model.lines.length}`, 'услуг выполнено', '#a96a10')}
-      ${projectCabinetRing(model.windowCount ? 100 * model.sizedCount / model.windowCount : 0, `${model.sizedCount} из ${model.windowCount}`, `окон с размерами · ${model.sqft.toFixed(0)} sq ft`, '#2f62b8')}
-      ${projectCabinetRing(model.paidPct, fmtMoney(model.paid), `оплачено из ${fmtMoney(model.revenue)}`, '#7d4fc4')}
-    </section>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end">
-      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggleTour(${open ? 'false' : 'true'})">${open ? 'Свернуть тур' : `Тур по объекту · фото: ${model.photos.length}`}</button>
-      <button type="button" class="rpc-btn small ghost" onclick="projectCabinetToggle(true)">Весь кабинет</button>
-    </div>
-    ${open ? projectCabinetTourHtml(o, model, true) : ''}
-  </div>`;
+  return `<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button type="button" class="btn-ghost text-sm" onclick="projectCabinetToggle(true)">Обзор проекта · кольца и тур</button></div>`;
 }
 
 function projectCabinetToggleTour(open) {
