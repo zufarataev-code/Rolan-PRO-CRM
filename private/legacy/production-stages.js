@@ -1863,6 +1863,7 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
   });
   closeModal();
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
+  else if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   else render();
 }
 
