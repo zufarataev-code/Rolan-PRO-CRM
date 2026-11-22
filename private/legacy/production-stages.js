@@ -368,6 +368,7 @@ function projectServiceProgressCell(o, line, user = currentUser()) {
 }
 
 function projectSetServiceProgress(oid, key, status) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (projectStages(o,key).length) return alert('Отметьте выполнение каждого этапа услуги.');
   const user = currentUser();
@@ -1611,6 +1612,7 @@ function invoiceFormValues() {
   return { number: v('inv-number'), issued: v('inv-issued'), terms: v('inv-terms'), mode: v('inv-mode'), custom: v('inv-custom'), po: v('inv-po'), billName: v('inv-bill'), note: v('inv-note') };
 }
 function openProjectInvoice(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const inv = invoiceDraft(o, state._invoiceForm?.oid === oid ? state._invoiceForm : {});
