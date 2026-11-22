@@ -221,6 +221,7 @@ export async function listSmsMessages() {
     status: message.status,
     body: message.body,
     detail: twilioErrorDetail(message.status, message.error_code),
+    kind: typeof asObject(message.raw_payload)?.kind === "string" ? String(asObject(message.raw_payload)?.kind) : null,
     meta: { twilioSid: message.message_sid, from: message.from_number, to: message.to_number },
   }));
 }
