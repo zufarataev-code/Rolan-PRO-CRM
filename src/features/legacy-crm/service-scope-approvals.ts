@@ -25,7 +25,56 @@ export function prepareServiceScopeApprovals(current: Row, next: Row, owner: boo
       if(index < 0) baseline.push(entry); else baseline[index]=entry;
       order.timeline ||= [];order.timeline.push({at:entry.approvedAt,key:'service_change_approved',by:actor,serviceId:entry.serviceId,note:entry.note});
     }
+    followDirectionMoves(before, order, baseline);
     order.serviceScopeApprovals = baseline;
   }
   return null;
+}
+const windowsOf = (order: Row): Row[] => rows(order?.measurements?.rooms).flatMap(room => rows(room.windows));
+const windowDirection = (order: Row, win: Row): string => typeof win.offeringId === 'string' && win.offeringId ? '' : String(win.measureScope || order.serviceType || 'solar_film');
+const lineDirection = (order: Row, line: Row): string => String(line.serviceType || order.serviceType || 'solar_film');
+/**
+ * #592: the owner moves a finished project to another direction (the TintWiz
+ * import came in as solar, the work was privacy). Only the direction changes:
+ * the same windows and lines, sizes and prices. Approvals that matched the
+ * project before follow it, so its revenue stays. Anything else that changed
+ * still needs the client's approval.
+ */
+function followDirectionMoves(before: Row, order: Row, baseline: Row[]): void {
+  const moves = new Map<string, string>();
+  const windowsBefore = new Map(windowsOf(before).map(win => [String(win.id), win]));
+  for (const win of windowsOf(order)) {
+    const old = windowsBefore.get(String(win.id));
+    if (!old) continue;
+    const from = windowDirection(before, old), to = windowDirection(order, win);
+    if (from && to && from !== to) moves.set(from, to);
+  }
+  const fromType = String(before.serviceType || 'solar_film'), toType = String(order.serviceType || 'solar_film');
+  if (fromType !== toType) moves.set(fromType, toType);
+  if (!moves.size) return;
+  const groupsBefore = new Set(serviceGroupIds(before)), groupsNow = new Set(serviceGroupIds(order));
+  // Before as it would read with only its directions renamed.
+  const renamed = structuredClone(before);
+  for (const room of rows(renamed.measurements?.rooms)) for (const win of rows(room.windows)) {
+    const from = windowDirection(before, win);
+    if (from && moves.has(from)) win.measureScope = moves.get(from);
+  }
+  for (const line of rows(renamed.extraServices)) {
+    const from = lineDirection(before, line);
+    if (moves.has(from)) line.serviceType = moves.get(from);
+  }
+  renamed.serviceType = order.serviceType;
+  for (const entry of baseline) {
+    if (serviceGroupScope(order, entry.serviceId) === entry.scope) continue;
+    if (entry.scope !== serviceGroupScope(before, entry.serviceId)) continue; // it did not match before either
+    const [kind, key] = [entry.serviceId.slice(0, entry.serviceId.indexOf(':')), entry.serviceId.slice(entry.serviceId.indexOf(':') + 1)];
+    const id = kind === 'direction' && moves.has(key) ? `direction:${moves.get(key)}` : entry.serviceId;
+    // Never merge into a direction the project already had: that work has its own approval.
+    if (id !== entry.serviceId && groupsBefore.has(id)) continue;
+    if (!groupsNow.has(id) || baseline.some(other => other !== entry && other.serviceId === id)) continue;
+    const scope = serviceGroupScope(order, id);
+    if (scope !== serviceGroupScope(renamed, id)) continue;
+    entry.serviceId = id;
+    entry.scope = scope;
+  }
 }

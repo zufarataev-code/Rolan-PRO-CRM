@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { prepareServiceScopeApprovals, serviceScopeApproved } from './service-scope-approvals';
 
 // Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
 // неправильно: там солнцезащитные, а по факту приватная — нужна возможность
@@ -64,7 +65,7 @@ function sandbox(user: any = { id: 'owner', role: 'owner' }) {
     ...['orderMeasureScope', 'measureAllWindows', 'primaryServiceInfo', 'canonicalServiceDirection', 'serviceOfferingDirection',
       'projectPlural', 'projectWindowsWord', 'windowActualAreaSqft', 'windowCatalog', 'windowRetailPrice', 'windowFilmCost',
       'windowServiceInstallerRate', 'serviceOfferingInstallerRate', 'orderFilmRevenue', 'orderExtraServicesRevenue', 'orderRevenue'].map(name => fn(html, name)),
-    ...['projectServiceScope', 'projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectIsWizImport', 'projectMainDirectionKeys',
+    ...['projectServiceScope', 'projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectDirectionSkipNote', 'projectIsWizImport', 'projectMainDirectionKeys',
       'wizImportOrders', 'wizDirectionBulkMove'].map(name => fn(stages, name)),
   ].join('\n');
   vm.runInContext(code.replace(/^const (\w+) = /gm, 'var $1 = '), ctx);
@@ -212,13 +213,12 @@ test('the importer no longer adds the window price on top of the TintWiz total',
   assert.equal(ctx.windowServiceInstallerRate(placeholder), 0);
 });
 
-test('finished stages and client approvals follow the moved direction, so pay is not counted twice', () => {
+test('client approvals and crews follow the moved direction, so the revenue stays', () => {
   const ctx = sandbox();
   const o: any = {
     id: 's', status: 'completed', serviceType: 'solar_film', serviceTypes: ['solar_film'],
     measurements: { rooms: [{ id: 'r', windows: [{ id: 'a', measureScope: 'solar_film', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 }] }] },
     extraServices: [{ id: 'q', quickProjectLine: true, serviceType: 'solar_film', unit: 'sqft', qty: 40, price: 600, label: 'Солнцезащитная плёнка' }],
-    productionStages: [{ id: 'st1', serviceId: 'direction:solar_film', status: 'done', installerIds: ['i1'] }],
     serviceSchedules: [{ id: 'direction:solar_film', installerIds: ['i1'] }],
     serviceScopeApprovals: [] as any[],
   };
@@ -227,9 +227,26 @@ test('finished stages and client approvals follow the moved direction, so pay is
   const approved = (order: any) => ctx.projectServiceGroups(order).filter((group: any) => order.serviceScopeApprovals.some((a: any) => a.serviceId === group.id && a.scope === ctx.projectServiceScope(order, group))).map((group: any) => group.id).sort();
   assert.deepEqual(approved(o), ['direction:solar_film', 'line:q']);
   ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
-  assert.equal(o.productionStages[0].serviceId, 'direction:privacy_film', 'the done stage moves with its windows');
   assert.equal(o.serviceSchedules[0].id, 'direction:privacy_film');
   assert.deepEqual(approved(o), ['direction:privacy_film', 'line:q'], 'what the client approved stays approved');
+});
+
+test('a closed project whose work has paid stages keeps its direction, so pay is not counted twice', () => {
+  const ctx = sandbox();
+  const o: any = {
+    id: 'st', status: 'completed', serviceType: 'solar_film', serviceTypes: ['solar_film'],
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'a', measureScope: 'solar_film', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 }] }] },
+    extraServices: [],
+    productionStages: [{ id: 'st1', serviceId: 'direction:solar_film', status: 'done', installerIds: ['i1'] }],
+  };
+  const revenue = ctx.orderRevenue(o);
+  const result = ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
+  assert.equal(result.skipped, 'has_stages');
+  assert.equal(o.serviceType, 'solar_film');
+  assert.equal(o.measurements.rooms[0].windows[0].measureScope, 'solar_film');
+  assert.equal(o.productionStages[0].serviceId, 'direction:solar_film');
+  assert.equal(ctx.orderRevenue(o), revenue);
+  assert.match(ctx.projectDirectionSkipNote(result), /этапы с начислениями/);
 });
 
 test('the bulk fix never merges finished work into a direction the project already has', () => {
@@ -265,4 +282,37 @@ test('a project that already has the right direction gets a history entry from t
   assert.equal(entry.by, 'owner');
   assert.match(entry.note, /^Направление проверено: Приватная плёнка · массовая правка импорта TintWiz/);
   assert.ok(o._directionCheckedAt);
+});
+
+test('the server keeps the client approvals of a closed project whose direction the owner moved', () => {
+  const solar = () => ({
+    id: 'srv', status: 'completed', serviceType: 'solar_film',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', name: 'Импорт', width: 2000, height: 2000, qty: 1, catalogId: 'solar1', filmType: 'Solar 20' }] }] },
+    extraServices: [{ id: 'l', type: 'custom', qty: 1, price: 7500 }],
+  });
+  const moved = (order: any) => {
+    const next = structuredClone(order);
+    next.serviceType = 'privacy_film'; next.serviceTypes = ['privacy_film'];
+    next.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+    next.extraServices[0].serviceType = 'privacy_film';
+    return next;
+  };
+  const both = (order: any) => ['direction:privacy_film', 'line:l'].map(id => serviceScopeApproved(order, id));
+  // First save after the move: the project had no approvals yet.
+  const before = solar(), next = moved(before);
+  assert.equal(prepareServiceScopeApprovals({ orders: [before] }, { orders: [next] }, true, [], 'owner'), null);
+  assert.deepEqual(both(next), [true, true]);
+  // A project that already had approvals for the old direction.
+  const approved = solar();
+  assert.equal(prepareServiceScopeApprovals({ orders: [solar()] }, { orders: [approved] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(approved, 'direction:solar_film'), true);
+  const again = moved(approved);
+  assert.equal(prepareServiceScopeApprovals({ orders: [approved] }, { orders: [again] }, true, [], 'owner'), null);
+  assert.deepEqual(both(again), [true, true]);
+  // A move does not carry a size change past the client's approval.
+  const resized = moved(approved);
+  resized.measurements.rooms[0].windows[0].width = 3000;
+  assert.equal(prepareServiceScopeApprovals({ orders: [approved] }, { orders: [resized] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(resized, 'direction:privacy_film'), false);
+  assert.equal(serviceScopeApproved(resized, 'line:l'), true);
 });

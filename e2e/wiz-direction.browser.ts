@@ -145,6 +145,10 @@ async function main() {
       await page.reload({waitUntil: 'networkidle'});
       const open = page.getByRole('button', {name: /Импорт TintWiz/});
       await open.first().waitFor({state: 'visible', timeout: 10_000});
+      // After the server saved it, the moved project keeps its money.
+      const reloaded = await money(IDS[0]);
+      report.push(`card-move-reloaded@${label}: ${JSON.stringify(reloaded)}`);
+      if (reloaded.serviceType !== 'privacy_film' || reloaded.revenue !== before.revenue) failures.push(`card-move-reloaded@${label}: money changed after save: ${JSON.stringify({before, reloaded})}`);
       await open.first().click();
       await page.locator('[data-wiz-bulk]').waitFor({state: 'visible'});
       const listed = await page.locator('.rp-wiz-bulk-row').count();
@@ -165,6 +169,14 @@ async function main() {
         if (!row.note.some((note: string) => /массовая правка импорта TintWiz/.test(note))) failures.push(`bulk-move@${label}: no history entry on ${IDS[index + 1]}`);
       });
       await shot(page, `bulk-after-${label}`);
+      await page.waitForTimeout(1500);
+      await page.reload({waitUntil: 'networkidle'});
+      await page.waitForFunction(() => typeof (window as any).getOrder === 'function' && !!(window as any).getOrder('e2e-592-wiz-2'));
+      const bulkReloaded = await Promise.all(IDS.slice(1).map(money));
+      report.push(`bulk-reloaded@${label}: ${JSON.stringify(bulkReloaded)}`);
+      bulkReloaded.forEach((row: any, index: number) => {
+        if (row.serviceType !== 'privacy_film' || row.revenue !== bulkBefore[index].revenue) failures.push(`bulk-reloaded@${label}: money changed after save on ${IDS[index + 1]}`);
+      });
 
       if (errors.length) failures.push(`${label}: page errors ${JSON.stringify(errors)}`);
       await context.close();

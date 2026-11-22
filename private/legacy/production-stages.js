@@ -5010,6 +5010,10 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
     if (projectDirectionGroups(o).some(direction => direction.key === toKey) || keyed(toId)) {
       return { fromKey, toKey, fromTitle, toTitle: to.title, windows: 0, lines: 0, kept: 0, closed, skipped: 'target_exists' };
     }
+    // Stages of finished work keep their service and pay: a closed project keeps its history.
+    if ((o.productionStages || []).some(stage => stage.serviceId === fromId)) {
+      return { fromKey, toKey, fromTitle, toTitle: to.title, windows: 0, lines: 0, kept: 0, closed, skipped: 'has_stages' };
+    }
   }
   // Approvals that matched before the move are kept matching after it.
   const approvedBefore = closed && Array.isArray(o.serviceScopeApprovals) && typeof projectServiceGroups === 'function'
@@ -5082,8 +5086,6 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
     const rekey = key => (key === fromKey ? toKey : key === fromId ? toId : key);
     if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).map(([key, value]) => [rekey(key), value]));
     if (Array.isArray(o.serviceSchedules)) o.serviceSchedules.forEach(plan => { plan.id = rekey(plan.id); });
-    // Stages keep their paid work under the new service id, so it is not counted twice.
-    if (Array.isArray(o.productionStages)) o.productionStages.forEach(stage => { stage.serviceId = rekey(stage.serviceId); });
     if (Array.isArray(o.serviceScopeApprovals)) {
       o.serviceScopeApprovals.forEach(approval => { approval.serviceId = rekey(approval.serviceId); });
       if (approvedBefore.length) {
@@ -5112,6 +5114,12 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
   o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: by || null, from: fromKey, to: toKey, note: `Направление: ${fromTitle} → ${to.title}${parts.length ? ` · ${parts.join(' · ')}` : ''}` });
   return { fromKey, toKey, fromTitle, toTitle: to.title, windows: windowsMoved, lines: linesMoved, kept, closed };
 }
+/** Why a closed project keeps its direction: its finished work and pay stay as they are. */
+function projectDirectionSkipNote(result) {
+  return result.skipped === 'has_stages'
+    ? `Направление «${result.fromTitle}» не сменилось: у этой работы есть этапы с начислениями, а закрытый проект сохраняет их как есть.`
+    : `Направление «${result.fromTitle}» не сменилось: в проекте уже есть «${result.toTitle}», а выполненную работу двух направлений нельзя слить без изменения выплат.`;
+}
 function projectDirectionMove(oid, fromKey, toKey) {
   const o = getOrder(oid);
   const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
@@ -5125,10 +5133,12 @@ function projectDirectionMove(oid, fromKey, toKey) {
     ? `Сменить направление «${fromTitle}» на «${to.title}»? Проект закрыт: сумма, оплаты, акт и выплаты не изменятся. В истории проекта останется запись.`
     : `Перенести «${fromTitle}» в «${to.title}»? ${count ? `${count} ${projectWindowsWord(count)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`;
   if (!confirm(question)) return;
+  let result = null;
   projectCardEdit(() => {
-    projectDirectionMoveApply(o, fromKey, toKey, state.currentUserId);
-    save();
+    result = projectDirectionMoveApply(o, fromKey, toKey, state.currentUserId);
+    if (!result?.skipped) save();
   });
+  if (result?.skipped) { alert(projectDirectionSkipNote(result)); return; }
   state._directionWindow = { oid, key: toKey, step: 'services', pick: '' };
   openProjectDirectionWindow(oid, toKey, 'services');
 }
@@ -5261,7 +5271,7 @@ function wizDirectionBulkApply() {
   save();
   state._wizBulk = { ...s, picked: [] };
   renderWizDirectionBulk();
-  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}», а выполненную работу двух направлений нельзя слить без изменения выплат. Поправьте их в карточке проекта.` : '';
+  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}» или этапы с начислениями, а выплаты по выполненной работе не меняются.` : '';
   setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.${rest}`), 0);
 }
 
