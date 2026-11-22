@@ -649,7 +649,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     const priceField = `<label>Цена${priceEditable ? `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(priceUnit)}</span>${range ? `<span class="block text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</span>` : ''}` : `<div class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(unitPrice)}</div>`}</label>`;
     return `<div data-project-line="${academyEsc(line.key)}">
-      <div class="project-service-row ${selected ? 'selected' : ''}">
+      <div class="project-service-row ${selected ? 'selected' : ''}" data-service-row="${academyEsc(line.key)}">
         <div class="project-service-summary">
           <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
           <div class="project-service-meta">${academyEsc(projectLineNote(line))}${selected ? '' : ` · ${academyEsc(projectLineQtyText(line))} · ${academyEsc(crew.people)} · ${academyEsc(crew.date)}`}</div>

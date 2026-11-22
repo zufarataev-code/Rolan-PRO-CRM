@@ -31526,7 +31526,7 @@ function renderOrderDetails(id) {
     return renderInstallerTechnicalWorkspace(o, c, u);
   }
   // «Кабинет проекта» — пробный вид владельца (private/legacy/project-cabinet.js).
-  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u)) return editBanner + projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
+  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u) && state.projectCabinetBypass !== o.id) return editBanner + projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
   if (!state.orderClassicMode || u.role !== 'owner') {
     return editBanner + (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }

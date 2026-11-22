@@ -474,9 +474,9 @@ function projectEditorHtml(o, c) {
     const done = projectServiceProgress(o, line.key).status === 'done';
     const qtyCell = projectEditorQtyEditable(line)
       ? `<label class="rpe-field"><span>Кол-во, ${academyEsc(line.unitShort || line.unit || 'шт')}</span><input type="number" min="0" step="0.01" inputmode="decimal" value="${Number(line.qty) || 0}" onchange="projectEditorSetQty('${oid}','${key}',this.value)"></label>`
-      : `<div class="rpe-field"><span>Объём</span><b>${academyEsc(projectLineQtyText(line) || '—')}</b>${line.kind === 'windows' ? `<button type="button" class="rpe-link" onclick="closeModal(); openManagerMeasureModal('${oid}')">размеры в замере</button>` : ''}</div>`;
+      : `<div class="rpe-field"><span>Объём</span><b>${academyEsc(projectLineQtyText(line) || '—')}</b>${line.kind === 'windows' ? `<button type="button" class="rpe-measure" onclick="closeModal(); openManagerMeasureModal('${oid}')">📐 Окна и размеры</button>` : ''}</div>`;
     return `<div class="rpe-row">
-      <div class="rpe-name"><span class="rpe-ico">${line.direction?.icon || '▫️'}</span><span><b>${academyEsc(line.name)}</b><small>${academyEsc(line.direction?.title || '')}${done ? ' · выполнено' : ''}</small></span></div>
+      <button type="button" class="rpe-name rpe-open" title="Открыть услугу: материал, объём, исполнитель, дата" onclick="projectEditorOpenService('${oid}','${key}')"><span class="rpe-ico">${line.direction?.icon || '▫️'}</span><span><b>${academyEsc(line.name)} <span class="rpe-go">✏️ Изменить ›</span></b><small>${academyEsc(line.direction?.title || '')}${done ? ' · выполнено' : ''}</small></span></button>
       ${qtyCell}
       <label class="rpe-field"><span>Сумма клиенту, $</span><input type="number" min="0" step="1" inputmode="decimal" value="${Math.round((Number(line.price) || 0) * 100) / 100}" onchange="projectEditorSetPrice('${oid}','${key}',this.value)"></label>
       <button type="button" class="rpe-del" title="Удалить услугу" aria-label="Удалить ${academyEsc(line.name)}" onclick="projectEditorRemove('${oid}','${key}')">✕</button>
@@ -498,6 +498,10 @@ function projectEditorHtml(o, c) {
         .rpe-field input{min-height:38px;font-weight:800;color:#0f172a}
         .rpe-field b{color:#0f172a;font-size:.86rem}
         .rpe-link{border:0;background:none;color:#15803d;font-weight:700;padding:0;text-align:left;font-size:.72rem;cursor:pointer}
+        .rpe-open{border:1px solid transparent;background:none;border-radius:8px;padding:6px;text-align:left;cursor:pointer;color:inherit}
+        .rpe-open:hover{border-color:#bbf7d0;background:#f0fdf4}
+        .rpe-go{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:6px;background:#15803d;color:#fff;font-size:.72rem;font-weight:800;vertical-align:middle}
+        .rpe-measure{margin-top:4px;min-height:32px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-weight:800;font-size:.78rem;padding:0 10px;cursor:pointer}
         .rpe-del{min-height:38px;border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:8px;font-weight:900;cursor:pointer}
         .rpe-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid #e2e8f0}
         .rpe-note{font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px}
@@ -538,6 +542,24 @@ function projectEditorSaved(o, reason) {
   // Re-open the editor only when the change came from it; the card's 🗑 stays in the card.
   if (String(state.modal || '').includes('workspace-modal rpe')) state.modal = projectEditorHtml(o, getClient(o.clientId));
   preservePositionForNextRender(); render();
+}
+
+// Owner, 2026-11-22 14:25: «в „Редактировать проект“ нажал на услугу — должна
+// открыться сама услуга для редактирования; маленькую кнопку „в замере“ не найти».
+// The service name opens that service in the working card (material, scope, price,
+// crew, date, stages), scrolled into view; windows services get a clear «📐 Окна и размеры».
+function projectEditorOpenService(oid, key) {
+  const o = getOrder(oid);
+  if (!o) return;
+  closeModal();
+  state.projectCabinetBypass = oid; // the overview has no service editing — show the working card
+  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: key };
+  if (state.view !== 'orderDetails' || state.openOrderId !== oid) openOrder(oid);
+  else render();
+  setTimeout(() => {
+    const row = Array.from(document.querySelectorAll('[data-service-row]')).find(el => el.getAttribute('data-service-row') === key);
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 60);
 }
 
 /** «🗑» on a service row in the project card: the same removal as the editor window. */

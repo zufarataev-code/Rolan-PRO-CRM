@@ -23,3 +23,13 @@ test("a collapsed service is one line with price, «Изменить» and a vis
   assert.match(cabinet, /function projectCardRemoveLine\(oid, key\) \{\s*projectEditorRemove\(oid, key\);/);
   assert.match(html, /\.project-service-row \{ grid-template-columns:minmax\(0,1fr\) auto auto; \}/);
 });
+
+test("in «Редактировать проект» a tap on the service opens that service in the working card", () => {
+  assert.match(cabinet, /class="rpe-name rpe-open"[^>]*onclick="projectEditorOpenService\('\$\{oid\}','\$\{key\}'\)"/);
+  assert.match(cabinet, /✏️ Изменить ›/);
+  assert.match(cabinet, /📐 Окна и размеры/);
+  assert.doesNotMatch(cabinet, />размеры в замере</);
+  assert.match(cabinet, /function projectEditorOpenService\(oid, key\) \{[\s\S]*?state\.projectCabinetBypass = oid;[\s\S]*?state\.projectCardSelection = \{[\s\S]*?\[oid\]: key \};[\s\S]*?scrollIntoView/);
+  assert.match(html, /projectCabinetEnabled\(u\) && state\.projectCabinetBypass !== o\.id\) return editBanner/);
+  assert.match(stages, /data-service-row="\$\{academyEsc\(line\.key\)\}"/);
+});
