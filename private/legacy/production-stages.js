@@ -5058,8 +5058,10 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
       gone.add(line.offeringId);
       return false;
     }
-    // A row without a directory service (the TintWiz revenue line, a custom work)
-    // keeps its price and moves with the project.
+    // A row without a directory service: on an open project it goes with the old
+    // direction, as before. A closed project and a TintWiz import keep its price
+    // (the TintWiz revenue line), so it moves with the project.
+    if (!closed && !projectIsWizImport(o)) return false;
     line.serviceType = toKey; linesMoved++;
     return true;
   });

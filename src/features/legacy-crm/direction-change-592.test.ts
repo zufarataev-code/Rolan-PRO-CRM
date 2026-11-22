@@ -140,10 +140,10 @@ test('on a closed project a paid service of the old direction stays, and quick l
   assert.equal(o.serviceSchedules[0].id, 'direction:privacy_film');
 });
 
-test('an open project still drops the old services and film, but keeps a custom revenue line', () => {
+test('an open TintWiz project drops the old services and film, but keeps its revenue line', () => {
   const ctx = sandbox();
   const o: any = {
-    id: 'o', status: 'proposal_accepted', serviceType: 'solar_film', serviceTypes: ['solar_film'], offeringIds: ['solar_install'],
+    id: 'o', status: 'proposal_accepted', _importSource: 'wiz', serviceType: 'solar_film', serviceTypes: ['solar_film'], offeringIds: ['solar_install'],
     measurements: { rooms: [{ id: 'r', windows: [{ id: 'a', measureScope: 'solar_film', offeringId: 'solar_install', catalogId: 'solar1', filmType: 'x', width: 1000, height: 1000, qty: 1 }] }] },
     extraServices: [
       { id: 's', offeringId: 'solar_install', serviceType: 'solar_film', qty: 1, price: 200 },
@@ -160,6 +160,22 @@ test('an open project still drops the old services and film, but keeps a custom 
   assert.deepEqual([...o.offeringIds], []);
   assert.equal(o.serviceType, 'privacy_film');
   assert.equal(ctx.marks.length, 1, 'an open project asks to re-check its estimate');
+});
+
+test('an ordinary open project drops a custom line of the old direction, as before', () => {
+  const ctx = sandbox();
+  const o: any = {
+    id: 'oc', status: 'proposal_accepted', serviceType: 'solar_film', serviceTypes: ['solar_film', 'decorative_film'],
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'a', measureScope: 'solar_film', width: 1000, height: 1000, qty: 1 }] }] },
+    extraServices: [
+      { id: 'c', type: 'custom', serviceType: 'solar_film', label: 'Доп. работа', qty: 1, price: 150 },
+      { id: 'd', type: 'custom', serviceType: 'decorative_film', label: 'Декор', qty: 1, price: 80 },
+      { id: 'rm', autoWindowRemoval: true, serviceType: 'solar_film', qty: 1, price: 50 },
+    ],
+  };
+  ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
+  assert.deepEqual(o.extraServices.map((line: any) => line.id), ['d', 'rm']);
+  assert.equal(o.measurements.rooms[0].windows[0].measureScope, 'privacy_film');
 });
 
 test('the owner fixes three imported projects at once, each with its own history entry', () => {
