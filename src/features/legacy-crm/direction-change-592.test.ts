@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import { prepareServiceScopeApprovals, serviceScopeApproved } from './service-scope-approvals';
+import { prepareServiceSolutions } from './service-solutions';
 
 // Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
 // неправильно: там солнцезащитные, а по факту приватная — нужна возможность
@@ -313,6 +314,45 @@ test('the server keeps the client approvals of a closed project whose direction 
   const resized = moved(approved);
   resized.measurements.rooms[0].windows[0].width = 3000;
   assert.equal(prepareServiceScopeApprovals({ orders: [approved] }, { orders: [resized] }, true, [], 'owner'), null);
+  // Not a pure rename, so nothing moved here follows it: both wait for the client.
   assert.equal(serviceScopeApproved(resized, 'direction:privacy_film'), false);
-  assert.equal(serviceScopeApproved(resized, 'line:l'), true);
+  assert.equal(serviceScopeApproved(resized, 'line:l'), false);
+});
+
+test('a closed project keeps its crew, dates and progress when the owner moves its direction', () => {
+  const done = { status: 'done', doneAt: '2026-10-23T22:00:00Z', doneBy: 'i1' };
+  const before: any = {
+    id: 'crew', status: 'completed', serviceType: 'solar_film',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 2000, height: 2000, qty: 1, catalogId: 'solar1' }] }] },
+    extraServices: [],
+    serviceSchedules: [{ id: 'direction:solar_film', installationAt: '2026-10-23T16:00:00Z', installerIds: ['i1'] }],
+    serviceProgress: { 'direction:solar_film': done },
+  };
+  const payload = (order: any) => ({ settings: {}, users: [{ id: 'i1', role: 'installer' }, { id: 'i2', role: 'installer' }], orders: [order] });
+  const move = () => {
+    const next = structuredClone(before);
+    next.serviceType = 'privacy_film';
+    next.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+    next.serviceSchedules[0].id = 'direction:privacy_film';
+    next.serviceProgress = { 'direction:privacy_film': done };
+    return next;
+  };
+  assert.equal(prepareServiceSolutions(payload(before), payload(move()), true), null);
+  // Only the rename passes: a new crew on a closed project is still refused.
+  const recrewed = move();
+  recrewed.serviceSchedules[0].installerIds = ['i2'];
+  assert.match(String(prepareServiceSolutions(payload(before), payload(recrewed), true)), /Проект закрыт/);
+  // And a "move" that also resizes the window is not a rename.
+  const resized = move();
+  resized.measurements.rooms[0].windows[0].width = 3000;
+  assert.match(String(prepareServiceSolutions(payload(before), payload(resized), true)), /Проект закрыт/);
+});
+
+test('a manager without the owner grant cannot move the direction of a closed project', () => {
+  const ctx: any = sandbox();
+  const o = { id: 'lock', status: 'completed' };
+  assert.equal(ctx.projectDirectionCanMove(o, { id: 'm', role: 'owner' }), true);
+  ctx.projectEditLocked = (order: any, user: any) => user.role === 'manager';
+  assert.equal(ctx.projectDirectionCanMove(o, { id: 'm', role: 'manager' }), false);
+  assert.match(fn(stages, 'projectDirectionMove'), /projectEditBlocked\(oid\)/);
 });

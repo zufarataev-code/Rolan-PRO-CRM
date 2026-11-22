@@ -185,6 +185,58 @@ export function projectServicesStarted(order: Row): boolean {
 }
 // The work of a service (projectServiceScope): its windows' sizes, its
 // line's quantity…; prices are not part of it.
+const windowDirectionKey = (order: Row, win: Row): string => typeof win.offeringId === 'string' && win.offeringId ? '' : String(win.measureScope || order.serviceType || 'solar_film');
+/** The project as it was, with only its directions renamed (#592). */
+export function renameProjectDirections(before: Row, moves: Map<string, string>, serviceType: unknown): Row {
+  const renamed = structuredClone(before);
+  for (const room of rows(object(renamed.measurements).rooms)) for (const win of rows(room.windows)) {
+    const from = windowDirectionKey(before, win);
+    if (from && moves.has(from)) win.measureScope = moves.get(from);
+  }
+  for (const line of rows(renamed.extraServices)) {
+    const from = String(line.serviceType || before.serviceType || 'solar_film');
+    if (moves.has(from)) line.serviceType = moves.get(from);
+  }
+  renamed.serviceType = serviceType;
+  return renamed;
+}
+/**
+ * #592: the directions the owner moved on this project (solar → privacy after
+ * the TintWiz import). A move counts only when it is a pure rename: the same
+ * windows with the same sizes, into a direction the project did not have.
+ */
+export function projectDirectionMoves(before: Row, order: Row): Map<string, string> {
+  const moves = new Map<string, string>();
+  const windowsOf = (item: Row) => rows(object(item.measurements).rooms).flatMap(room => rows(room.windows));
+  const windowsBefore = new Map(windowsOf(before).map(win => [String(win.id), win]));
+  for (const win of windowsOf(order)) {
+    const old = windowsBefore.get(String(win.id));
+    if (!old) continue;
+    const from = windowDirectionKey(before, old), to = windowDirectionKey(order, win);
+    if (from && to && from !== to) moves.set(from, to);
+  }
+  const fromType = String(before.serviceType || 'solar_film'), toType = String(order.serviceType || 'solar_film');
+  if (fromType !== toType && !moves.has(fromType)) moves.set(fromType, toType);
+  if (!moves.size) return moves;
+  const renamed = renameProjectDirections(before, moves, order.serviceType);
+  const groupsBefore = new Set(serviceGroupIds(before)), groupsNow = new Set(serviceGroupIds(order));
+  for (const [from, to] of [...moves]) {
+    const target = `direction:${to}`;
+    if (groupsBefore.has(target) || groupsNow.has(`direction:${from}`) || serviceGroupScope(order, target) !== serviceGroupScope(renamed, target)) moves.delete(from);
+  }
+  return moves;
+}
+/** Crew, dates and progress of a project with its moved directions under their new ids. */
+export function rekeyDirectionRecords(order: Row, moves: Map<string, string>): Row {
+  if (!moves.size) return order;
+  const rekey = (key: string) => key.startsWith('direction:') && moves.has(key.slice(10)) ? `direction:${moves.get(key.slice(10))}` : (moves.get(key) ?? key);
+  const copy: Row = { ...order };
+  if (Array.isArray(order.serviceSchedules)) copy.serviceSchedules = order.serviceSchedules.map((plan: Row) => plan && typeof plan === 'object' ? { ...plan, id: rekey(String(plan.id)) } : plan);
+  if (order.serviceProgress && typeof order.serviceProgress === 'object' && !Array.isArray(order.serviceProgress)) {
+    copy.serviceProgress = Object.fromEntries(Object.entries(order.serviceProgress).map(([key, value]) => [rekey(key), value]));
+  }
+  return copy;
+}
 const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
 const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 export function serviceGroupScope(order: Row, id: string): string {
@@ -379,7 +431,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     }
   }
   for (const order of rows(next.orders)) {
-    const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    const savedOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    // #592: a closed project moved to another direction keeps its crew, dates and
+    // progress under the new service id; compared as such, they are unchanged.
+    const oldOrder = CLOSED_PROJECT_STATUSES.includes(String(savedOrder.status))
+      ? rekeyDirectionRecords(savedOrder, projectDirectionMoves(savedOrder, order)) : savedOrder;
     const manualTotalChanged = ['manualProjectTotal', 'manualProjectTotalBase'].some(field =>
       stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null));
     const pricingModeChanged = order.quickEntryPricingMode !== oldOrder.quickEntryPricingMode;

@@ -4960,7 +4960,8 @@ function renderQuickEntry() {
 // что привязано к услуге справочника старого направления, на закрытом проекте
 // остаётся на месте — снять её значило бы поменять сумму и зарплату.
 function projectDirectionCanMove(o, user = currentUser()) {
-  return !!o && !!user && orderUserCanSeeMoney(o, user);
+  // A closed project stays locked for a manager without the owner's grant.
+  return !!o && !!user && orderUserCanSeeMoney(o, user) && !(typeof projectEditLocked === 'function' && projectEditLocked(o, user));
 }
 function projectDirectionMoveTargets(o, fromKey) {
   const have = new Set(projectDirectionGroups(o).map(direction => direction.key));
@@ -5123,6 +5124,7 @@ function projectDirectionSkipNote(result) {
 function projectDirectionMove(oid, fromKey, toKey) {
   const o = getOrder(oid);
   const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return;
   if (!o || !to || !projectDirectionCanMove(o)) return;
   fromKey = fromKey || orderMeasureScope(o);
   if (fromKey === toKey) return;
