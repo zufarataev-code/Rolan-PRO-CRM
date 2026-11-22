@@ -12,7 +12,6 @@ import {assertServerUsesTestDatabase} from './guard';
 // and fixes many imported projects at once from the projects list. Money stays as is.
 const OUT = 'test-results/wiz-direction';
 const CLIENT_ID = 'e2e-592-client';
-const IDS = ['e2e-592-wiz-1', 'e2e-592-wiz-2', 'e2e-592-wiz-3'];
 
 async function overflowOf(page: any, scope?: string) {
   return page.evaluate((selector: string | undefined) => {
@@ -49,7 +48,7 @@ async function shot(page: any, name: string) {
 // the paid total on its own line, status completed.
 function wizProject(id: string, index: number, now: string) {
   return {
-    id, number: `WIZ-592-${index}`, clientId: CLIENT_ID, status: 'completed', createdAt: now, paidAt: now, actSignedAt: now,
+    id, number: `WIZ-592-${id.split('-')[2]}-${index}`, clientId: CLIENT_ID, status: 'completed', createdAt: now, paidAt: now, actSignedAt: now,
     installationAt: now, installationDoneAt: now, paid: 7500, depositReceived: true, complexity: 'standard', pricePerM2: 120,
     installerIds: [], extraExpenses: [],
     measurements: {rooms: [{id: `r${index}`, name: 'Импорт', windows: [{id: `w${index}`, name: 'Импорт', width: 2000, height: 2000, qty: 1, actualWidth: 2000, actualHeight: 2000, actualQty: 1, glassType: '', side: 'in', filmType: 'QA — Solar 20', catalogId: 'e2e592-solar'}]}]},
@@ -77,6 +76,8 @@ async function main() {
     for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 844}]) {
       const phone = viewport.width < 500;
       const label = `${viewport.width}`;
+      // New ids for every screen size: the server keeps approvals of a project it already has.
+      const IDS = [1, 2, 3].map(index => `e2e-592-${label}-wiz-${index}`);
       const context = await browser.newContext({viewport, timezoneId: 'America/Los_Angeles', ...(phone ? {isMobile: true, hasTouch: true, deviceScaleFactor: 2} : {})});
       await context.addInitScript('window.__name = window.__name || ((fn) => fn);');
       const login = await context.request.post(base + '/api/v1/auth/login', {data: {email: owner.email, password: testPassword}});
@@ -171,7 +172,7 @@ async function main() {
       await shot(page, `bulk-after-${label}`);
       await page.waitForTimeout(1500);
       await page.reload({waitUntil: 'networkidle'});
-      await page.waitForFunction(() => typeof (window as any).getOrder === 'function' && !!(window as any).getOrder('e2e-592-wiz-2'));
+      await page.waitForFunction((id: string) => typeof (window as any).getOrder === 'function' && !!(window as any).getOrder(id), IDS[1]);
       const bulkReloaded = await Promise.all(IDS.slice(1).map(money));
       report.push(`bulk-reloaded@${label}: ${JSON.stringify(bulkReloaded)}`);
       bulkReloaded.forEach((row: any, index: number) => {
