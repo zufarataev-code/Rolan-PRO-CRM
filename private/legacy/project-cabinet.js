@@ -27,8 +27,11 @@ function projectCabinetToggle(on) {
  * no second set of rings and no tour on top of the card any more — only a light
  * link to the overview. Nothing is computed here, so the card opens faster. */
 function projectCabinetEntryBar(o, u) {
-  if (!o || !u || u.role !== 'owner') return '';
-  return `<div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button type="button" class="btn-ghost text-sm" onclick="projectCabinetToggle(true)">Обзор проекта · кольца и тур</button></div>`;
+  if (!o || !u) return '';
+  // Managers get the edit button too (the window checks the lock itself).
+  if (u.role === 'manager') return (typeof orderUserCanSeeMoney !== 'function' || orderUserCanSeeMoney(o, u)) ? `<div style="display:flex;justify-content:flex-end;gap:8px;margin:0 0 8px"><button type="button" class="btn-primary text-sm" onclick="projectEditStart('${jsQuote(o.id)}')">✏️ Редактировать проект</button></div>` : '';
+  if (u.role !== 'owner') return '';
+  return `<div style="display:flex;justify-content:flex-end;gap:8px;margin:0 0 8px"><button type="button" class="btn-ghost text-sm" onclick="projectCabinetToggle(true)">Обзор проекта · кольца и тур</button><button type="button" class="btn-primary text-sm" onclick="projectEditStart('${jsQuote(o.id)}')">✏️ Редактировать проект</button></div>`;
 }
 
 function projectCabinetToggleTour(open) {
@@ -361,11 +364,7 @@ function projectEditStart(oid) {
   const u = currentUser();
   if (!o || !u) return;
   if (projectEditLocked(o, u)) { projectEditRequest(oid); return; }
-  try { localStorage.removeItem('rp_project_cabinet'); } catch (error) { /* full view stays off */ }
-  state.view = 'orderDetails';
-  state.openOrderId = o.id;
-  render();
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { /* old browser */ }
+  openProjectEditor(oid);
 }
 
 function projectEditRequest(oid) {
@@ -434,4 +433,205 @@ function projectEditBanner(o, u) {
   const pending = projectEditPendingRequest(o, u.id);
   return box(['#cbd5e1', '#f8fafc', '#334155'], `<span style="flex:1;min-width:220px">🔒 Проект закрыт — изменения только с разрешения владельца.</span>
     ${pending ? `<span class="tag">Запрос отправлен ${fmtDateTime(pending.at)}</span>` : `<button type="button" class="btn-primary text-sm" onclick="projectEditRequest('${oid}')">✏️ Запросить редактирование</button>`}`);
+}
+
+// ---------- Окно «Редактировать проект» (Owner, 2026-11-22 09:45) ----------
+// «Если я открываю „Редактировать проект“, оно должно открываться в новом окне и в
+// нормальном виде, и там в составе я могу добавлять услуги, удалять и изменять
+// существующие». One window, one list of the project's services: quantity, price,
+// delete, «+ Добавить услугу». The owner may correct a closed (historical) project;
+// a manager only while the project is open or the owner approved his request.
+// The lines are the same projectLines() the card, the proposal and payroll read.
+
+function projectEditorCanEdit(o, u = currentUser()) {
+  if (!o || !u || !orderUserCanSeeMoney(o, u)) return false;
+  if (u.role === 'owner') return true;
+  return u.role === 'manager' && !projectEditLocked(o, u);
+}
+
+function projectEditorLines(o) {
+  return projectLines(o).filter(line => line.kind !== 'included' && !line.excluded);
+}
+
+function openProjectEditor(oid) {
+  const o = getOrder(oid);
+  const u = currentUser();
+  if (!o || !u) return;
+  if (!projectEditorCanEdit(o, u)) { if (!projectEditBlocked(oid)) alert('Нет прав на редактирование этого проекта.'); return; }
+  state.modal = projectEditorHtml(o, getClient(o.clientId));
+  render();
+}
+
+function projectEditorQtyEditable(line) {
+  return ['quantity', 'quick'].includes(line.kind) || !!line.unitPriced;
+}
+
+function projectEditorHtml(o, c) {
+  const oid = jsQuote(o.id);
+  const closed = CLOSED_PROJECT_STATUSES.includes(o.status);
+  const rows = projectEditorLines(o).map(line => {
+    const key = jsQuote(line.key);
+    const done = projectServiceProgress(o, line.key).status === 'done';
+    const qtyCell = projectEditorQtyEditable(line)
+      ? `<label class="rpe-field"><span>Кол-во, ${academyEsc(line.unitShort || line.unit || 'шт')}</span><input type="number" min="0" step="0.01" inputmode="decimal" value="${Number(line.qty) || 0}" onchange="projectEditorSetQty('${oid}','${key}',this.value)"></label>`
+      : `<div class="rpe-field"><span>Объём</span><b>${academyEsc(projectLineQtyText(line) || '—')}</b>${line.kind === 'windows' ? `<button type="button" class="rpe-measure" onclick="closeModal(); openManagerMeasureModal('${oid}')">📐 Окна и размеры</button>` : ''}</div>`;
+    return `<div class="rpe-row">
+      <button type="button" class="rpe-name rpe-open" title="Открыть услугу: материал, объём, исполнитель, дата" onclick="projectEditorOpenService('${oid}','${key}')"><span class="rpe-ico">${line.direction?.icon || '▫️'}</span><span><b>${academyEsc(line.name)} <span class="rpe-go">✏️ Изменить ›</span></b><small>${academyEsc(line.direction?.title || '')}${done ? ' · выполнено' : ''}</small></span></button>
+      ${qtyCell}
+      <label class="rpe-field"><span>Сумма клиенту, $</span><input type="number" min="0" step="1" inputmode="decimal" value="${Math.round((Number(line.price) || 0) * 100) / 100}" onchange="projectEditorSetPrice('${oid}','${key}',this.value)"></label>
+      <button type="button" class="rpe-del" title="Удалить услугу" aria-label="Удалить ${academyEsc(line.name)}" onclick="projectEditorRemove('${oid}','${key}')">✕</button>
+    </div>`;
+  }).join('');
+  return `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content workspace-modal rpe" style="max-width:860px;width:min(860px,96vw);padding:0">
+      <style>
+        .rpe-head{display:flex;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid #e2e8f0}
+        .rpe-head h3{margin:0;font-size:1.2rem;font-weight:900}
+        .rpe-head small{display:block;color:#64748b;font-weight:600;margin-top:2px}
+        .rpe-body{padding:14px 20px;display:grid;gap:14px;max-height:70vh;overflow:auto}
+        .rpe-sec h4{margin:0 0 8px;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#64748b}
+        .rpe-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(120px,.8fr) minmax(130px,.8fr) 40px;gap:10px;align-items:end;padding:10px 0;border-bottom:1px solid #f1f5f9}
+        .rpe-name{display:flex;gap:10px;align-items:center;min-width:0}
+        .rpe-name b{display:block}.rpe-name small{color:#64748b}
+        .rpe-ico{font-size:1.2rem}
+        .rpe-field{display:grid;gap:3px;font-size:.72rem;color:#64748b;min-width:0}
+        .rpe-field input{min-height:38px;font-weight:800;color:#0f172a}
+        .rpe-field b{color:#0f172a;font-size:.86rem}
+        .rpe-link{border:0;background:none;color:#15803d;font-weight:700;padding:0;text-align:left;font-size:.72rem;cursor:pointer}
+        .rpe-open{border:1px solid transparent;background:none;border-radius:8px;padding:6px;text-align:left;cursor:pointer;color:inherit}
+        .rpe-open:hover{border-color:#bbf7d0;background:#f0fdf4}
+        .rpe-go{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:6px;background:#15803d;color:#fff;font-size:.72rem;font-weight:800;vertical-align:middle}
+        .rpe-measure{margin-top:4px;min-height:32px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-weight:800;font-size:.78rem;padding:0 10px;cursor:pointer}
+        .rpe-del{min-height:38px;border:1px solid #fecaca;background:#fff1f2;color:#b91c1c;border-radius:8px;font-weight:900;cursor:pointer}
+        .rpe-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid #e2e8f0}
+        .rpe-note{font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px}
+        @media (max-width:700px){.rpe-row{grid-template-columns:1fr 1fr 40px}.rpe-name{grid-column:1/-1}}
+      </style>
+      <div class="rpe-head">
+        <div style="flex:1;min-width:0"><h3>✏️ Редактировать проект ${academyEsc(o.number || '')}</h3><small>${academyEsc(c?.name || 'Клиент')}${orderAddress(o, c) ? ' · ' + academyEsc(orderAddress(o, c)) : ''}</small></div>
+        <button type="button" class="btn-ghost text-sm" onclick="closeModal()">✕ Закрыть</button>
+      </div>
+      <div class="rpe-body">
+        ${closed ? `<div class="rpe-note">Проект закрыт. Изменения пересчитают сумму, долг, зарплату и списание плёнки по этому проекту.</div>` : ''}
+        <div class="rpe-sec"><h4>Клиент и объект</h4>
+          <button type="button" class="btn-ghost text-sm" onclick="closeModal(); openClientContactProfile('${jsQuote(c?.id || '')}','${oid}')">Изменить клиента, телефон, адрес</button>
+        </div>
+        <div class="rpe-sec"><h4>Состав проекта</h4>
+          ${rows || '<p class="text-sm text-gray-500">Услуг пока нет.</p>'}
+          <div style="margin-top:10px"><button type="button" class="btn-primary text-sm" onclick="openServiceCashier('${oid}','editor')">+ Добавить услугу</button></div>
+        </div>
+      </div>
+      <div class="rpe-foot">
+        <b style="flex:1">Итого клиенту: ${fmtMoney(orderRevenue(o))}</b>
+        <span class="text-sm text-gray-500">Оплачено ${fmtMoney(orderPaidTotal(o) || Number(o.paid) || 0)}</span>
+        <button type="button" class="btn-primary" onclick="closeModal()">Готово</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function projectEditorLine(oid, key) {
+  const o = getOrder(oid);
+  if (!o || !projectEditorCanEdit(o)) return {};
+  return { o, line: projectLines(o).find(item => item.key === key) || null };
+}
+
+function projectEditorSaved(o, reason) {
+  projectEstimateMarkChanged(o, reason);
+  save();
+  // Re-open the editor only when the change came from it; the card's 🗑 stays in the card.
+  if (String(state.modal || '').includes('workspace-modal rpe')) state.modal = projectEditorHtml(o, getClient(o.clientId));
+  preservePositionForNextRender(); render();
+}
+
+// Owner, 2026-11-22 14:25: «в „Редактировать проект“ нажал на услугу — должна
+// открыться сама услуга для редактирования; маленькую кнопку „в замере“ не найти».
+// The service name opens that service in the working card (material, scope, price,
+// crew, date, stages), scrolled into view; windows services get a clear «📐 Окна и размеры».
+function projectEditorOpenService(oid, key) {
+  const o = getOrder(oid);
+  if (!o) return;
+  closeModal();
+  state.projectCabinetBypass = oid; // the overview has no service editing — show the working card
+  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: key };
+  if (state.view !== 'orderDetails' || state.openOrderId !== oid) openOrder(oid);
+  else render();
+  setTimeout(() => {
+    const row = Array.from(document.querySelectorAll('[data-service-row]')).find(el => el.getAttribute('data-service-row') === key);
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 60);
+}
+
+/** «🗑» on a service row in the project card: the same removal as the editor window. */
+function projectCardRemoveLine(oid, key) {
+  projectEditorRemove(oid, key);
+}
+
+function projectEditorSetQty(oid, key, value) {
+  const { o, line } = projectEditorLine(oid, key);
+  const source = line?.sources?.[0];
+  if (!o || !source || !projectEditorQtyEditable(line)) return;
+  const qty = Math.max(0, parseFloat(value) || 0);
+  if (line.kind === 'quick') {
+    source.qty = qty; // a quick row keeps its total
+    if (qty > 0 && Number(source.price) > 0) source.unitPrice = Number(source.price) / qty;
+  } else {
+    const unit = Number(source.unitPrice) || (Number(source.qty) > 0 ? Number(source.price) / Number(source.qty) : 0);
+    source.qty = qty;
+    source.unitPrice = unit;
+    source.price = Math.round(unit * qty * 100) / 100;
+  }
+  if (line.kind === 'quick') projectEstimateSyncQuickServices(o);
+  projectEditorSaved(o, `Изменено количество «${line.name}»: ${qty}`);
+}
+
+function projectEditorSetPrice(oid, key, value) {
+  const { o, line } = projectEditorLine(oid, key);
+  if (!o || !line) return;
+  const total = Math.max(0, parseFloat(value) || 0);
+  let unit = total;
+  if (line.kind === 'windows') {
+    const sqft = line.windows.reduce((sum, win) => sum + (windowActualAreaSqft(win) || 0), 0);
+    if (!(sqft > 0)) { alert('Сначала внесите размеры окон — цена считается за sq ft.'); return; }
+    unit = total / sqft;
+  } else if (line.kind === 'quantity' || line.unitPriced) {
+    const qty = Number(line.sources?.[0]?.qty) || 0;
+    if (!(qty > 0)) { alert('Сначала укажите количество.'); return; }
+    unit = total / qty;
+  }
+  if (currentUser()?.role !== 'owner') {
+    const offering = serviceOffering(line.offeringId);
+    const range = projectServicePriceRange(offering);
+    if (range && ((range.min > 0 && unit < range.min - 0.005) || (range.max > 0 && unit > range.max + 0.005))) {
+      alert(`Цена «${offering.name}»: от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}.`);
+      return;
+    }
+  }
+  if (!projectApplyLineUnitPrice(line, unit)) return;
+  if (line.kind === 'quick') projectEstimateSyncQuickServices(o);
+  projectEditorSaved(o, `Изменена сумма «${line.name}»: ${fmtMoney(total)}`);
+}
+
+function projectEditorRemove(oid, key) {
+  const { o, line } = projectEditorLine(oid, key);
+  if (!o || !line) return;
+  const done = projectServiceProgress(o, line.key).status === 'done';
+  // A completed service is history (revenue, schedule, installer pay). Only the
+  // owner may deliberately correct it; for everyone else it stays (as in the card).
+  if (done && currentUser()?.role !== 'owner') { alert(`«${line.name}»: услуга выполнена — её не удаляют. Попросите владельца.`); return; }
+  if (!confirm(`Удалить «${line.name}» из проекта?${done ? ' Услуга отмечена выполненной — зарплата и списание по ней пересчитаются.' : ''}`)) return;
+  if (line.kind === 'windows') {
+    measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
+    o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+  } else {
+    const ids = new Set((line.sources || []).map(source => source.id).filter(Boolean));
+    if (!ids.size) return;
+    o.extraServices = (o.extraServices || []).filter(item => !ids.has(item.id));
+  }
+  if (o.serviceProgress) delete o.serviceProgress[line.key];
+  syncProjectIncludedServices(o);
+  projectPrunePlans(o);
+  projectCardSyncCrew(o);
+  if (line.kind === 'quick') projectEstimateSyncQuickServices(o);
+  projectEditorSaved(o, `Удалена услуга «${line.name}»`);
 }

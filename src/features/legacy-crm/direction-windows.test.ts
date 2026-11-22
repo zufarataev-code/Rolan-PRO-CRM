@@ -30,9 +30,9 @@ test('a direction opens in its own window: Услуги → Замер → Це�
 
 test('adding a service or measuring from the window comes back to it', () => {
   assert.match(stages, /openServiceCashier\(oid, 'direction'\);\n  serviceCashierPick\('direction', directionKey\);/);
-  assert.match(html, /\['estimate', 'intake', 'direction'\]\.includes\(returnTo\)/);
+  assert.match(html, /\['estimate', 'intake', 'direction', 'editor'\]\.includes\(returnTo\)/);
   assert.match(html, /returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function' && returnToProjectDirectionWindow\(\)/);
-  assert.match(html, /if \(returnTo === 'card' \|\| returnTo === 'direction'\) projectCardEdit\(apply\)/);
+  assert.match(html, /if \(returnTo === 'card' \|\| returnTo === 'direction' \|\| returnTo === 'editor'\) projectCardEdit\(apply\)/);
   assert.match(stages, /if \(o && orderMeasureScopes\(o\)\.includes\(directionKey\)\) managerSelectMeasureScope\(oid, directionKey\);/, 'the measurement opens on this direction');
   assert.match(html, /state\._directionWindow\?\.oid === oid \? `<button class="workspace-back" onclick="returnToProjectDirectionWindow\(\)">← К направлению<\/button>`/);
 });
