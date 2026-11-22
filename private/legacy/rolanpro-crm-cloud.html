@@ -1646,6 +1646,13 @@
   .project-service-row:hover { background:#f8fbfd; }
   .project-service-row.selected { background:#eef9fc;box-shadow:inset 4px 0 #159bc4; }
   .project-service-row:last-child { border-bottom:0; }
+  /* Owner, 2026-11-22: a collapsed service is one line — name, scope, price, «Изменить», 🗑. */
+  .project-service-row { grid-template-columns:minmax(0,1fr) auto auto; }
+  .project-service-price { font-weight:900; font-size:.9rem; color:#0f172a; white-space:nowrap; }
+  .project-service-buttons { display:inline-flex; align-items:center; gap:.35rem; }
+  .project-service-row.selected .project-service-buttons { align-self:start; }
+  .project-service-remove { min-width:34px; min-height:34px; border:1px solid #fecaca; border-radius:4px; background:#fff1f2; color:#b91c1c; font-size:.85rem; cursor:pointer; }
+  .project-service-row:not(.selected) .project-service-meta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .project-service-summary { min-width:0; }
   .project-service-heading { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
   .project-service-name { font-size:.82rem;font-weight:950; }
@@ -1763,6 +1770,11 @@
   .project-cashier-lead { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:.15rem .5rem; min-width:0; max-width:100%; min-height:34px; padding:.35rem .75rem; border:1px solid #9ed4e6; border-left:4px solid #167ca6; border-radius:6px; background:#f2fafd; color:#10213b; text-align:left; font-size:.82rem; }
   .project-cashier-lead-kicker { color:#167ca6; font-size:.66rem; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
   .project-cashier-lead > span:last-child { color:#167ca6; font-weight:800; }
+  .project-command-contacts { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .project-command-contact { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:4px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; font-size:12.5px; font-weight:700; text-decoration:none; cursor:pointer; }
+  .project-command-contact.wa { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }
+  .project-command-contact.edit { color:#475569; font-weight:600; }
+  .project-command-contact.muted { color:#94a3b8; font-weight:600; border-style:dashed; cursor:default; }
   /* «Следующий шаг» stays one compact row, at most 44px. */
   .project-feed-next .order-action-card { max-height:44px; overflow:hidden; }
   .project-service-progress-inline { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.35rem .9rem .55rem; font-size:.66rem; font-weight:700; color:#526176; }
@@ -1857,7 +1869,7 @@
     .project-command-grid { gap:.75rem; }
     .project-command-side { grid-template-columns:1fr; }
     .project-command-side > :first-child { grid-column:auto; }
-    .project-service-row { grid-template-columns:minmax(0,1fr) auto;padding:.8rem; }
+    .project-service-row { grid-template-columns:minmax(0,1fr) auto auto;padding:.8rem; }
     .project-service-row > div:not(:first-child):not(:last-child) { display:none; }
     .project-service-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .project-service-fact:last-child:nth-child(odd) { grid-column:1/-1; }
@@ -29899,11 +29911,26 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
   </aside>`;
 }
 
+// Owner, 2026-11-22: «слева карточка клиента — почта, телефон, имя и адрес проекта».
+// Phone, WhatsApp and email sit under the address so the left column is the client card.
+function projectCommandContactsHtml(o, c) {
+  if (!c) return '';
+  const phone = String(c.phone || '').trim();
+  const email = String(c.email || '').trim();
+  const tel = phone.replace(/[^+\d]/g, '');
+  const items = [
+    phone ? `<a class="project-command-contact" href="tel:${academyEsc(tel)}">📞 ${academyEsc(phone)}</a>` : '<span class="project-command-contact muted">📞 телефон не указан</span>',
+    phone ? `<button type="button" class="project-command-contact wa" onclick="openClientConversation('${o.id}','whatsapp')">💬 WhatsApp</button>` : '',
+    email ? `<a class="project-command-contact" href="mailto:${academyEsc(email)}">✉️ ${academyEsc(email)}</a>` : '<span class="project-command-contact muted">✉️ почта не указана</span>',
+    `<button type="button" class="project-command-contact edit" onclick="openClientContactProfile('${jsQuote(c.id || '')}','${o.id}')">Изменить</button>`,
+  ].filter(Boolean);
+  return `<div class="project-command-contacts" data-project-contacts>${items.join('')}</div>`;
+}
 function renderProjectCommandHeader(o, c, primary, { money = false, pendingRequests = [], nextEvent = null } = {}) {
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
-    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
+    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div>${projectCommandContactsHtml(o, c)}</div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
     <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;

@@ -535,8 +535,14 @@ function projectEditorLine(oid, key) {
 function projectEditorSaved(o, reason) {
   projectEstimateMarkChanged(o, reason);
   save();
-  state.modal = projectEditorHtml(o, getClient(o.clientId));
+  // Re-open the editor only when the change came from it; the card's 🗑 stays in the card.
+  if (String(state.modal || '').includes('workspace-modal rpe')) state.modal = projectEditorHtml(o, getClient(o.clientId));
   preservePositionForNextRender(); render();
+}
+
+/** «🗑» on a service row in the project card: the same removal as the editor window. */
+function projectCardRemoveLine(oid, key) {
+  projectEditorRemove(oid, key);
 }
 
 function projectEditorSetQty(oid, key, value) {

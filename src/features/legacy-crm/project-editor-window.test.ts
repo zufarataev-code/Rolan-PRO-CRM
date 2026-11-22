@@ -47,6 +47,7 @@ test("owner edits quantity, price and removes a service on a closed project", ()
   const o: any = order("review_received");
   const ctx = sandbox("owner", o);
   assert.equal(ctx.projectEditorCanEdit(o), true);
+  ctx.state.modal = '<div class="modal-content workspace-modal rpe">'; // the editor window is open
   ctx.projectEditorSetQty("o1", "k1", "3");
   assert.equal(o.extraServices[0].price, 150, "sum follows quantity at the unit price");
   ctx.projectEditorSetPrice("o1", "k1", "200");
@@ -54,6 +55,15 @@ test("owner edits quantity, price and removes a service on a closed project", ()
   ctx.projectEditorRemove("o1", "k1");
   assert.equal(o.extraServices.length, 0);
   assert.match(ctx.state.modal, /Редактировать проект R-1/);
+});
+
+test("🗑 in the project card removes the service without opening the editor window", () => {
+  const o: any = order("review_received");
+  const ctx = sandbox("owner", o);
+  ctx.state.modal = null;
+  ctx.projectCardRemoveLine("o1", "k1");
+  assert.equal(o.extraServices.length, 0);
+  assert.equal(ctx.state.modal, null);
 });
 
 test("a manager cannot edit a closed project without the owner's approval", () => {

@@ -85,7 +85,7 @@ test('with two or more services every row starts collapsed; one service opens st
   assert.equal(context.projectCardExpandedLine({ id: 'o' }, one), null, 'one service plus one waiting for its measurement: nothing opens');
   const render = fn(stages, 'renderProjectCardServices');
   assert.match(render, /const chosen = projectCardExpandedLine\(o, lines\);/);
-  assert.match(render, /\$\{selected \? 'Свернуть ‹' :/);
+  assert.match(render, /\$\{selected \? '← Все услуги' :/);
   assert.match(render, /!selected && tracking && \(edit \|\| plan\) && !projectStages\(o,line\.key\)\.length \? `<label class="project-service-progress-inline">Ход работ/, 'progress stays one tap away on a collapsed row');
   assert.match(render, /!selected && tracking \? projectStagesCompactHtml\(o,line\.key\) : ''/, 'staged services keep their stage buttons when collapsed');
   const e2e = readFileSync('e2e/project-intake-layout.browser.ts', 'utf8');

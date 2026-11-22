@@ -621,7 +621,10 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const directions = projectDirectionGroups(o, lines, pending);
   const production = projectCardInProduction(o);
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
-  const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  // Owner, 2026-11-22: «не могу удалить ту или иную услугу, редактировать — непонятно как».
+  // The owner corrects a closed project right in the card (as in «Редактировать проект»).
+  const edit = money && (!CLOSED_PROJECT_STATUSES.includes(o.status) || currentUser()?.role === 'owner');
+  const removable = typeof projectEditorCanEdit === 'function' ? projectEditorCanEdit(o) : edit;
   const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
   // Owner/coordinator, 2026-11-21 (#577 follow-up): with two or more services the card
   // must fit one 1920 screen, so every service row starts collapsed and opens on
@@ -635,7 +638,6 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const statusLabel = status === 'done' ? 'Выполнено' : status === 'in_progress' ? 'В работе' : line.installationAt ? 'Назначено' : line.kind === 'included' ? 'В пакете' : 'В проекте';
     const source = line.sources[0];
     const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
-    const deletable = edit && ['quantity', 'work'].includes(line.kind);
     const offering = serviceOffering(line.offeringId);
     const sizedOffering = offering && serviceOfferingNeedsSizes(offering) ? offering : null;
     const calculation = projectCardLineCalculation(o, line);
@@ -650,17 +652,21 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       <div class="project-service-row ${selected ? 'selected' : ''}">
         <div class="project-service-summary">
           <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
-          <div class="project-service-meta">${academyEsc(projectLineNote(line))}</div>
-          <div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
+          <div class="project-service-meta">${academyEsc(projectLineNote(line))}${selected ? '' : ` · ${academyEsc(projectLineQtyText(line))} · ${academyEsc(crew.people)} · ${academyEsc(crew.date)}`}</div>
+          ${selected ? `<div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
           <div class="project-service-facts">
             <span class="project-service-fact mode"><small>Расчёт</small><b>${academyEsc(calculation.label)}</b></span>
             <span class="project-service-fact"><small>Объём · ставка</small><b>${academyEsc(projectLineQtyText(line))}${projectLineRateText(o, line)}</b></span>
             ${money ? `<span class="project-service-fact"><small>Цена клиенту</small><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></span>` : ''}
             <span class="project-service-fact"><small>Исполнитель</small><b>${academyEsc(crew.people)}</b></span>
             <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
-          </div>
+          </div>` : ''}
         </div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-expanded="${selected ? 'true' : 'false'}" aria-label="${selected ? 'Свернуть' : 'Открыть'} услугу ${academyEsc(line.name)}">${selected ? 'Свернуть ‹' : `${edit || plan ? 'Настроить' : 'Подробнее'} ›`}</button>
+        ${!selected && money ? `<span class="project-service-price">${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span>` : ''}
+        <span class="project-service-buttons">
+          <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-expanded="${selected ? 'true' : 'false'}" aria-label="${selected ? 'Свернуть' : 'Открыть'} услугу ${academyEsc(line.name)}">${selected ? '← Все услуги' : `${edit || plan ? '✏️ Изменить' : 'Подробнее'} ›`}</button>
+          ${removable && line.kind !== 'included' ? `<button type="button" class="project-service-remove" title="Удалить услугу" aria-label="Удалить услугу ${academyEsc(line.name)}" onclick="projectCardRemoveLine('${o.id}','${jsQuote(line.key)}')">🗑</button>` : ''}
+        </span>
       </div>
       ${!selected && tracking && (edit || plan) && !projectStages(o,line.key).length ? `<label class="project-service-progress-inline">Ход работ<div class="flex flex-wrap items-center gap-1">${projectServiceProgressCell(o, line)}</div></label>` : ''}
       ${!selected && tracking ? projectStagesCompactHtml(o,line.key) : ''}
@@ -670,7 +676,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
         ${!sizedOffering ? (line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
         ${edit && (!sizedOffering || calculation.mode === 'detailed') ? priceField : ''}
         ${plan ? `<label>Исполнитель${projectCardCrewPicker(o, line)}</label><label>Дата<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" value="${date}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)"></label>` : `<label>Состояние<div class="project-service-value">${academyEsc(statusLabel)}</div></label>`}
-        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button>${deletable ? `<button class="btn-ghost text-red-600" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">Удалить</button>` : ''}</div></label>
+        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button></div></label>
         <details style="grid-column:1/-1" ${projectLineNoteValue(o,line.key) ? 'open' : ''}><summary class="text-xs font-semibold text-slate-500 cursor-pointer">Комментарий по услуге${projectLineNoteValue(o,line.key) ? '' : ' +'}</summary><textarea rows="2" placeholder="Что важно учесть при расчёте, замере или монтаже" onchange="projectCardSetLineNote('${o.id}','${jsQuote(line.key)}',this.value)">${academyEsc(projectLineNoteValue(o,line.key))}</textarea></details>
       </div>` : ''}
     </div>`;
