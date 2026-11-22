@@ -709,6 +709,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div></div>
+    ${money && typeof projectWizDirectionNoticeHtml === 'function' ? projectWizDirectionNoticeHtml(o) : ''}
     ${typeof projectCashierMapHtml === 'function' ? projectCashierMapHtml(o, directions, { money, edit }) : ''}
     <div class="project-service-list">${directionCards || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}</div>
     <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? (edit && lines.length ? projectTotalEditHtml(o) : `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>`) : ''}</div>
@@ -1419,7 +1420,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
       ${direction.lines.filter(line => !['quick','windows'].includes(line.kind)).map(lineRow).join('')}${direction.pending.filter(offering => !sizedIds.has(offering.id)).map(pendingRow).join('')}
       ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет — добавьте ниже.</div>' : ''}
       ${edit ? projectDirectionAddHtml(o, directionKey) : ''}
-      ${edit ? projectDirectionMoveHtml(o, directionKey) : ''}
+      ${projectDirectionCanMove(o) ? projectDirectionMoveHtml(o, directionKey) : ''}
       ${edit && money ? `<label class="rp-dirwin-toggle"><input type="checkbox" ${excludedDir ? '' : 'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${jsQuote(directionKey)}',this.checked); openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')"> Направление входит в расчёт и КП</label>` : ''}`;
   }
   const next = index < steps.length - 1
@@ -4950,7 +4951,17 @@ function renderQuickEntry() {
 // защитная — и нет возможности удалить или сменить». Размеры окон — труд
 // замерщика, они остаются; меняется направление: окна переходят в новое,
 // услуги старого направления снимаются (у нового свои), материал подбирается
-// заново. Кнопка живёт в окне направления, пока проект не закрыт.
+// заново.
+// Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
+// неправильно: там солнцезащитные, а по факту приватная — нужна возможность
+// менять направление». Направление меняется и на закрытом проекте (монтаж
+// сделан, оплачен). У закрытого проекта деньги не трогаются: цена, плёнка,
+// оплаты, акт и выплаты остаются как были, меняется только направление. То,
+// что привязано к услуге справочника старого направления, на закрытом проекте
+// остаётся на месте — снять её значило бы поменять сумму и зарплату.
+function projectDirectionCanMove(o, user = currentUser()) {
+  return !!o && !!user && orderUserCanSeeMoney(o, user);
+}
 function projectDirectionMoveTargets(o, fromKey) {
   const have = new Set(projectDirectionGroups(o).map(direction => direction.key));
   return ORDER_PRIMARY_SERVICES.filter(service => !service.general && service.id !== fromKey && !have.has(service.id));
@@ -4959,57 +4970,264 @@ function projectDirectionMoveHtml(o, fromKey) {
   const targets = projectDirectionMoveTargets(o, fromKey);
   if (!targets.length) return '';
   const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
-  return `<details class="rp-dirwin-move"><summary>Ошиблись направлением? Перенести «${academyEsc(from?.title || fromKey)}» в другое…</summary>
-    <p class="rp-dirwin-hint">Размеры окон и помещения останутся. Услуги и плёнка этого направления снимутся — у нового направления свои, выберите их заново.</p>
+  const closed = CLOSED_PROJECT_STATUSES.includes(o.status);
+  const hint = closed
+    ? 'Проект закрыт: сумма, оплаты, акт и выплаты не изменятся. Окна и строки перейдут в новое направление вместе со своей ценой и плёнкой.'
+    : 'Размеры окон и помещения останутся. Услуги и плёнка этого направления снимутся — у нового направления свои, выберите их заново.';
+  return `<details class="rp-dirwin-move" ${closed || o._importSource === 'wiz' ? 'open' : ''}><summary>${closed ? 'Сменить направление' : 'Ошиблись направлением? Перенести'} «${academyEsc(from?.title || fromKey)}» в другое…</summary>
+    <p class="rp-dirwin-hint">${hint}</p>
     <div class="rp-dirwin-move-row">${targets.map(service => { const tone = typeof rpDir === 'function' ? rpDir(service.id) : { color: '#2563eb', tint: '#eff6ff' }; return `<button type="button" class="rp-dirwin-pick" style="border-left:4px solid ${academyEsc(tone.color)}" onclick="projectDirectionMove('${o.id}','${jsQuote(fromKey)}','${jsQuote(service.id)}')"><b>${service.icon || ''} ${academyEsc(service.title)}</b><span>перенести сюда</span></button>`; }).join('')}</div>
   </details>`;
 }
-function projectDirectionMove(oid, fromKey, toKey) {
-  const o = getOrder(oid);
+/** Windows of the direction: an old window without its own direction belongs to the project's direction. */
+function projectDirectionMoveWindows(o, fromKey) {
+  const defaultScope = orderMeasureScope(o);
+  return measureAllWindows(o).filter(({ win }) => (win.measureScope || defaultScope) === fromKey);
+}
+/**
+ * Moves one direction of the project into another and writes it to the
+ * project's history. No confirm and no render: the card button and the bulk
+ * fix of the TintWiz import both call it. Returns what moved, or null.
+ */
+function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, source = '', { keepMoney = false } = {}) {
   const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
-  // Старые заказы могут не нести направление на окнах: тогда их направление — направление проекта.
+  if (!o || !to) return null;
   const defaultScope = orderMeasureScope(o);
   fromKey = fromKey || defaultScope;
-  if (!o || !to || fromKey === toKey || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-  const windows = measureAllWindows(o).filter(({ win }) => (win.measureScope || defaultScope) === fromKey);
-  const fromTitle = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey)?.title || fromKey;
-  if (!confirm(`Перенести «${fromTitle}» в «${to.title}»? ${windows.length ? `${windows.length} ${projectWindowsWord(windows.length)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`)) return;
-  projectCardEdit(() => {
-    windows.forEach(({ room, win }) => {
-      win.measureScope = toKey;
-      win.offeringId = ''; win.catalogId = ''; win.filmType = '';
-      if (typeof normalizeMeasureWindowTypeForScope === 'function') win.winType = normalizeMeasureWindowTypeForScope(toKey, win.winType);
-      if (typeof syncWindowPanelsForType === 'function') syncWindowPanelsForType(win, toKey);
-      if (room?.defaultCatalogByScope) delete room.defaultCatalogByScope[fromKey];
-    });
-    const fromDir = serviceOfferingDirection(fromKey);
-    const gone = new Set();
-    o.extraServices = (o.extraServices || []).filter(line => {
-      const dirKey = line.serviceType || o.serviceType;
-      if (line.quickProjectLine) { if (dirKey === fromKey) { line.serviceType = toKey; line.offeringId = ''; line.offeringName = ''; line.catalogId = ''; line.manualFilmName = ''; line.label = to.title; } return true; }
-      const offering = serviceOffering(line.offeringId);
-      const own = dirKey === fromKey && (!offering || serviceOfferingDirection(dirKey) === fromDir);
-      if (own) { if (line.offeringId) gone.add(line.offeringId); return false; }
+  if (fromKey === toKey) return null;
+  // The bulk fix of an import keeps the money of every project, open or closed.
+  const closed = keepMoney || CLOSED_PROJECT_STATUSES.includes(o.status);
+  const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
+  const fromTitle = from?.title || fromKey;
+  const fromDir = serviceOfferingDirection(fromKey);
+  const ownOffering = id => !!id && serviceOffering(id)?.direction === fromDir;
+  let windowsMoved = 0, linesMoved = 0, kept = 0;
+  projectDirectionMoveWindows(o, fromKey).forEach(({ room, win }) => {
+    // A closed project keeps what is priced and paid by the old direction's service.
+    if (closed && ownOffering(win.offeringId)) { kept++; return; }
+    win.measureScope = toKey;
+    windowsMoved++;
+    if (closed) return; // price, film and pay of finished work stay as they are
+    win.offeringId = ''; win.catalogId = ''; win.filmType = '';
+    if (typeof normalizeMeasureWindowTypeForScope === 'function') win.winType = normalizeMeasureWindowTypeForScope(toKey, win.winType);
+    if (typeof syncWindowPanelsForType === 'function') syncWindowPanelsForType(win, toKey);
+    if (room?.defaultCatalogByScope) delete room.defaultCatalogByScope[fromKey];
+  });
+  const gone = new Set();
+  o.extraServices = (o.extraServices || []).filter(line => {
+    if (line.autoWindowRemoval) return true; // removal of old film is a general work
+    const dirKey = line.serviceType || o.serviceType || defaultScope;
+    if (dirKey !== fromKey) return true;
+    const offering = serviceOffering(line.offeringId);
+    if (line.quickProjectLine) {
+      if (closed && ownOffering(line.offeringId)) { kept++; return true; }
+      if (closed) {
+        // The rate of a quick line follows its direction: keep the pay of finished work.
+        if (line.offeringInstallerRate == null && typeof installerRateForQuickLine === 'function') line.offeringInstallerRate = installerRateForQuickLine(null, line);
+        if (!line.label || line.label === fromTitle) line.label = to.title;
+      } else {
+        line.offeringId = ''; line.offeringName = ''; line.catalogId = ''; line.manualFilmName = ''; line.label = to.title;
+      }
+      line.serviceType = toKey; linesMoved++;
       return true;
-    });
+    }
+    if (offering && offering.direction !== fromDir) return true; // a service of another direction
+    if (offering) {
+      if (closed) { kept++; return true; }
+      gone.add(line.offeringId);
+      return false;
+    }
+    // A row without a directory service (the TintWiz revenue line, a custom work)
+    // keeps its price and moves with the project.
+    line.serviceType = toKey; linesMoved++;
+    return true;
+  });
+  if (!closed) {
     o.offeringIds = (o.offeringIds || []).filter(id => !gone.has(id) && !(serviceOffering(id) && serviceOffering(id).direction === fromDir && serviceOfferingNeedsSizes(serviceOffering(id))));
     if (o.offeringId && (gone.has(o.offeringId) || serviceOffering(o.offeringId)?.direction === fromDir)) { o.offeringId = ''; o.offeringName = ''; }
-    o.serviceTypes = [...new Set((o.serviceTypes || [o.serviceType]).map(key => key === fromKey ? toKey : key).filter(Boolean))];
-    if (!o.serviceTypes.includes(toKey)) o.serviceTypes.push(toKey);
-    if (o.serviceType === fromKey) { o.serviceType = toKey; o.serviceCategory = to.catalogCategory; o.serviceWorkflow = [...(to.workflow || [])]; }
-    o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
-    o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+  }
+  const stays = kept > 0; // the old direction keeps its paid service on a closed project
+  const types = Array.isArray(o.serviceTypes) && o.serviceTypes.length ? o.serviceTypes : [o.serviceType || defaultScope];
+  o.serviceTypes = [...new Set(types.flatMap(key => key === fromKey ? (stays ? [fromKey, toKey] : [toKey]) : [key]).filter(Boolean))];
+  if (!o.serviceTypes.includes(toKey)) o.serviceTypes.push(toKey);
+  if (!stays && (o.serviceType || defaultScope) === fromKey) {
+    o.serviceType = toKey; o.serviceCategory = to.catalogCategory;
+    if (!closed) o.serviceWorkflow = [...(to.workflow || [])];
+  }
+  if (!stays && o.measureScope === fromKey) o.measureScope = toKey;
+  if (!stays && Array.isArray(o.tags) && from?.tag) {
+    o.tags = o.tags.filter(tag => tag !== from.tag);
+    if (to.tag && !o.tags.includes(to.tag)) o.tags.push(to.tag);
+  }
+  o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
+  o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+  if (closed) {
+    // Finished work keeps its dates, crew and progress under the new direction.
+    const rekey = key => (key === fromKey ? toKey : key === `direction:${fromKey}` ? `direction:${toKey}` : key);
+    if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).map(([key, value]) => [rekey(key), value]));
+    if (Array.isArray(o.serviceSchedules)) o.serviceSchedules.forEach(plan => { plan.id = rekey(plan.id); });
+  } else {
     if (o.serviceProgress) delete o.serviceProgress[fromKey];
     syncProjectIncludedServices(o);
     if (typeof projectPrunePlans === 'function') projectPrunePlans(o);
     if (typeof projectCardSyncCrew === 'function') projectCardSyncCrew(o);
     projectEstimateMarkChanged(o, `Направление «${fromTitle}» перенесено в «${to.title}»`);
-    o.timeline = o.timeline || [];
-    o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: state.currentUserId, note: `${fromTitle} → ${to.title}${windows.length ? ` · ${windows.length} ${projectWindowsWord(windows.length)} с размерами` : ''}` });
+  }
+  o._directionCheckedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  const parts = [
+    windowsMoved ? `${windowsMoved} ${projectWindowsWord(windowsMoved)} с размерами` : '',
+    closed ? 'сумма и оплаты без изменений' : '',
+    kept ? `${kept} ${projectPlural(kept, 'услуга осталась', 'услуги остались', 'услуг осталось')} в «${fromTitle}»` : '',
+    source,
+  ].filter(Boolean);
+  o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: by || null, from: fromKey, to: toKey, note: `Направление: ${fromTitle} → ${to.title}${parts.length ? ` · ${parts.join(' · ')}` : ''}` });
+  return { fromKey, toKey, fromTitle, toTitle: to.title, windows: windowsMoved, lines: linesMoved, kept, closed };
+}
+function projectDirectionMove(oid, fromKey, toKey) {
+  const o = getOrder(oid);
+  const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
+  if (!o || !to || !projectDirectionCanMove(o)) return;
+  fromKey = fromKey || orderMeasureScope(o);
+  if (fromKey === toKey) return;
+  const closed = CLOSED_PROJECT_STATUSES.includes(o.status);
+  const count = projectDirectionMoveWindows(o, fromKey).length;
+  const fromTitle = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey)?.title || fromKey;
+  const question = closed
+    ? `Сменить направление «${fromTitle}» на «${to.title}»? Проект закрыт: сумма, оплаты, акт и выплаты не изменятся. В истории проекта останется запись.`
+    : `Перенести «${fromTitle}» в «${to.title}»? ${count ? `${count} ${projectWindowsWord(count)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`;
+  if (!confirm(question)) return;
+  projectCardEdit(() => {
+    projectDirectionMoveApply(o, fromKey, toKey, state.currentUserId);
     save();
   });
   state._directionWindow = { oid, key: toKey, step: 'services', pick: '' };
   openProjectDirectionWindow(oid, toKey, 'services');
+}
+
+// ---------- ИМПОРТ TINTWIZ: ПРОВЕРКА НАПРАВЛЕНИЯ (Owner, 2026-11-22, #592) ----------
+// В выгрузке TintWiz нет направления, старый импорт ставил солнцезащитную всем.
+// Карточка такого проекта просит проверить направление, а владелец может
+// исправить сразу много проектов: отметить галочками и выбрать направление.
+// Живая база скриптом не правится — правку делает владелец сам, и у каждого
+// проекта остаётся запись в истории.
+function projectIsWizImport(o) {
+  return o?._importSource === 'wiz';
+}
+function projectMainDirectionKeys(o) {
+  const keys = projectDirectionGroups(o).map(direction => direction.key).filter(key => !primaryServiceInfo(key)?.general);
+  return keys.length ? keys : [orderMeasureScope(o)];
+}
+function projectWizDirectionNoticeHtml(o) {
+  if (!projectIsWizImport(o) || o._directionCheckedAt || !projectDirectionCanMove(o)) return '';
+  const keys = projectMainDirectionKeys(o);
+  const titles = keys.map(key => primaryServiceInfo(key)?.title || key).join(', ');
+  return `<div class="rp-wiz-direction" data-wiz-direction-notice>
+    <div><b>Проект из TintWiz: проверьте направление</b><span>В выгрузке TintWiz нет направления. Сейчас стоит: ${academyEsc(titles)}.</span></div>
+    <div class="rp-wiz-direction-actions"><button type="button" class="btn-primary" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(keys[0])}','services')">Сменить направление</button><button type="button" class="btn-ghost" onclick="projectWizDirectionConfirm('${o.id}')">Направление верное</button></div>
+  </div>`;
+}
+function projectWizDirectionConfirm(oid) {
+  const o = getOrder(oid);
+  if (!o || !projectDirectionCanMove(o)) return;
+  o._directionCheckedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o._directionCheckedAt, key: 'direction_checked', by: state.currentUserId, note: `Направление проверено: ${projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.title || key).join(', ')}` });
+  save(); preservePositionForNextRender(); render();
+}
+function wizImportOrders() {
+  return (db.orders || []).filter(projectIsWizImport);
+}
+function wizDirectionBulkRows() {
+  const s = state._wizBulk || {};
+  return wizImportOrders()
+    .filter(o => !s.onlyUnchecked || !o._directionCheckedAt)
+    .filter(o => !s.fromKey || projectMainDirectionKeys(o).includes(s.fromKey))
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+function openWizDirectionBulk() {
+  if (currentUser()?.role !== 'owner') return;
+  state._wizBulk = { picked: [], toKey: 'privacy_film', fromKey: '', onlyUnchecked: true };
+  renderWizDirectionBulk();
+}
+function renderWizDirectionBulk() {
+  state.modal = wizDirectionBulkHtml();
+  render();
+}
+function wizDirectionBulkSet(field, value) {
+  if (!state._wizBulk) return;
+  state._wizBulk[field] = value;
+  if (field !== 'toKey') state._wizBulk.picked = [];
+  renderWizDirectionBulk();
+}
+function wizDirectionBulkToggle(oid, on) {
+  const s = state._wizBulk;
+  if (!s) return;
+  s.picked = on ? [...new Set([...s.picked, oid])] : s.picked.filter(id => id !== oid);
+  const btn = document.querySelector('[data-wiz-bulk-apply]');
+  if (btn) btn.textContent = wizDirectionBulkApplyLabel();
+}
+function wizDirectionBulkPickAll(on) {
+  const s = state._wizBulk;
+  if (!s) return;
+  s.picked = on ? wizDirectionBulkRows().map(o => o.id) : [];
+  renderWizDirectionBulk();
+}
+function wizDirectionBulkApplyLabel() {
+  const s = state._wizBulk || {};
+  const n = (s.picked || []).length;
+  return n ? `Сменить у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')} на «${primaryServiceInfo(s.toKey)?.title || ''}»` : 'Отметьте проекты';
+}
+function wizDirectionBulkHtml() {
+  const s = state._wizBulk || {};
+  const rows = wizDirectionBulkRows();
+  const all = wizImportOrders();
+  const targets = ORDER_PRIMARY_SERVICES.filter(service => !service.general);
+  const picked = new Set(s.picked || []);
+  const row = o => {
+    const client = getClient(o.clientId);
+    const dirs = projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.short || primaryServiceInfo(key)?.title || key).join(', ');
+    return `<label class="rp-wiz-bulk-row"><input type="checkbox" ${picked.has(o.id) ? 'checked' : ''} onchange="wizDirectionBulkToggle('${o.id}',this.checked)"><span><b>${academyEsc(o.number || '')}</b> ${academyEsc(client?.name || '')}</span><span>${academyEsc(dirs)}${o._directionCheckedAt ? ' · проверено' : ''}</span><span>${fmtMoney(orderRevenue(o))}</span></label>`;
+  };
+  return `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content p-5 rp-wiz-bulk" style="max-width:46rem" onclick="event.stopPropagation()" data-wiz-bulk role="dialog" aria-modal="true" aria-label="Импорт TintWiz: направление">
+    <h3 class="text-lg font-semibold">Импорт TintWiz: направление</h3>
+    <p class="text-sm text-gray-600 mt-1">В выгрузке TintWiz нет направления, поэтому старый импорт поставил всем солнцезащитную. Отметьте проекты и выберите правильное направление. Сумма, оплаты и выплаты не изменятся, у каждого проекта в истории будет запись.</p>
+    <div class="rp-wiz-bulk-filters">
+      <label>Сейчас стоит<select onchange="wizDirectionBulkSet('fromKey',this.value)"><option value="">любое</option>${targets.map(service => `<option value="${service.id}" ${s.fromKey === service.id ? 'selected' : ''}>${academyEsc(service.title)}</option>`).join('')}</select></label>
+      <label class="rp-wiz-bulk-check"><input type="checkbox" ${s.onlyUnchecked ? 'checked' : ''} onchange="wizDirectionBulkSet('onlyUnchecked',this.checked)"> только непроверенные</label>
+      <label>Новое направление<select onchange="wizDirectionBulkSet('toKey',this.value)">${targets.map(service => `<option value="${service.id}" ${s.toKey === service.id ? 'selected' : ''}>${academyEsc(service.title)}</option>`).join('')}</select></label>
+    </div>
+    <div class="rp-wiz-bulk-head"><span>Показано ${rows.length} из ${all.length}</span><span><button type="button" class="btn-ghost text-xs" onclick="wizDirectionBulkPickAll(true)">Отметить все показанные</button><button type="button" class="btn-ghost text-xs" onclick="wizDirectionBulkPickAll(false)">Снять отметки</button></span></div>
+    <div class="rp-wiz-bulk-list">${rows.map(row).join('') || '<div class="p-4 text-sm text-gray-500">Нет проектов по этому фильтру.</div>'}</div>
+    <div class="rp-wiz-bulk-foot"><button type="button" class="btn-ghost" onclick="closeModal()">Закрыть</button><button type="button" class="btn-primary" data-wiz-bulk-apply onclick="wizDirectionBulkApply()">${academyEsc(wizDirectionBulkApplyLabel())}</button></div>
+  </div></div>`;
+}
+/** Moves every picked project into the chosen direction; one history entry per project. */
+function wizDirectionBulkMove(ids, toKey, by = state.currentUserId) {
+  let projects = 0;
+  ids.forEach(id => {
+    const o = getOrder(id);
+    if (!o || !projectIsWizImport(o)) return;
+    const results = projectMainDirectionKeys(o).filter(key => key !== toKey)
+      .map(key => projectDirectionMoveApply(o, key, toKey, by, 'массовая правка импорта TintWiz', { keepMoney: true }))
+      .filter(Boolean);
+    if (!results.length) o._directionCheckedAt = new Date().toISOString(); // already right
+    projects++;
+  });
+  return projects;
+}
+function wizDirectionBulkApply() {
+  const s = state._wizBulk;
+  if (!s || currentUser()?.role !== 'owner') return;
+  const ids = (s.picked || []).filter(id => getOrder(id));
+  const to = primaryServiceInfo(s.toKey);
+  if (!ids.length) { alert('Отметьте проекты, которым нужно сменить направление.'); return; }
+  if (!confirm(`Сменить направление у ${ids.length} ${projectPlural(ids.length, 'проекта', 'проектов', 'проектов')} на «${to.title}»?\n\nСумма, оплаты, акт и выплаты не изменятся. У каждого проекта в истории будет запись.`)) return;
+  const n = wizDirectionBulkMove(ids, s.toKey);
+  save();
+  state._wizBulk = { ...s, picked: [] };
+  renderWizDirectionBulk();
+  setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.`), 0);
 }
 
 // ---------- ВАРИАНТЫ ПЛЁНКИ В КП: «КЛИЕНТ ВЫБИРАЕТ» (Owner, 2026-11-12) ----------

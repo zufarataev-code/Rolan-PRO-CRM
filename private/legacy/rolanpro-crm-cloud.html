@@ -2251,6 +2251,16 @@
   .crm-import-banner button { border:1px solid #B45309;background:#fff;color:#78350F;border-radius:4px;padding:5px 12px;font-weight:800; }
   .crm-import-panel { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; } .crm-import-panel p { margin:4px 0 0;font-size:13px;color:#5A6577;max-width:34rem; }
   .rp-dirwin-move { margin-top:14px;border-top:1px dashed #D9DEE6;padding-top:10px; } .rp-dirwin-move summary { cursor:pointer;font-size:12px;font-weight:600;color:#5A6577; } .rp-dirwin-move-row { display:grid;gap:6px;margin-top:8px; }
+  /* #592: TintWiz import — check the direction on the card, fix many projects at once. */
+  .rp-wiz-direction { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 12px;padding:10px 12px;border:1px solid #F3D19C;border-left:4px solid #D97706;border-radius:10px;background:#FFFBEB; }
+  .rp-wiz-direction > div:first-child { display:grid;gap:2px;min-width:0;flex:1 1 240px; } .rp-wiz-direction b { font-size:14px; } .rp-wiz-direction span { font-size:12px;color:#5A6577; }
+  .rp-wiz-direction-actions { display:flex;flex-wrap:wrap;gap:6px; }
+  .rp-wiz-bulk-filters { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:12px 0 8px; } .rp-wiz-bulk-filters label { display:grid;gap:4px;font-size:12px;font-weight:600;color:#5A6577; } .rp-wiz-bulk-filters label.rp-wiz-bulk-check { display:flex;align-items:center;gap:6px;align-self:end; }
+  .rp-wiz-bulk-head { display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;font-size:12px;color:#5A6577; }
+  .rp-wiz-bulk-list { max-height:min(52vh,460px);overflow-y:auto;overflow-x:hidden;border:1px solid #E3E8EF;border-radius:10px;margin-top:6px; }
+  .rp-wiz-bulk-row { display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:8px 10px;border-bottom:1px solid #EEF1F5;font-size:13px;cursor:pointer; } .rp-wiz-bulk-row > span { min-width:0;overflow-wrap:anywhere; } .rp-wiz-bulk-row > span:nth-child(3) { color:#5A6577;font-size:12px; }
+  @media (max-width:560px) { .rp-wiz-bulk-row { grid-template-columns:auto minmax(0,1fr); } .rp-wiz-bulk-row > span:nth-child(3), .rp-wiz-bulk-row > span:nth-child(4) { grid-column:2; } }
+  .rp-wiz-bulk-foot { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px; }
   /* Быстрый ввод заказов (Owner, 2026-11-03) */
   .qe { display:flex;flex-direction:column;gap:14px;max-width:1400px; }
   .qe-top { display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap; } .qe-top > div:first-child { flex:1;min-width:260px; }
@@ -8045,6 +8055,7 @@ const I18N = {
     proposal_accepted: 'КП принято',
     installation_forced: 'Монтаж начат без полной готовности (владелец)',
     direction_moved: 'Направление проекта изменено',
+    direction_checked: 'Направление проверено',
     installation_scheduled: 'Монтаж назначен',
     installation_accepted: '✓ Специалист по установке принял',
     installation_en_route: '🚗 Бригада выехала',
@@ -8474,6 +8485,7 @@ const I18N = {
     proposal_accepted: 'Proposal accepted',
     installation_forced: 'Installation started before full readiness (owner)',
     direction_moved: 'Project direction changed',
+    direction_checked: 'Direction checked',
     installation_scheduled: 'Installation scheduled',
     installation_accepted: '✓ Installer accepted',
     installation_en_route: '🚗 Crew en route',
@@ -22949,6 +22961,7 @@ function renderOrders() {
       <div class="orders-primary-actions">
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
+        ${currentUser()?.role === 'owner' && typeof wizImportOrders === 'function' && wizImportOrders().length ? `<button class="btn-ghost" onclick="openWizDirectionBulk()" title="Проверить направление проектов из TintWiz">🧾 Импорт TintWiz (${wizImportOrders().filter(o => !o._directionCheckedAt).length})</button>` : ''}
         ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
@@ -36808,14 +36821,19 @@ function importWizRows(rows) {
     const rooms = [];
     if (totalAreaSqft > 0) {
       const sideMM = Math.round(Math.sqrt((totalAreaSqft / 10.7639104) * 1_000_000));
-      // Pick first catalog item by direction guess (no direction column → solar default)
-      const cat = db.settings.catalog.find(c => c.category === 'solar') || db.settings.catalog[0];
+      // Owner, 2026-11-22 (#592): the TintWiz export has no direction column, so
+      // the import guesses neither the direction nor the film (it used to put
+      // solar film on every project). The window keeps only the area: no price
+      // and no installer rate, because the project's revenue is the
+      // «Услуга по проекту (импорт Wiz)» line below. The card asks to check the
+      // direction; the owner fixes it there or for many projects at once.
       rooms.push({
         id: uid(), name: 'Импорт',
         windows: [{
           id: uid(), name: 'Импорт', width: sideMM, height: sideMM, qty: 1,
           actualWidth: sideMM, actualHeight: sideMM, actualQty: 1,
-          glassType: '', side: 'in', filmType: cat ? `${cat.brand} — ${cat.model}` : '', catalogId: cat?.id || null,
+          glassType: '', side: 'in', filmType: '', catalogId: null,
+          pricePerSqft: 0, offeringInstallerRate: 0, importPlaceholder: true,
         }],
       });
     }
