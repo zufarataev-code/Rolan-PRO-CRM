@@ -56,7 +56,7 @@ export const CRM_NAV: CrmNavGroup[] = [
       { title: "Новые лиды", href: "/crm/leads", icon: InboxIcon },
       section("Холодные звонки", "coldcalls", PhoneCallIcon),
       section("КП", "proposals", FileTextIcon),
-      section("Клиенты", "clients", UsersIcon),
+      { title: "Клиенты", href: "/crm/clients", icon: UsersIcon },
       section("Выполненные проекты", "quickEntry", ZapIcon),
     ],
   },
@@ -95,7 +95,7 @@ export const CRM_NAV: CrmNavGroup[] = [
 const ALL_ITEMS = CRM_NAV.flatMap((group) => group.items);
 
 /** Working screens that stay reachable by address after their section was redrawn. */
-const KEPT: Record<string, string> = { orders: "Проекты", leads: "Новые лиды", calendar: "Календарь" };
+const KEPT: Record<string, string> = { orders: "Проекты", leads: "Новые лиды", calendar: "Календарь", clients: "Клиенты" };
 
 /** Sections the new interface asks the working CRM to open by #/section/<key>, and who may open them. */
 export const CRM_LEGACY_SECTIONS = [...ALL_ITEMS.filter((item) => item.section), ...Object.keys(KEPT).map((key) => ({ section: key, ownerOnly: false }))]
