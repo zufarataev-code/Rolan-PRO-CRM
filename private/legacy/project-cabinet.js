@@ -631,6 +631,13 @@ function projectEditorRemove(oid, key) {
   if (line.kind === 'windows') {
     measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
     o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+    // The direction leaves the project when nothing of it remains (no empty «… · 0» tab in the measurement).
+    const direction = offeringServiceType(serviceOffering(line.offeringId)) || line.direction?.key;
+    const stillUsed = (o.offeringIds || []).some(id => offeringServiceType(serviceOffering(id)) === direction);
+    if (direction && !stillUsed) {
+      o.serviceTypes = (o.serviceTypes || []).filter(type => type !== direction);
+      if (o.measureScope === direction) delete o.measureScope;
+    }
   } else {
     const ids = new Set((line.sources || []).map(source => source.id).filter(Boolean));
     if (!ids.size) return;

@@ -11930,7 +11930,16 @@ function orderMeasureScopes(order) {
   const scopes = [...primary, ...fromOrder, ...fromWindows]
     .map(value => measureScopeInfo(value).key)
     .filter(value => valid.has(value));
-  return Array.from(new Set(scopes));
+  // Owner, 2026-11-22 20:38 («ты издеваешься»): a removed service stayed as an empty
+  // «Приватная · 0» tab and opened first. Once the project has film services or windows,
+  // a direction is shown only if a service of it is in the project or it has windows;
+  // the direction with windows comes first.
+  const withWindows = new Set(fromWindows.map(value => measureScopeInfo(value).key));
+  const sizedKeys = new Set([...sized].map(value => measureScopeInfo(value).key));
+  const unique = Array.from(new Set(scopes));
+  if (!withWindows.size && !sizedKeys.size) return unique;
+  const kept = unique.filter(value => withWindows.has(value) || sizedKeys.has(value));
+  return [...kept.filter(value => withWindows.has(value)), ...kept.filter(value => !withWindows.has(value))];
 }
 function managerActiveMeasureScope(order) {
   state._managerActiveScopeByOrder = state._managerActiveScopeByOrder || {};
