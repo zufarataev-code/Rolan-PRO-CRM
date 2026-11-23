@@ -29320,10 +29320,29 @@ function projectDirectionsInUse(o) {
     // A per-sq-ft service holds its direction while it waits for sizes; a quantity
     // or work service holds it only through its row below.
     ...[o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id)).filter(offering => offering && serviceOfferingNeedsSizes(offering)).map(offeringServiceType),
-    // Removal of old film is a general work, it holds no direction.
-    ...(o.extraServices || []).filter(line => !line.autoWindowRemoval).map(line => line.serviceType || offeringServiceType(serviceOffering(line.offeringId)) || main),
+    // Removal of old film is a general work, it holds no direction; a work line without a
+    // direction of its own follows the main one and does not hold it either (Zakaz #908).
+    ...(o.extraServices || []).filter(line => !line.autoWindowRemoval).map(line => line.serviceType || offeringServiceType(serviceOffering(line.offeringId))),
     ...measureAllWindows(o).map(({ win }) => win.measureScope || main),
   ].filter(Boolean).map(value => measureScopeInfo(value).key));
+}
+/** What keeps a direction in the project, in words the manager can act on. */
+function projectDirectionHolders(o, direction) {
+  if (!o || !direction) return [];
+  const main = orderMeasureScope(o);
+  const key = value => measureScopeInfo(value).key;
+  direction = key(direction);
+  const out = [];
+  const windows = measureAllWindows(o).filter(({ win }) => key(win.measureScope || main) === direction);
+  if (windows.length) out.push(`в замере ${windows.length} окон этой услуги (${[...new Set(windows.map(({ room }) => room.name || 'комната'))].join(', ')})`);
+  [o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id))
+    .filter(offering => offering && serviceOfferingNeedsSizes(offering) && key(offeringServiceType(offering)) === direction)
+    .forEach(offering => out.push(`в проекте услуга «${offering.name || 'услуга'}»`));
+  (o.extraServices || []).filter(line => !line.autoWindowRemoval)
+    .filter(line => { const type = line.serviceType || offeringServiceType(serviceOffering(line.offeringId)); return type && key(type) === direction; })
+    .forEach(line => out.push(`в смете строка «${line.name || line.title || 'работа'}»`));
+  if (!out.length && direction === key(main) && CLOSED_PROJECT_STATUSES.includes(o.status)) out.push('это главная услуга закрытого проекта');
+  return [...new Set(out)];
 }
 function projectReleaseDirection(o, direction) {
   if (!o || !direction) return false;
@@ -29394,7 +29413,7 @@ function managerRemoveMeasureScope(oid, scopeKey) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const title = measureScopeInfo(scopeKey).short;
-  if (!projectReleaseDirection(o, scopeKey)) { alert(`«${title}» ещё используется в проекте: сначала уберите её услуги и окна.`); return; }
+  if (!projectReleaseDirection(o, scopeKey)) { alert(`«${title}» нельзя убрать: ${projectDirectionHolders(o, scopeKey).join('; ') || 'в проекте нет другой услуги с окнами, которая станет главной'}.`); return; }
   if (state._managerActiveScopeByOrder) delete state._managerActiveScopeByOrder[oid];
   projectEstimateMarkChanged(o, `Убрано направление «${title}»`);
   save(); preservePositionForNextRender(); render();
