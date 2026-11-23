@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { prisma } from "@/lib/db";
+import { getSpacesConfig, isValidStorageKey, presignUrl } from "@/lib/storage/spaces";
 
 type JsonObject = Record<string, unknown>;
 
@@ -165,20 +166,26 @@ export async function sendWhatsApp(input: {
   clientId?: string | null;
   actorUserId?: string | null;
   rawPayload?: Record<string, unknown> | null;
+  media?: Array<{ key: string; contentType: string }>;
 }) {
   const config = getTwilioConfig();
   if (!config.whatsappReady) throw new Error("Twilio WhatsApp sender is not configured on the CRM server.");
   const to = normalizePhone(input.to);
+  const media = (input.media ?? []).filter((item) => isValidStorageKey(item.key)).slice(0, 10);
   const body = input.body.trim();
   if (!/^\+\d{8,15}$/.test(to)) throw new Error("Client WhatsApp number must be in international format.");
-  if (!body || body.length > 1600) throw new Error("WhatsApp text must contain 1–1600 characters.");
+  if ((!body && !media.length) || body.length > 1600) throw new Error("WhatsApp text must contain 1–1600 characters.");
+  const spaces = media.length ? getSpacesConfig() : null;
+  if (media.length && !spaces) throw new Error("File storage is not configured on the CRM server.");
 
   const callbackUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/status` : undefined;
   const form = new URLSearchParams({
     To: twilioWhatsAppAddress(to),
     From: twilioWhatsAppAddress(config.whatsappFrom),
-    Body: body,
   });
+  if (body) form.set("Body", body);
+  // Twilio downloads each file once from a short-lived signed link to our storage.
+  if (spaces) media.forEach((item) => form.append("MediaUrl", presignUrl({ config: spaces, method: "GET", key: item.key, expiresSeconds: 3600 })));
   if (callbackUrl) form.set("StatusCallback", callbackUrl);
   const message = await twilioRequest(
     `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`,
@@ -188,6 +195,7 @@ export async function sendWhatsApp(input: {
   const sid = String(message.sid ?? "");
   const status = String(message.status ?? "queued");
   if (!sid) throw new Error("Twilio did not return a WhatsApp message SID.");
+  const payload = { ...(input.rawPayload ?? {}), channel: "whatsapp", ...(media.length ? { media } : {}) };
   await prisma.twilioMessage.upsert({
     where: { message_sid: sid },
     create: {
@@ -200,10 +208,10 @@ export async function sendWhatsApp(input: {
       legacy_order_id: input.orderId ?? null,
       legacy_client_id: input.clientId ?? null,
       actor_user_id: input.actorUserId ?? null,
-      raw_payload: input.rawPayload ? { ...input.rawPayload, channel: "whatsapp" } : { channel: "whatsapp" },
+      raw_payload: payload,
       sent_at: message.date_created ? new Date(String(message.date_created)) : new Date(),
     },
-    update: { status, raw_payload: input.rawPayload ? { ...input.rawPayload, channel: "whatsapp" } : { channel: "whatsapp" } },
+    update: { status, raw_payload: payload },
   });
   return { sid, status, to, channel: "whatsapp" };
 }
@@ -222,6 +230,12 @@ export async function listSmsMessages() {
     body: message.body,
     detail: twilioErrorDetail(message.status, message.error_code),
     kind: typeof asObject(message.raw_payload)?.kind === "string" ? String(asObject(message.raw_payload)?.kind) : null,
+    media: twilioMessageMediaList(message.raw_payload).map((item) => ({
+      contentType: item.contentType,
+      url: item.key
+        ? `/api/v1/files/view?key=${encodeURIComponent(item.key)}`
+        : `/api/v1/integrations/twilio/media?sid=${encodeURIComponent(message.message_sid)}&i=${item.index}`,
+    })),
     meta: { twilioSid: message.message_sid, from: message.from_number, to: message.to_number },
   }));
 }
@@ -316,11 +330,58 @@ export async function recordIncomingSms(params: Record<string, string>) {
       body: String(params.Body ?? "").slice(0, 1600),
       legacy_client_id: refs.clientId,
       legacy_order_id: refs.orderId,
-      raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) },
+      raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0), media: twilioInboundMedia(params) },
       sent_at: new Date(),
     },
-    update: { status: "received", raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0) } },
+    update: { status: "received", raw_payload: { channel, numMedia: Number(params.NumMedia ?? 0), media: twilioInboundMedia(params) } },
   });
+}
+
+/** Photos / PDFs a customer sent: Twilio media URLs (fetched later through the CRM with server credentials). */
+export function twilioInboundMedia(params: Record<string, string>) {
+  const count = Math.min(10, Math.max(0, Number(params.NumMedia ?? 0) || 0));
+  const media: Array<{ url: string; contentType: string }> = [];
+  for (let index = 0; index < count; index += 1) {
+    const url = String(params[`MediaUrl${index}`] ?? "");
+    if (!/^https:\/\/api\.twilio\.com\//.test(url)) continue;
+    media.push({ url, contentType: String(params[`MediaContentType${index}`] ?? "application/octet-stream").slice(0, 100) });
+  }
+  return media;
+}
+
+/** Media of one stored message, as the CRM may show it (no Twilio URLs leave the server). */
+export function twilioMessageMediaList(rawPayload: unknown) {
+  const media = asObject(rawPayload)?.media;
+  if (!Array.isArray(media)) return [];
+  return media
+    .map((item, index) => {
+      const value = asObject(item);
+      if (!value) return null;
+      const contentType = String(value.contentType ?? "application/octet-stream");
+      if (typeof value.key === "string") return { index, contentType, key: value.key };
+      if (typeof value.url === "string") return { index, contentType };
+      return null;
+    })
+    .filter((item): item is { index: number; contentType: string; key?: string } => Boolean(item));
+}
+
+/** Downloads an inbound Twilio media file with the server credentials (staff-only proxy). */
+export async function fetchTwilioMessageMedia(messageSid: string, index: number) {
+  const message = await prisma.twilioMessage.findUnique({ where: { message_sid: messageSid }, select: { raw_payload: true } });
+  const media = asObject(message?.raw_payload)?.media;
+  const item = Array.isArray(media) ? asObject(media[index]) : null;
+  const url = typeof item?.url === "string" ? item.url : "";
+  if (!/^https:\/\/api\.twilio\.com\//.test(url)) return null;
+  const config = getTwilioConfig();
+  const username = config.apiKeySid || config.accountSid;
+  const password = config.apiKeySecret || config.authToken;
+  if (!username || !password) return null;
+  const response = await fetch(url, {
+    headers: { Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` },
+    redirect: "follow",
+  });
+  if (!response.ok || !response.body) return null;
+  return { body: response.body, contentType: response.headers.get("content-type") || String(item?.contentType || "application/octet-stream") };
 }
 
 export async function updateMessageStatus(params: Record<string, string>) {

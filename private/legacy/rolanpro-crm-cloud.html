@@ -15569,7 +15569,7 @@ function renderWhatsAppPhoneThread(phone) {
   return items.map(x => {
     const mine = x.direction !== 'in';
     const who = !mine ? 'Клиент' : x.kind === 'whatsapp_bot' ? '🤖 Бот' : (getUser(x.by)?.name || 'Менеджер');
-    return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${mine ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border'}">${academyEsc(x.body || '')}<div class="text-[10px] mt-1 ${mine ? 'text-emerald-100' : 'text-slate-400'}">${academyEsc(who)} · ${fmtDateTime(x.at)}${x.status === 'failed' || x.status === 'undelivered' ? ' · не доставлено' : ''}</div></div></div>`;
+    return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${mine ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border'}">${academyEsc(x.body || '')}${messageMediaHtml(x, mine)}<div class="text-[10px] mt-1 ${mine ? 'text-emerald-100' : 'text-slate-400'}">${academyEsc(who)} · ${fmtDateTime(x.at)}${x.status === 'failed' || x.status === 'undelivered' ? ' · не доставлено' : ''}</div></div></div>`;
   }).join('');
 }
 function openWhatsAppPhoneThread(phone) {
@@ -15585,7 +15585,7 @@ function openWhatsAppPhoneThread(phone) {
         <div class="border-t bg-white p-4">
           <div id="whatsapp-phone-thread-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
           <textarea id="whatsapp-phone-thread-text" rows="3" class="w-full" placeholder="Ответ клиенту в WhatsApp…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendWhatsAppPhoneThreadMessage();}"></textarea>
-          <div class="flex items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
+          <div class="flex items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><label class="btn-ghost text-sm cursor-pointer" title="Фото, видео или PDF">📎 Файл<input type="file" accept="image/*,video/*,application/pdf" multiple class="hidden" onchange="whatsappThreadSendFiles(this)"></label><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
         </div>
       </div>
     </div>`;
@@ -15671,7 +15671,7 @@ function openInboundMessagesInbox() {
                 <div class="min-w-0"><div class="font-black text-slate-900">${message.channel === 'whatsapp' ? '💬' : '📱'} ${academyEsc(sender)}</div><div class="text-xs text-slate-500 mt-1">${channel}${order ? ` · ${academyEsc(order.number || '')}` : ' · заказ из прежней базы или без привязки'}</div></div>
                 <div class="text-xs text-slate-400 whitespace-nowrap">${fmtDateTime(message.at)}</div>
               </div>
-              <div class="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">${academyEsc(message.body || '')}</div>
+              <div class="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">${academyEsc(message.body || '')}</div>${messageMediaHtml(message)}
               ${order ? `<button class="btn-primary text-sm mt-3" onclick="openClientConversation('${order.id}','${message.channel === 'whatsapp' ? 'whatsapp' : 'sms'}')">Открыть весь диалог</button>` : message.channel === 'whatsapp' && whatsappThreadPhone(message) ? `<button class="btn-primary text-sm mt-3" onclick="openWhatsAppPhoneThread('${academyEsc(whatsappThreadPhone(message))}')">💬 Открыть переписку и ответить</button>` : `<div class="text-xs text-amber-700 mt-3">Сообщение можно прочитать здесь, но ответ привязать нельзя: исходного заказа уже нет в текущей базе.</div>`}
             </div>`;
           }).join('') : `<div class="card text-center text-gray-500">Входящих сообщений по вашим заказам пока нет.</div>`}
@@ -15679,6 +15679,54 @@ function openInboundMessagesInbox() {
       </div>
     </div>`;
   render();
+}
+// Owner, 2026-11-22: «обмениваться файлами по WhatsApp в CRM». Photos show inline,
+// PDFs and videos as a link; the 📎 button uploads to storage and sends in WhatsApp.
+function messageMediaHtml(message, light = false) {
+  const media = Array.isArray(message?.media) ? message.media : [];
+  if (!media.length) return '';
+  return `<div class="flex flex-wrap gap-2 mt-2">${media.map(item => {
+    const url = academyEsc(item.url || '');
+    const type = String(item.contentType || '');
+    if (type.startsWith('image/')) return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="фото" loading="lazy" style="max-width:220px;max-height:220px;border-radius:10px;display:block"></a>`;
+    const label = type === 'application/pdf' ? '📄 PDF' : type.startsWith('video/') ? '🎬 Видео' : '📎 Файл';
+    return `<a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-bold ${light ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}">${label} — открыть</a>`;
+  }).join('')}</div>`;
+}
+async function whatsappUploadFiles(fileList) {
+  const files = Array.from(fileList || []).slice(0, 10);
+  const media = [];
+  for (const file of files) {
+    const uploaded = await crmUploadMedia(file, 'whatsapp');
+    media.push({ key: uploaded.key, contentType: uploaded.mime });
+  }
+  return media;
+}
+async function sendWhatsAppFiles(inputEl, phone, context, onDone) {
+  const files = inputEl?.files;
+  if (!files?.length || !phone) return;
+  const caption = (context.captionEl?.value || '').trim();
+  try {
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-slate-50 text-slate-600'; context.statusEl.textContent = `Загружаю файлы: ${files.length}…`; }
+    const media = await whatsappUploadFiles(files);
+    await twilioApi('/messages', { method: 'POST', body: JSON.stringify({ to: phone, body: caption, channel: 'whatsapp', orderId: context.orderId || null, clientId: context.clientId || null, media }) });
+    if (context.captionEl) context.captionEl.value = '';
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-emerald-50 text-emerald-700'; context.statusEl.textContent = `Отправлено файлов: ${media.length}`; }
+    await syncTwilioMessages();
+    onDone?.();
+  } catch (e) {
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; context.statusEl.textContent = 'Файл не отправился: ' + (e.message || e); }
+  } finally {
+    if (inputEl) inputEl.value = '';
+  }
+}
+function clientConversationSendFiles(inputEl) {
+  const o = getOrder(state.clientConversationOrderId);
+  const c = getClient(o?.clientId);
+  sendWhatsAppFiles(inputEl, c?.whatsappPhone || c?.phone, { orderId: o?.id, clientId: c?.id, captionEl: document.getElementById('client-conversation-text'), statusEl: document.getElementById('client-conversation-notice') }, refreshClientConversationDialog);
+}
+function whatsappThreadSendFiles(inputEl) {
+  sendWhatsAppFiles(inputEl, state.whatsappThreadPhone, { captionEl: document.getElementById('whatsapp-phone-thread-text'), statusEl: document.getElementById('whatsapp-phone-thread-notice') }, refreshWhatsAppPhoneThread);
 }
 function clientConversationMessages(orderId) {
   return twilioRemoteMessages
@@ -15694,7 +15742,7 @@ function renderClientConversationMessages(orderId) {
     return `<div class="flex ${incoming ? 'justify-start' : 'justify-end'} mb-3">
       <div class="max-w-[82%] rounded-2xl px-4 py-3 ${incoming ? 'bg-white border border-slate-200 rounded-bl-md' : 'bg-blue-600 text-white rounded-br-md'} shadow-sm">
         <div class="text-[11px] font-bold ${incoming ? 'text-emerald-700' : 'text-blue-100'} mb-1">${x.channel === 'whatsapp' ? '💬' : '📱'} ${channel} · ${incoming ? 'клиент' : 'ROLANPRO'}</div>
-        <div class="text-sm whitespace-pre-wrap break-words">${academyEsc(x.body || '')}</div>
+        <div class="text-sm whitespace-pre-wrap break-words">${academyEsc(x.body || '')}</div>${messageMediaHtml(x, !incoming)}
         <div class="text-[10px] mt-2 ${incoming ? 'text-slate-400' : 'text-blue-100'}">${fmtDateTime(x.at)}${incoming ? '' : ' · ' + communicationStatusLabel(x.status)}</div>
       </div>
     </div>`;
@@ -15735,7 +15783,7 @@ function openClientConversation(orderId, preferredChannel = 'sms') {
         <div class="border-t bg-white p-4">
           <div id="client-conversation-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
           <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
-          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
+          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div>${channel === 'whatsapp' ? `<label class="btn-ghost text-sm cursor-pointer" title="Фото, видео или PDF — отправится в WhatsApp, текст из поля станет подписью">📎 Файл<input type="file" accept="image/*,video/*,application/pdf" multiple class="hidden" onchange="clientConversationSendFiles(this)"></label>` : ''}<button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
         </div>
       </div>
     </div>`;
