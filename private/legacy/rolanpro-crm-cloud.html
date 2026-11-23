@@ -43810,6 +43810,27 @@ function payrollPaidForPeriod(userId, startDate, endDate) {
   return Number((batches + legacy).toFixed(2));
 }
 
+// Owner, 2026-11-23: «когда выбираем период в зарплате — день, неделя, месяц — нужна
+// стрелка вперёд и назад, чтобы перемещала неделю назад либо вперёд». The arrows move
+// the chosen period by its own length: a day, a week, a month, or a custom span.
+function payrollShiftedRange(period, start, end, shift) {
+  if (!shift) return { start, end };
+  const from = new Date(start), to = new Date(end);
+  if (period === 'this_month' || period === 'last_month') {
+    const first = new Date(from.getFullYear(), from.getMonth() + shift, 1);
+    return { start: first, end: new Date(first.getFullYear(), first.getMonth() + 1, 0, 23, 59, 59, 999) };
+  }
+  const days = period === 'today' ? 1 : period === 'custom'
+    ? Math.max(1, Math.round((new Date(to.getFullYear(), to.getMonth(), to.getDate()) - new Date(from.getFullYear(), from.getMonth(), from.getDate())) / 86400000) + 1)
+    : 7;
+  from.setDate(from.getDate() + days * shift);
+  to.setDate(to.getDate() + days * shift);
+  return { start: from, end: to };
+}
+function payrollShiftPeriod(step) {
+  state.payrollShift = (Number(state.payrollShift) || 0) + step;
+  render();
+}
 function renderPayroll() {
   const u = currentUser();
   if (u.role !== 'owner' && u.role !== 'manager') return `<div class="card text-center text-gray-500">Доступ только для Owner/Manager</div>`;
@@ -43832,7 +43853,11 @@ function renderPayroll() {
   } else if (period === 'custom') {
     start = state.payrollStart ? new Date(state.payrollStart) : new Date(now.getFullYear(), now.getMonth(), 1);
     end = state.payrollEnd ? new Date(state.payrollEnd + 'T23:59:59') : now;
+  } else if (period === 'today') {
+    start = new Date(); start.setHours(0,0,0,0);
+    end = new Date(start); end.setHours(23,59,59,999);
   } else { start = new Date(now.getFullYear(), now.getMonth(), 1); end = now; }
+  ({ start, end } = payrollShiftedRange(period, start, end, state.payrollShift || 0));
 
   const users = db.users.filter(u => u.role !== 'owner' && u.active !== false);
   const payouts = users.map(u => {
@@ -43847,7 +43872,9 @@ function renderPayroll() {
   <div class="card mb-4">
     <div class="flex items-center gap-3 flex-wrap">
       <h3 class="font-semibold">💰 Зарплата к выплате</h3>
-      <select onchange="state.payrollPeriod=this.value; render();">
+      <button type="button" class="btn-ghost text-sm" title="Предыдущий период" aria-label="Предыдущий период" onclick="payrollShiftPeriod(-1)">◀</button>
+      <select onchange="state.payrollPeriod=this.value; state.payrollShift=0; render();">
+        <option value="today" ${period==='today'?'selected':''}>День</option>
         <option value="this_week" ${period==='this_week'?'selected':''}>Эта неделя</option>
         <option value="last_week" ${period==='last_week'?'selected':''}>Прошлая неделя</option>
         <option value="this_month" ${period==='this_month'?'selected':''}>Этот месяц</option>
@@ -43859,7 +43886,9 @@ function renderPayroll() {
         <span>→</span>
         <input type="date" value="${state.payrollEnd||''}" onchange="state.payrollEnd=this.value; render();">
       ` : ''}
+      <button type="button" class="btn-ghost text-sm" title="Следующий период" aria-label="Следующий период" onclick="payrollShiftPeriod(1)">▶</button>
       <span class="text-sm text-gray-600 ml-2">${fmtDate(start.toISOString())} — ${fmtDate(end.toISOString())}</span>
+      ${state.payrollShift ? `<button type="button" class="btn-ghost text-xs" onclick="state.payrollShift=0; render();">↺ к текущему</button>` : ''}
       <div class="flex-1"></div>
       <div class="text-2xl font-bold text-red-600">${fmtMoney(totalPayroll)}</div>
     </div>
