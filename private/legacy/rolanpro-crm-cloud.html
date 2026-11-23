@@ -30858,6 +30858,29 @@ function projectEstimateUpdateWindowPrice(oid, rid, wid, value) {
   save(); refreshProjectEstimateWorkspace(oid);
 }
 
+/** Client revenue of the project if every window sold at one price per sqft (per-window prices off). */
+function projectRevenueAtFlatPrice(o, perSqft) {
+  const copy = JSON.parse(JSON.stringify(o));
+  copy.priceOverridePerSqft = perSqft;
+  (copy.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => { win.pricePerSqft = null; }));
+  return orderRevenue(copy);
+}
+/** The owner types the project total; the film price per sqft follows it (Owner, 2026-11-22, Zakaz #908). */
+function projectEstimateSetTotal(oid, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const total = parseFloat(String(value).replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(total) || total < 0) { refreshProjectEstimateWorkspace(oid); return; }
+  const other = projectRevenueAtFlatPrice(o, 0);
+  const perSqftUnit = projectRevenueAtFlatPrice(o, 1) - other;
+  if (perSqftUnit <= 0) { alert('В проекте нет окон с размерами — цену за sqft не из чего посчитать.'); refreshProjectEstimateWorkspace(oid); return; }
+  if (total < other) { alert(`Итого не может быть меньше услуг без плёнки: ${fmtMoney(other)}.`); refreshProjectEstimateWorkspace(oid); return; }
+  const perSqft = Math.round((total - other) / perSqftUnit * 10000) / 10000;
+  (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => { win.pricePerSqft = null; }));
+  o.priceOverridePerSqft = perSqft;
+  projectEstimateMarkChanged(o, `Итого проекта ${fmtMoney(total)} → плёнка $${perSqft.toFixed(2)}/sqft`);
+  save(); refreshProjectEstimateWorkspace(oid);
+}
 function projectEstimateUpdateSetting(oid, field, value) {
   const o = getOrder(oid);
   if (!o) return;
@@ -31439,9 +31462,10 @@ function renderProjectEstimateWorkspace(o) {
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>${canSeeInternalEconomics ? '5. Параметры и себестоимость' : '3. Параметры цены'}</h4><div class="text-xs text-gray-500">${canSeeInternalEconomics ? 'Владелец видит внутренние расходы и прибыль.' : 'Менеджер назначает только цену продажи, которая попадёт в КП.'}</div></div></div>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
-        <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.01" value="${o.priceOverridePerSqft == null ? '' : Number(Number(o.priceOverridePerSqft).toFixed(2))}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        <div><label>Итого по проекту, $</label><input type="number" min="0" step="1" value="${Math.round(orderRevenue(o) * 100) / 100}" title="Введите итог — цена за sqft пересчитается сама" onchange="projectEstimateSetTotal('${o.id}',this.value)"></div>
         <div><label>Условия оплаты</label><select onchange="projectEstimateSetPaymentTerms('${o.id}',this.value)"><option value="deposit_before_work" ${(o.paymentTerms||'deposit_before_work')==='deposit_before_work'?'selected':''}>Аванс до производства</option><option value="after_completion" ${o.paymentTerms==='after_completion'?'selected':''}>Оплата после выполнения</option></select></div>
         ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div>` : ''}
       </div>
