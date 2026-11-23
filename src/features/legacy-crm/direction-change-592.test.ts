@@ -504,4 +504,27 @@ test('the server moves a locked project only for the owner or a manager the owne
   // Before the act a closed project stays open to its manager, as in the card.
   const installed = before({ status: 'installation_done' });
   assert.equal(prepareServiceSolutions(payload(installed), payload(move(installed)), false, ['m1']), null);
+  // But only to the project's own manager.
+  assert.notEqual(prepareServiceSolutions(payload(installed), payload(move(installed)), false, ['m2']), null, 'another manager cannot move it');
+  const theirs = before({ status: 'installation_done', managerId: 'm2', editAccess: { userId: 'm1', by: 'owner', until: later } });
+  assert.notEqual(prepareServiceSolutions(payload(theirs), payload(move(theirs)), false, ['m1']), null);
+});
+
+test('direct costs of the moved work follow it to the new direction', () => {
+  const ctx = sandbox();
+  const o: any = wizProject('e', {
+    extraExpenses: [
+      { id: 'x1', amount: 120, direction: 'solar_film' },
+      { id: 'x2', amount: 80, serviceId: 'direction:solar_film' },
+      { id: 'x3', amount: 50, serviceId: 'line:le' },
+      { id: 'x4', amount: 30 },
+    ],
+  });
+  o.measurements.rooms[0].windows[0].measureScope = 'solar_film';
+  ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
+  assert.equal(o.extraExpenses[0].direction, 'privacy_film');
+  assert.equal(o.extraExpenses[1].serviceId, 'direction:privacy_film');
+  assert.equal(o.extraExpenses[2].serviceId, 'line:le', 'a cost on a line keeps its line');
+  assert.equal(o.extraExpenses[3].direction, undefined, 'a cost on the whole project stays there');
+  assert.deepEqual(o.extraExpenses.map((e: any) => e.amount), [120, 80, 50, 30]);
 });

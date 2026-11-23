@@ -5084,6 +5084,12 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
   }
   o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
   o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+  // Direct costs of the moved work go with it, so the direction totals still show them.
+  (o.extraExpenses || []).forEach(expense => {
+    if (!expense || typeof expense !== 'object') return;
+    if (expense.serviceId === fromId) expense.serviceId = toId;
+    if (!stays && expense.direction === fromKey) expense.direction = toKey;
+  });
   if (closed) {
     // Finished work keeps its dates, crew and progress under the new direction.
     const rekey = key => (key === fromKey ? toKey : key === fromId ? toId : key);

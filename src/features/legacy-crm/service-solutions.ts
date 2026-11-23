@@ -206,13 +206,17 @@ const PROJECT_EDIT_LOCKED_STATUSES = ['act_signed', 'payment_received', 'complet
 /**
  * #592: whether this save may move the project's work to another direction with its
  * crew, dates, progress and approvals. Only a closed project or a TintWiz import moves
- * that way, and a locked project only for the owner or a manager the owner let in.
+ * that way, only for the owner or the project's own manager, and a locked project
+ * only for the owner or that manager with the owner's grant.
  * The grant is read from the saved project, never from the incoming one.
  */
 export function directionMoveAllowed(before: Row, owner: boolean, managerIds: readonly string[], now = Date.now()): boolean {
   const status = String(before.status);
   if (!CLOSED_PROJECT_STATUSES.includes(status) && before._importSource !== 'wiz') return false;
-  if (owner || !PROJECT_EDIT_LOCKED_STATUSES.includes(status)) return true;
+  if (owner) return true;
+  // A manager moves only his own project (orderUserOwns on the card).
+  if (!managerIds.includes(String(before.managerId))) return false;
+  if (!PROJECT_EDIT_LOCKED_STATUSES.includes(status)) return true;
   const grant = before.editAccess;
   return !!grant && managerIds.includes(String(grant.userId)) && new Date(String(grant.until)).getTime() > now;
 }
