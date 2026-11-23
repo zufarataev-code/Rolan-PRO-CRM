@@ -9,6 +9,7 @@ import { CALENDAR_KINDS, calendarDays, dayParts, rangeLabel, shiftAnchor, todayK
 import type { CrmCalendar, CrmCalendarEvent } from "@/features/crm-shell/types";
 import { LoadError, LoadingBlock, PageHeader } from "@/features/crm-shell/ui";
 import { useCrmData } from "@/features/crm-shell/use-crm-data";
+import { useViewerToday } from "@/features/crm-shell/use-viewer-today";
 import { cn } from "@/lib/utils";
 
 function EventCard({ event, compact }: { event: CrmCalendarEvent; compact?: boolean }) {
@@ -57,9 +58,23 @@ function DayList({ events, empty }: { events: CrmCalendarEvent[]; empty: string 
 }
 
 export default function CrmCalendarPage() {
+  // The week on the screen is the viewer's week, so it is drawn only in the browser.
+  const viewerToday = useViewerToday();
+  if (!viewerToday) {
+    return (
+      <>
+        <PageHeader title="Календарь" loading />
+        <LoadingBlock />
+      </>
+    );
+  }
+  return <CalendarScreen initialToday={viewerToday} />;
+}
+
+function CalendarScreen({ initialToday }: { initialToday: string }) {
   const [mode, setMode] = useState<CalendarMode>("week");
-  const [anchor, setAnchor] = useState(() => todayKey());
-  const [selected, setSelected] = useState(() => todayKey());
+  const [anchor, setAnchor] = useState(initialToday);
+  const [selected, setSelected] = useState(initialToday);
   const [kind, setKind] = useState("all");
   const days = useMemo(() => calendarDays(anchor, mode), [anchor, mode]);
   const { data, error, loading, reload } = useCrmData<CrmCalendar>(`/api/v1/crm-ui/calendar?from=${days[0]}&to=${days[days.length - 1]}`);
