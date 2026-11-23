@@ -83,6 +83,13 @@ async function main() {
         await context.addCookies((await context.cookies()).map((cookie: any) => ({...cookie, secure: false})));
       }
 
+      // The one-time «Добавить CRM на телефон?» offer follows the first sign-in; a person answers «Не сейчас».
+      const installOffer = page.getByRole('dialog', {name: 'Установка Rolan PRO'});
+      if (await installOffer.waitFor({state: 'visible', timeout: 5_000}).then(() => true, () => false)) {
+        await installOffer.getByRole('button', {name: 'Не сейчас'}).click();
+        await installOffer.waitFor({state: 'hidden'});
+      }
+
       const projects = await (await context.request.get(base + '/api/v1/crm-ui/projects')).json().catch(() => null);
       const firstProject = projects?.data?.columns?.flatMap?.((column: any) => column.cards || [])?.[0]?.id;
       const screens: Array<[string, string]> = [['home', '/crm'], ['projects', '/crm/projects'], ['leads', '/crm/leads'], ['calendar', '/crm/calendar']];
@@ -96,6 +103,7 @@ async function main() {
           const result = await sideways(page);
           if (result.scroll > result.inner || result.offenders.length) failures.push(`${name}@${label} scrolls sideways: ${JSON.stringify(result)}`);
         }
+        if (await installOffer.count()) failures.push(`${name}@${label}: the one-time install offer came back after «Не сейчас»`);
         await shot(page, `${name}-${label}`);
       }
       // The new menu still has a way back to the previous interface and a way out.
