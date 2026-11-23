@@ -11,6 +11,14 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - `app/api/public/files` (PUT/GET по подписи), `upload-url` и `files/view` переключаются на диск, `sendWhatsApp` отдаёт Twilio абсолютную подписанную ссылку (`TWILIO_WEBHOOK_BASE_URL`/`APP_URL`). Пульт владельца: «Файлы хранятся на диске сервера». Если ключи Spaces появятся — всё снова идёт в Spaces.
 - Отдельно: ручные WhatsApp 22.11 «привет» — Twilio 63016 (вне 24-часового окна клиента нужен утверждённый шаблон).
 - Тесты: `src/lib/storage/local.test.ts`; `whatsapp-files.test.ts` под новую строку.
+## 2026-11-23 — Один «Итог проекта» в расчёте КП и в карточке; старые согласования не обнуляют сумму (Claude)
+
+- Owner, 2026-11-23 06:49/07:07, Zakaz #908: в «Расчёт проекта перед КП» нет возможности написать сумму и откорректировать; «сумма проекта равна нулю»; непонятно, как выйти — «Сохранить черновик».
+- Branch `claude/edit-total`, based on `origin/main` `bfcf23a`.
+- Снято поле из #608 (`projectEstimateSetTotal` в html, «Итого по проекту» в разделе 5) — второй механизм рядом с уже существующим ручным итогом (2026-11-13, `projectSetTotal`). Теперь везде один: `projectTotalEditHtml` внизу окна расчёта (`projectEstimateSetTotal`/`ResetTotal` = `projectSetTotal`/`projectResetTotal` + обновление окна) и в «Услугах проекта» кабинета.
+- `projectScopeApprovalsGateMoney`: согласования объёма (`serviceScopeApprovals`) отсекают услуги из выручки и итога только когда проект в производстве (`projectCardInProduction`). У #908 они остались с прошлого принятого КП, проект вернулся на замер — карточка показывала $2 079, расчёт $0.
+- Кнопка «Сохранить черновик» в окне расчёта → «Закрыть (всё сохранено)»: окно сохраняет само.
+- Тесты: `project-total-removal.test.ts` (+2, статус производства в тесте согласований); `project-total-price.test.ts` удалён вместе с дублем.
 
 ## 2026-11-22 — API-ключ CRM для бота-ассистента (Claude)
 
