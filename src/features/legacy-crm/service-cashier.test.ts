@@ -30,6 +30,8 @@ function load(role = 'owner') {
     console,
     ORDER_PRIMARY_SERVICES: services,
     CLOSED_PROJECT_STATUSES: ['completed'],
+    measureScopeInfo: (key: string) => ({ key }),
+    orderMeasureScope: (order: Row) => order.measureScope || order.serviceType,
     primaryServiceInfo: (id: string) => services.find(item => item.id === id),
     canonicalCatalogCategory: (value: string) => value,
     currentUser: () => ({ role }),

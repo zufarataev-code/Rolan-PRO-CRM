@@ -681,7 +681,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       </div>` : ''}
     </div>`;
   };
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); const directionKey = projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) }).key; return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><div class="project-service-pending-main"><div><b>${academyEsc(offering.name)}</b><span>Материал: ${film ? academyEsc(catalogLabel(film)) : 'не выбран'} · выберите способ расчёта</span></div>${o.offeringId !== offering.id && edit ? `<button class="btn-ghost text-xs text-red-600" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>${edit ? `<div class="project-service-pending-actions"><button class="btn-primary text-xs" onclick="projectCardEdit(()=>projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick'))">⚡ Быстро · общая площадь</button><button class="btn-ghost text-xs" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button></div>` : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); const directionKey = projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) }).key; return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><div class="project-service-pending-main"><div><b>${academyEsc(offering.name)}</b><span>Материал: ${film ? academyEsc(catalogLabel(film)) : 'не выбран'} · выберите способ расчёта</span></div>${edit ? `<button class="btn-ghost text-xs text-red-600" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>${edit ? `<div class="project-service-pending-actions"><button class="btn-primary text-xs" onclick="projectCardEdit(()=>projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick'))">⚡ Быстро · общая площадь</button><button class="btn-ghost text-xs" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button></div>` : ''}</div>`; };
   const directionCards = directions.map(direction => {
     const directionLines = direction.lines;
     const excluded = projectDirectionExcluded(o,direction.key);
@@ -1319,7 +1319,7 @@ function projectDirectionRemoveLine(oid, directionKey, lineKey) {
     const count = line.windows.length;
     if (!confirm(`Убрать «${line.name}» из проекта? Размеры ${count} ${projectWindowsWord(count)} останутся в замере — им можно выбрать другую услугу.`)) return;
     measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
-    o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+    projectForgetOffering(o, line.offeringId);
     syncProjectIncludedServices(o);
     projectPrunePlans(o);
     projectCardSyncCrew(o);
@@ -1333,7 +1333,7 @@ function projectDirectionRemoveLine(oid, directionKey, lineKey) {
 }
 function projectDirectionRemovePending(oid, directionKey, offeringId) {
   const o = getOrder(oid);
-  if (!o || o.offeringId === offeringId) return;
+  if (!o) return;
   if (!confirm(`Убрать «${serviceOffering(offeringId)?.name || 'услугу'}» из проекта?`)) return;
   o.extraServices = (o.extraServices || []).filter(line => !(line.quickProjectLine && line.offeringId === offeringId));
   if (o.offeringMeasurementModes) delete o.offeringMeasurementModes[offeringId];
@@ -1371,7 +1371,7 @@ function projectServiceMeasurementModeHtml(o, offering, directionKey, edit) {
     </div><div class="rp-service-mode-note">${selected ? `Материал: ${academyEsc(catalogLabel(selected))}. ` : ''}Быстрый расчёт хранится как строка этой услуги и остаётся в проекте, даже если другая услуга рассчитана подробно.</div>` : '';
   const detailedEditor = mode === 'detailed' ? `<div class="rp-service-mode-note"><b>${windows.length} ${projectWindowsWord(windows.length)} · ${area.toFixed(2)} sq ft.</b> Плёнку можно задать для всей услуги, комнаты или отдельного окна.</div><button type="button" class="btn-ghost w-full" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">${windows.length ? 'Открыть комнаты и окна' : '+ Добавить комнату и окна'}</button>` : '';
   return `<section class="rp-service-mode" data-offering-mode="${academyEsc(offering.id)}">
-    <div class="rp-service-mode-head"><div><b>${academyEsc(offering.name)}</b><span>${mode === 'quick' ? 'Быстрый расчёт по общей площади' : mode === 'detailed' ? 'Подробный замер по комнатам и окнам' : 'Сначала выберите способ расчёта'}</span></div>${o.offeringId !== offering.id && edit ? `<button type="button" class="rp-dirwin-remove" onclick="projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')" aria-label="Убрать ${academyEsc(offering.name)}">✕</button>` : ''}</div>
+    <div class="rp-service-mode-head"><div><b>${academyEsc(offering.name)}</b><span>${mode === 'quick' ? 'Быстрый расчёт по общей площади' : mode === 'detailed' ? 'Подробный замер по комнатам и окнам' : 'Сначала выберите способ расчёта'}</span></div>${edit ? `<button type="button" class="rp-dirwin-remove" onclick="projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')" aria-label="Убрать ${academyEsc(offering.name)}">✕</button>` : ''}</div>
     <div class="rp-service-mode-switch">
       <button type="button" class="${mode === 'quick' ? 'on' : ''}" aria-pressed="${mode === 'quick'}" onclick="projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick')">⚡ Быстро · общая площадь</button>
       <button type="button" class="${mode === 'detailed' ? 'on' : ''}" aria-pressed="${mode === 'detailed'}" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button>
@@ -1392,7 +1392,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
   const removeBtn = (onclick, name) => (edit && step === 'services' ? `<button type="button" class="rp-dirwin-remove" onclick="${onclick}" aria-label="Убрать ${academyEsc(name)}" title="Убрать из проекта">✕</button>` : '');
   const lineRemove = line => (projectDirectionLineRemovable(o, line) ? removeBtn(`projectDirectionRemoveLine('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}')`, line.name) : '');
   const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div>${lineRemove(line)}</div>`;
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}${o.offeringId !== offering.id ? removeBtn(`projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')`, offering.name) : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}${removeBtn(`projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')`, offering.name)}</div>`; };
   const sizedOfferings = projectSelectedSizedOfferings(o, directionKey);
   const sizedIds = new Set(sizedOfferings.map(offering => offering.id));
   let body = '';
@@ -1862,13 +1862,16 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
   const checked = new Set([...document.querySelectorAll('[data-offering-window]')].filter(box => box.checked).map(box => box.dataset.offeringWindow));
   const film = projectOfferingCatalogId(o, offering.id);
   projectCardEdit(() => {
+    const left = new Set();
     offeringWindowCandidates(o, offering).forEach(({ win }) => {
       if (!checked.has(win.id) || win.offeringId === offering.id) return;
+      left.add(win.measureScope || o.serviceType);
       win.measureScope = offeringServiceType(offering) || win.measureScope;
       applyWindowOffering(win, offering);
       if (film && !win.catalogId) { win.catalogId = film; win.filmType = catalogLabel(getCatalogItem(film)); }
     });
     o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+    left.forEach(scope => { if (scope && scope !== offeringServiceType(offering)) projectReleaseDirection(o, scope); });
     projectEstimateMarkChanged(o, `Услуга «${offering.name}» поставлена на окна: ${checked.size}`);
     save();
   });

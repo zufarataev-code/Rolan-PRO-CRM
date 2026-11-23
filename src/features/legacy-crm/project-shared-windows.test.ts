@@ -7,7 +7,7 @@ const stages = readFileSync("private/legacy/production-stages.js", "utf8");
 
 test("a sized service takes free windows of any direction when its own direction has none", () => {
   assert.match(html, /const free = measureAllWindows\(o\)\.filter\(\(\{ win \}\) => !win\.offeringId\);/);
-  assert.match(html, /\(own\.length \? own : free\)\.forEach\(\(\{ win \}\) => \{\s*win\.measureScope = direction;\s*applyWindowOffering\(win, offering\);/);
+  assert.match(html, /\(own\.length \? own : free\)\.forEach\(\(\{ win \}\) => \{\s*left\.add\(win\.measureScope \|\| o\.serviceType\);\s*win\.measureScope = direction;\s*applyWindowOffering\(win, offering\);/);
 });
 
 test("the window picker offers every window without a film service and moves it to the service direction", () => {

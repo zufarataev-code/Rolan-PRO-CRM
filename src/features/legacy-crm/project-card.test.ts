@@ -37,6 +37,9 @@ function load(role = 'owner') {
   const context: any = vm.createContext({
     db, console, state: { currentUserId: 'u' },
     ORDER_PRIMARY_SERVICES: services,
+    CLOSED_PROJECT_STATUSES: ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'],
+    measureScopeInfo: (key: string) => ({ key }),
+    orderMeasureScope: (o: Row) => o.measureScope || o.serviceType,
     primaryServiceInfo: (id: string) => services.find(item => item.id === id),
     canonicalCatalogCategory: (value: string) => value,
     currentUser: () => ({ role }),
@@ -110,10 +113,10 @@ test('while priced, the card shows services with quantity and price only; a per-
   assert.match(out, /onclick="openProjectDirectionPicker\('o'\)">\+ Направление \/ услуга</);
   assert.match(out, /Клиенту \$720\.00/);
   assert.match(out, /Материал \$0\.00 · работа \$280\.00/);
-  // The incoming request cannot be removed from its own project.
+  // Owner, 2026-11-22 (Zakaz #908): the incoming request is removed like any other service.
   const own = project();
   own.measurements.rooms[0].windows = [];
-  assert.doesNotMatch(c.renderProjectCardServices(own, { money: true, manage: true }), /projectCardRemovePending\('o','a1'\)/);
+  assert.match(c.renderProjectCardServices(own, { money: true, manage: true }), /projectCardRemovePending\('o','a1'\)/);
 });
 
 test('in production each row gets its specialist and date; the schedule is built from the rows', () => {
