@@ -291,8 +291,12 @@ function crmShellTasks(user) {
     const hasTime = timeMatch && !(timeMatch[1] === '00' && timeMatch[2] === '00');
     let time = '';
     if (hasTime) {
-      const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(due);
-      const at = zoned ? new Date(due) : null;
+      // Same rule as taskDueDateKey: older call/follow-up tasks are UTC with the "Z" dropped.
+      const legacyUtc = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(due)
+        && (/^📞 Перезвонить:/.test(t.title || '') || /^AI follow-up:/.test(t.title || ''));
+      const stamp = legacyUtc ? `${due}Z` : due;
+      const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(stamp);
+      const at = zoned ? new Date(stamp) : null;
       time = at && Number.isFinite(at.getTime()) ? `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}` : `${timeMatch[1]}:${timeMatch[2]}`;
     }
     const team = (t.teamIds || []).map(name).filter(Boolean);
