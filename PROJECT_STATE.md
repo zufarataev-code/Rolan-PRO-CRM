@@ -8,6 +8,14 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Branch `claude/payroll-period-arrows`, based on `origin/main`.
 - `renderPayroll`: ◀ / ▶ вокруг выбора периода, `state.payrollShift`; `payrollShiftedRange` сдвигает на длину периода (день, 7 дней, целый месяц, длина своего периода). Новый пункт «День». Смена периода сбрасывает сдвиг, «↺ к текущему» возвращает.
 - Тест: `payroll-period-arrows.test.ts`.
+## 2026-11-23 — Один «Итог проекта» в расчёте КП и в карточке; старые согласования не обнуляют сумму (Claude)
+
+- Owner, 2026-11-23 06:49/07:07, Zakaz #908: в «Расчёт проекта перед КП» нет возможности написать сумму и откорректировать; «сумма проекта равна нулю»; непонятно, как выйти — «Сохранить черновик».
+- Branch `claude/edit-total`, based on `origin/main` `bfcf23a`.
+- Снято поле из #608 (`projectEstimateSetTotal` в html, «Итого по проекту» в разделе 5) — второй механизм рядом с уже существующим ручным итогом (2026-11-13, `projectSetTotal`). Теперь везде один: `projectTotalEditHtml` внизу окна расчёта (`projectEstimateSetTotal`/`ResetTotal` = `projectSetTotal`/`projectResetTotal` + обновление окна) и в «Услугах проекта» кабинета.
+- `projectScopeApprovalsGateMoney`: согласования объёма (`serviceScopeApprovals`) отсекают услуги из выручки и итога только когда проект в производстве (`projectCardInProduction`). У #908 они остались с прошлого принятого КП, проект вернулся на замер — карточка показывала $2 079, расчёт $0.
+- Кнопка «Сохранить черновик» в окне расчёта → «Закрыть (всё сохранено)»: окно сохраняет само.
+- Тесты: `project-total-removal.test.ts` (+2, статус производства в тесте согласований); `project-total-price.test.ts` удалён вместе с дублем.
 
 ## 2026-11-22 — API-ключ CRM для бота-ассистента (Claude)
 

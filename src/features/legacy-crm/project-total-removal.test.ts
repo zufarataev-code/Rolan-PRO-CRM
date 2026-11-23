@@ -48,6 +48,7 @@ function loadTotal(role = 'owner') {
   const ctx: Row = {
     db: { settings: { complexityCoefs: { standard: 1 }, removalPricePerSqft: 2.5 } }, alerts, order, win, removal, silicone,
     CLOSED_PROJECT_STATUSES: ['completed'],
+    projectCardInProduction: (item: Row) => ['installation_scheduled', 'completed'].includes(item?.status),
     getOrder: () => order, currentUser: () => ({ role }), orderUserCanSeeMoney: () => true,
     measureAllWindows: () => [{ win }],
     windowRetailPrice: (item: Row) => item.area * (item.pricePerSqft ?? 9),
@@ -64,7 +65,7 @@ function loadTotal(role = 'owner') {
   ctx.orderRevenue = () => ctx.projectLines().reduce((sum: number, line: Row) => sum + line.price, 0);
   vm.createContext(ctx);
   vm.runInContext(fn(html, 'projectServicePriceRange') + fn(html, 'removalPricePerSqft')
-    + ['projectLineUnitPrice', 'projectLineListPrice', 'projectApplyLineUnitPrice', 'projectTotalAdjustableLines', 'projectTotalIsManual', 'projectWindowRate', 'projectScaleLinePrice', 'projectSetTotal', 'projectResetTotal'].map(name => fn(stages, name)).join(''), ctx);
+    + ['projectScopeApprovalsGateMoney', 'projectLineUnitPrice', 'projectLineListPrice', 'projectApplyLineUnitPrice', 'projectTotalAdjustableLines', 'projectTotalIsManual', 'projectWindowRate', 'projectScaleLinePrice', 'projectSetTotal', 'projectResetTotal'].map(name => fn(stages, name)).join(''), ctx);
   return ctx;
 }
 
@@ -236,6 +237,7 @@ test('windows of one service keep their own rates through a manual total and its
 
 test('services waiting for scope approval are not repriced by the total', () => {
   const ctx = loadTotal();
+  ctx.order.status = 'installation_scheduled';
   ctx.order.serviceScopeApprovals = ['w'];
   const all = ctx.projectLines;
   ctx.orderRevenue = () => all().filter((line: Row) => line.key === 'w').reduce((sum: number, line: Row) => sum + line.price, 0);
@@ -273,4 +275,23 @@ test('a manager cannot set the total for quick rows or measured windows', () => 
   ctx.projectLines = () => [{ key: 'w', kind: 'windows', name: 'Black Silver', offeringId: 'film', qty: 20, price: a.area * a.pricePerSqft + b.area * b.pricePerSqft, windows: [a, b], sources: [] }];
   assert.equal(vm.runInContext("projectSetTotal('o','250')", ctx), false);
   assert.deepEqual([a.pricePerSqft, b.pricePerSqft], [9, 20]);
+});
+
+// Owner, 2026-11-23, Zakaz #908: approvals left from an earlier accepted proposal made the
+// estimate total $0 while the card showed $2 079. Before the client accepts, every service counts.
+test('before the proposal is accepted, old scope approvals do not hide services from the total', () => {
+  const ctx = loadTotal();
+  ctx.order.serviceScopeApprovals = [];
+  assert.equal(vm.runInContext('projectTotalAdjustableLines(order).length', ctx), 3);
+  assert.equal(vm.runInContext("projectSetTotal('o','1250')", ctx), true);
+  assert.equal(Math.round(ctx.orderRevenue() * 100) / 100, 1250);
+});
+
+test('the estimate window and the project card edit the same total', () => {
+  const cabinet = readFileSync('private/legacy/project-cabinet.js', 'utf8');
+  assert.match(cabinet, /data-cabinet-total>\$\{projectTotalEditHtml\(o\)\}/);
+  assert.match(html, /projectTotalEditHtml\(o\)\.replace\(\/projectCard\(Set\|Reset\)Total/);
+  assert.match(fn(stages, 'projectEstimateSetTotal'), /projectSetTotal\(oid, value\);\s*refreshProjectEstimateWorkspace\(oid\);/);
+  assert.match(fn(stages, 'orderRevenue'), /if \(projectScopeApprovalsGateMoney\(o\)\)/);
+  assert.match(html, /Закрыть \(всё сохранено\)/);
 });
