@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
 import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
-import type { CrmCalendar, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
+import type { CrmCalendar, CrmClients, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
 const script = new vm.Script(source);
@@ -77,6 +77,19 @@ test("the calendar is the working calendar's events, with consultations booked f
   assert.deepEqual([booked?.kind, booked?.day, booked?.projectId, booked?.address], ["consultation", "2026-04-26", "", "Glendale, CA, 5 Lead St"]);
   const wide = runCrmEngine<CrmCalendar>(payload, owner, { model: "calendar", from: "2026-01-01", to: "2026-12-31" }, script);
   assert.deepEqual([wide.from, wide.to], ["2026-01-01", "2026-01-07"], "a range longer than two months is cut to a week");
+});
+
+test("clients are the working «Клиенты» list: own projects, money and addresses; a manager sees only clients of their projects", () => {
+  const all = runCrmEngine<CrmClients>(payload, owner, { model: "clients" }, script);
+  assert.deepEqual(all.counts, { all: 4, b2c: 2, b2b: 2, regular: 0 });
+  assert.deepEqual(all.clients.map((client) => client.id), ["c2", "c1", "c3", "c4"], "the latest project first, a client without projects last");
+  const acme = all.clients.find((client) => client.id === "c1");
+  assert.deepEqual([acme?.b2b, acme?.projects, acme?.addresses, Math.round(acme?.debt ?? 0)], [true, 1, 1, 3236]);
+  assert.deepEqual(acme?.recent, [{ id: "o1", number: "R-2604-001", status: "Монтаж назначен" }]);
+  assert.equal(all.clients.find((client) => client.id === "c3")?.referredBy, "Acme Business Tower");
+  assert.ok(all.clients.find((client) => client.id === "c2")?.search.includes("santa monica"), "the search box finds a client by address");
+  const mine = runCrmEngine<CrmClients>(payload, { legacyUserIds: ["u_m1"], role: "manager" }, { model: "clients" }, script);
+  assert.deepEqual(mine.clients.map((client) => client.id).sort(), ["c1", "c3"]);
 });
 
 test("no CRM card of an office role — no data", () => {

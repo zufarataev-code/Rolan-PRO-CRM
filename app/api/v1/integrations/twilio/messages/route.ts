@@ -26,10 +26,21 @@ export async function POST(request: NextRequest) {
       orderId: typeof body.orderId === "string" ? body.orderId : null,
       clientId: typeof body.clientId === "string" ? body.clientId : null,
       actorUserId: auth.session.user.user_id,
+      ...(channel === "whatsapp" ? { media: whatsappMedia(body.media) } : {}),
     });
     return apiSuccess(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Twilio request failed.";
     return apiError(502, "twilio_send_failed", message);
   }
+}
+
+/** Files attached in the CRM: storage keys from /api/v1/files/upload-url. */
+function whatsappMedia(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item.key === "string"))
+    .map((item) => ({ key: String(item.key), contentType: String(item.contentType || "application/octet-stream") }))
+    .slice(0, 10);
 }

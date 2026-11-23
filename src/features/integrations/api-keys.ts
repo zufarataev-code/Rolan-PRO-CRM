@@ -8,7 +8,9 @@ import { prisma } from "@/lib/db";
  * SHA-256 hash, so a database copy does not reveal it.
  */
 export const INTEGRATION_KEY_PREFIX = "rpk_";
-export const INTEGRATIONS = ["google_ads"] as const;
+// Owner, 2026-11-22 21:55: «дай API ключ нашей CRM для бота-ассистента… полный доступ».
+// The assistant key acts as the owner who issued it, on every /api/v1 route.
+export const INTEGRATIONS = ["google_ads", "assistant"] as const;
 export type IntegrationName = (typeof INTEGRATIONS)[number];
 
 export function isIntegrationName(value: unknown): value is IntegrationName {
@@ -68,4 +70,11 @@ export async function verifyIntegrationKey(integration: IntegrationName, key: st
   if (!timingSafeEqual(Buffer.from(row.key_hash, "utf8"), Buffer.from(hash, "utf8"))) return false;
   await prisma.integrationApiKey.update({ where: { key_id: row.key_id }, data: { last_used_at: new Date() } });
   return true;
+}
+
+/** The owner an assistant key acts for, or null (wrong, revoked, or the owner is gone). */
+export async function assistantKeyOwnerId(key: string) {
+  if (!(await verifyIntegrationKey("assistant", key))) return null;
+  const row = await prisma.integrationApiKey.findUnique({ where: { key_hash: hashIntegrationKey(key) }, select: { created_by: true } });
+  return row?.created_by ?? null;
 }

@@ -50,7 +50,7 @@ test("planned expenses do not become cash movements automatically", () => {
     /financeAllRows\(\)[\s\S]*financeManualRows\(\), \.\.\.financeSystemRows\(\)/,
   );
   assert.doesNotMatch(html, /source: 'opex'/);
-  assert.match(html, /actualExpenses = \(o\.extraExpenses \|\| \[\]\)\.filter\(e => e\.actual === true \|\| e\.paid === true \|\| e\.paidAt\)/);
+  assert.match(html, /allActual = \(o\.extraExpenses \|\| \[\]\)\.filter\(e => e\.actual === true \|\| e\.paid === true \|\| e\.paidAt\)/);
 });
 
 test("legacy tracker import is limited to financial records", () => {

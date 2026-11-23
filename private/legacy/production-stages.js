@@ -113,6 +113,16 @@ function projectStagesHtml(o,key) {
 }
 
 
+// #577 follow-up (Codex review): a collapsed staged service still shows each stage
+// with its status and the same «Начать»/«Выполнено» button as the open card, so a
+// worker does not have to expand every service to move a stage.
+function projectStagesCompactHtml(o,key) {
+  const stages=projectStages(o,key);
+  if(!stages.length||(!projectScopeApproved(o,key)&&projectCardInProduction(o)))return '';
+  const manage=projectCardCanPlan(o),me=currentUser()?.id,live=PROJECT_SCHEDULED_STATUSES.includes(o.status);
+  return `<div class="project-service-progress-inline" data-stages-compact>Этапы${stages.map(s=>`<span class="flex flex-wrap items-center gap-1" data-stage-id="${s.id}"><span class="tag">${academyEsc(s.title)} · ${s.status==='done'?'✓ Выполнен':s.status==='in_progress'?'В работе':'Запланирован'}</span>${s.status!=='done'&&live&&(manage||s.installerIds.includes(me))?`<button class="btn-ghost" onclick="projectSetStageProgress('${o.id}','${s.id}','${s.status==='planned'?'in_progress':'done'}')">${s.status==='planned'?'Начать':'Выполнено'}</button>`:''}</span>`).join('')}</div>`;
+}
+
 function orderInstallerPayoutForUser(o, userId) {
   if (projectStages(o).length && getUser(userId)?.payConfig?.type === 'per_sqft') return projectStages(o).reduce((sum,s) => sum + projectStageEmployeeAmount(o,s,userId),0) * installerSeniorFactor(getUser(userId)) + orderInstallerPayoutForUser(projectStageUnstagedOrder(o),userId);
   const historicalUser = getUser(userId);
@@ -368,6 +378,7 @@ function projectServiceProgressCell(o, line, user = currentUser()) {
 }
 
 function projectSetServiceProgress(oid, key, status) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (projectStages(o,key).length) return alert('Отметьте выполнение каждого этапа услуги.');
   const user = currentUser();
@@ -610,9 +621,15 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   const directions = projectDirectionGroups(o, lines, pending);
   const production = projectCardInProduction(o);
   const plan = production && manage && money && PROJECT_PLANNING_STATUSES.includes(o.status);
-  const edit = money && !CLOSED_PROJECT_STATUSES.includes(o.status);
+  // Owner, 2026-11-22: «не могу удалить ту или иную услугу, редактировать — непонятно как».
+  // The owner corrects a closed project right in the card (as in «Редактировать проект»).
+  const edit = money && (!CLOSED_PROJECT_STATUSES.includes(o.status) || currentUser()?.role === 'owner');
+  const removable = typeof projectEditorCanEdit === 'function' ? projectEditorCanEdit(o) : edit;
   const tracking = PROJECT_SCHEDULED_STATUSES.includes(o.status) || CLOSED_PROJECT_STATUSES.includes(o.status);
-  const chosen = projectCardChosenLine(o, lines);
+  // Owner/coordinator, 2026-11-21 (#577 follow-up): with two or more services the card
+  // must fit one 1920 screen, so every service row starts collapsed and opens on
+  // «Настроить». A project with one service still opens it straight away.
+  const chosen = projectCardExpandedLine(o, lines);
   const total = field => lines.filter(line => !line.excluded).reduce((sum, line) => sum + (Number(line[field]) || 0), 0);
   const row = line => {
     const selected = chosen?.key === line.key;
@@ -621,7 +638,6 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const statusLabel = status === 'done' ? 'Выполнено' : status === 'in_progress' ? 'В работе' : line.installationAt ? 'Назначено' : line.kind === 'included' ? 'В пакете' : 'В проекте';
     const source = line.sources[0];
     const date = line.installationAt ? datetimeLocalValue(line.installationAt) : '';
-    const deletable = edit && ['quantity', 'work'].includes(line.kind);
     const offering = serviceOffering(line.offeringId);
     const sizedOffering = offering && serviceOfferingNeedsSizes(offering) ? offering : null;
     const calculation = projectCardLineCalculation(o, line);
@@ -633,33 +649,39 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
     const priceEditable = edit && line.kind !== 'included' && (line.kind === 'windows' || line.kind === 'work' || line.kind === 'quick' || line.kind === 'quantity');
     const priceField = `<label>Цена${priceEditable ? `<input type="number" min="${range?.min || 0}" ${range?.max ? `max="${range.max}"` : ''} step="0.25" value="${Math.round(unitPrice * 100) / 100}" aria-label="Цена: ${academyEsc(line.name)}" onchange="projectCardSetPrice('${o.id}','${jsQuote(line.key)}',this.value)"> <span class="text-xs text-gray-500">${academyEsc(priceUnit)}</span>${range ? `<span class="block text-xs text-gray-500">от ${fmtMoney(range.min)}${range.max ? ` до ${fmtMoney(range.max)}` : ''}</span>` : ''}` : `<div class="project-service-value">${line.kind === 'included' ? 'в пакете' : fmtMoney(unitPrice)}</div>`}</label>`;
     return `<div data-project-line="${academyEsc(line.key)}">
-      <div class="project-service-row ${selected ? 'selected' : ''}">
+      <div class="project-service-row ${selected ? 'selected' : ''}" data-service-row="${academyEsc(line.key)}">
         <div class="project-service-summary">
           <div class="project-service-heading"><div class="project-service-name">${line.kind === 'included' ? '↳ ' : projectCardServiceIcon(line) + ' '}${academyEsc(line.name)}</div><span class="project-service-status">${academyEsc(statusLabel)}</span></div>
-          <div class="project-service-meta">${academyEsc(projectLineNote(line))}</div>
-          <div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
+          <div class="project-service-meta">${academyEsc(projectLineNote(line))}${selected ? '' : ` · ${academyEsc(projectLineQtyText(line))} · ${academyEsc(crew.people)} · ${academyEsc(crew.date)}`}</div>
+          ${selected ? `<div class="project-service-material">Материал: <b>${materials.length ? materials.map(academyEsc).join(', ') : 'не выбран'}</b></div>
           <div class="project-service-facts">
             <span class="project-service-fact mode"><small>Расчёт</small><b>${academyEsc(calculation.label)}</b></span>
             <span class="project-service-fact"><small>Объём · ставка</small><b>${academyEsc(projectLineQtyText(line))}${projectLineRateText(o, line)}</b></span>
             ${money ? `<span class="project-service-fact"><small>Цена клиенту</small><b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b></span>` : ''}
             <span class="project-service-fact"><small>Исполнитель</small><b>${academyEsc(crew.people)}</b></span>
             <span class="project-service-fact"><small>Дата</small><b>${academyEsc(crew.date)}</b></span>
-          </div>
+          </div>` : ''}
         </div>
-        <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-label="Открыть услугу ${academyEsc(line.name)}">${edit || plan ? 'Настроить' : 'Подробнее'} ›</button>
+        ${!selected && money ? `<span class="project-service-price">${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</span>` : ''}
+        <span class="project-service-buttons">
+          <button type="button" class="project-service-arrow" onclick="projectCardSelectLine('${o.id}','${jsQuote(line.key)}')" aria-expanded="${selected ? 'true' : 'false'}" aria-label="${selected ? 'Свернуть' : 'Открыть'} услугу ${academyEsc(line.name)}">${selected ? '← Все услуги' : `${edit || plan ? '✏️ Изменить' : 'Подробнее'} ›`}</button>
+          ${removable && line.kind !== 'included' ? `<button type="button" class="project-service-remove" title="Удалить услугу" aria-label="Удалить услугу ${academyEsc(line.name)}" onclick="projectCardRemoveLine('${o.id}','${jsQuote(line.key)}')">🗑</button>` : ''}
+        </span>
       </div>
+      ${!selected && tracking && (edit || plan) && !projectStages(o,line.key).length ? `<label class="project-service-progress-inline">Ход работ<div class="flex flex-wrap items-center gap-1">${projectServiceProgressCell(o, line)}</div></label>` : ''}
+      ${!selected && tracking ? projectStagesCompactHtml(o,line.key) : ''}
       ${selected ? projectStagesHtml(o,line.key) : ''}
       ${selected && (edit || plan) ? `<div class="project-service-edit">
         ${sizedOffering && typeof projectServiceMeasurementModeHtml === 'function' ? `<div class="project-card-service-measurement">${projectServiceMeasurementModeHtml(o, sizedOffering, projectLineDirectionInfo(line).key, edit)}</div>` : ''}
-        ${!sizedOffering ? (line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
+        ${!sizedOffering ? (line.kind === 'windows' ? `<label>Окна и размеры<button type="button" class="btn-primary w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">📐 ${line.windows.length} ${projectWindowsWord(line.windows.length)} · изменить размеры</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
         ${edit && (!sizedOffering || calculation.mode === 'detailed') ? priceField : ''}
         ${plan ? `<label>Исполнитель${projectCardCrewPicker(o, line)}</label><label>Дата<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" value="${date}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)"></label>` : `<label>Состояние<div class="project-service-value">${academyEsc(statusLabel)}</div></label>`}
-        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button>${deletable ? `<button class="btn-ghost text-red-600" onclick="projectCardDeleteService('${o.id}','${jsQuote(source.id)}')">Удалить</button>` : ''}</div></label>
+        <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button></div></label>
         <details style="grid-column:1/-1" ${projectLineNoteValue(o,line.key) ? 'open' : ''}><summary class="text-xs font-semibold text-slate-500 cursor-pointer">Комментарий по услуге${projectLineNoteValue(o,line.key) ? '' : ' +'}</summary><textarea rows="2" placeholder="Что важно учесть при расчёте, замере или монтаже" onchange="projectCardSetLineNote('${o.id}','${jsQuote(line.key)}',this.value)">${academyEsc(projectLineNoteValue(o,line.key))}</textarea></details>
       </div>` : ''}
     </div>`;
   };
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); const directionKey = projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) }).key; return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><div class="project-service-pending-main"><div><b>${academyEsc(offering.name)}</b><span>Материал: ${film ? academyEsc(catalogLabel(film)) : 'не выбран'} · выберите способ расчёта</span></div>${o.offeringId !== offering.id && edit ? `<button class="btn-ghost text-xs text-red-600" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>${edit ? `<div class="project-service-pending-actions"><button class="btn-primary text-xs" onclick="projectCardEdit(()=>projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick'))">⚡ Быстро · общая площадь</button><button class="btn-ghost text-xs" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button></div>` : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); const directionKey = projectLineDirectionInfo({ offeringId: offering.id, direction: offeringServiceType(offering) }).key; return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><div class="project-service-pending-main"><div><b>${academyEsc(offering.name)}</b><span>Материал: ${film ? academyEsc(catalogLabel(film)) : 'не выбран'} · выберите способ расчёта</span></div>${edit ? `<button class="btn-ghost text-xs text-red-600" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>${edit ? `<div class="project-service-pending-actions"><button class="btn-primary text-xs" onclick="projectCardEdit(()=>projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick'))">⚡ Быстро · общая площадь</button><button class="btn-ghost text-xs" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button></div>` : ''}</div>`; };
   const directionCards = directions.map(direction => {
     const directionLines = direction.lines;
     const excluded = projectDirectionExcluded(o,direction.key);
@@ -687,6 +709,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
   }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Проект может включать несколько направлений. У каждой услуги — свой объём, цена, дата, исполнитель, этапы и расходы.</div></div></div>
+    ${money && typeof projectWizDirectionNoticeHtml === 'function' ? projectWizDirectionNoticeHtml(o) : ''}
     ${typeof projectCashierMapHtml === 'function' ? projectCashierMapHtml(o, directions, { money, edit }) : ''}
     <div class="project-service-list">${directionCards || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}</div>
     <div class="project-service-footer"><span>${economics ? `Материал ${fmtMoney(total('materialCost'))} · работа ${fmtMoney(total('installerPay'))}` : `${lines.length} позиций`}</span>${money ? (edit && lines.length ? projectTotalEditHtml(o) : `<strong>Клиенту ${fmtMoney(orderRevenue(o))}</strong>`) : ''}</div>
@@ -1296,7 +1319,7 @@ function projectDirectionRemoveLine(oid, directionKey, lineKey) {
     const count = line.windows.length;
     if (!confirm(`Убрать «${line.name}» из проекта? Размеры ${count} ${projectWindowsWord(count)} останутся в замере — им можно выбрать другую услугу.`)) return;
     measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
-    o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+    projectForgetOffering(o, line.offeringId);
     syncProjectIncludedServices(o);
     projectPrunePlans(o);
     projectCardSyncCrew(o);
@@ -1310,7 +1333,7 @@ function projectDirectionRemoveLine(oid, directionKey, lineKey) {
 }
 function projectDirectionRemovePending(oid, directionKey, offeringId) {
   const o = getOrder(oid);
-  if (!o || o.offeringId === offeringId) return;
+  if (!o) return;
   if (!confirm(`Убрать «${serviceOffering(offeringId)?.name || 'услугу'}» из проекта?`)) return;
   o.extraServices = (o.extraServices || []).filter(line => !(line.quickProjectLine && line.offeringId === offeringId));
   if (o.offeringMeasurementModes) delete o.offeringMeasurementModes[offeringId];
@@ -1348,7 +1371,7 @@ function projectServiceMeasurementModeHtml(o, offering, directionKey, edit) {
     </div><div class="rp-service-mode-note">${selected ? `Материал: ${academyEsc(catalogLabel(selected))}. ` : ''}Быстрый расчёт хранится как строка этой услуги и остаётся в проекте, даже если другая услуга рассчитана подробно.</div>` : '';
   const detailedEditor = mode === 'detailed' ? `<div class="rp-service-mode-note"><b>${windows.length} ${projectWindowsWord(windows.length)} · ${area.toFixed(2)} sq ft.</b> Плёнку можно задать для всей услуги, комнаты или отдельного окна.</div><button type="button" class="btn-ghost w-full" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">${windows.length ? 'Открыть комнаты и окна' : '+ Добавить комнату и окна'}</button>` : '';
   return `<section class="rp-service-mode" data-offering-mode="${academyEsc(offering.id)}">
-    <div class="rp-service-mode-head"><div><b>${academyEsc(offering.name)}</b><span>${mode === 'quick' ? 'Быстрый расчёт по общей площади' : mode === 'detailed' ? 'Подробный замер по комнатам и окнам' : 'Сначала выберите способ расчёта'}</span></div>${o.offeringId !== offering.id && edit ? `<button type="button" class="rp-dirwin-remove" onclick="projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')" aria-label="Убрать ${academyEsc(offering.name)}">✕</button>` : ''}</div>
+    <div class="rp-service-mode-head"><div><b>${academyEsc(offering.name)}</b><span>${mode === 'quick' ? 'Быстрый расчёт по общей площади' : mode === 'detailed' ? 'Подробный замер по комнатам и окнам' : 'Сначала выберите способ расчёта'}</span></div>${edit ? `<button type="button" class="rp-dirwin-remove" onclick="projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')" aria-label="Убрать ${academyEsc(offering.name)}">✕</button>` : ''}</div>
     <div class="rp-service-mode-switch">
       <button type="button" class="${mode === 'quick' ? 'on' : ''}" aria-pressed="${mode === 'quick'}" onclick="projectSetServiceMeasurementMode('${o.id}','${jsQuote(offering.id)}','quick')">⚡ Быстро · общая площадь</button>
       <button type="button" class="${mode === 'detailed' ? 'on' : ''}" aria-pressed="${mode === 'detailed'}" onclick="projectChooseDetailedService('${o.id}','${jsQuote(offering.id)}','${jsQuote(directionKey)}')">▦ Подробно · комнаты и окна</button>
@@ -1369,7 +1392,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
   const removeBtn = (onclick, name) => (edit && step === 'services' ? `<button type="button" class="rp-dirwin-remove" onclick="${onclick}" aria-label="Убрать ${academyEsc(name)}" title="Убрать из проекта">✕</button>` : '');
   const lineRemove = line => (projectDirectionLineRemovable(o, line) ? removeBtn(`projectDirectionRemoveLine('${o.id}','${jsQuote(directionKey)}','${jsQuote(line.key)}')`, line.name) : '');
   const lineRow = line => `<div class="rp-dirwin-row"><div><b>${line.kind === 'included' ? '↳ ' : ''}${academyEsc(line.name)}</b><span>${academyEsc(projectLineNote(line))}</span></div><div class="rp-dirwin-num">${academyEsc(projectLineQtyText(line))}${money ? `<b>${line.kind === 'included' ? 'в пакете' : fmtMoney(line.price)}</b>` : ''}</div>${lineRemove(line)}</div>`;
-  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}${o.offeringId !== offering.id ? removeBtn(`projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')`, offering.name) : ''}</div>`; };
+  const pendingRow = offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="rp-dirwin-row pending"><div><b>${academyEsc(offering.name)}</b><span>${film ? academyEsc(catalogLabel(film)) : 'материал уточним на замере'}</span></div>${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button type="button" class="btn-ghost text-xs" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}','direction')">Выбрать окна</button>` : '<div class="rp-dirwin-num">нужен замер</div>'}${removeBtn(`projectDirectionRemovePending('${o.id}','${jsQuote(directionKey)}','${jsQuote(offering.id)}')`, offering.name)}</div>`; };
   const sizedOfferings = projectSelectedSizedOfferings(o, directionKey);
   const sizedIds = new Set(sizedOfferings.map(offering => offering.id));
   let body = '';
@@ -1397,7 +1420,7 @@ function projectDirectionWindowHtml(o, directionKey, step) {
       ${direction.lines.filter(line => !['quick','windows'].includes(line.kind)).map(lineRow).join('')}${direction.pending.filter(offering => !sizedIds.has(offering.id)).map(pendingRow).join('')}
       ${!direction.lines.length && !direction.pending.length ? '<div class="rp-dirwin-empty">Услуг пока нет — добавьте ниже.</div>' : ''}
       ${edit ? projectDirectionAddHtml(o, directionKey) : ''}
-      ${edit ? projectDirectionMoveHtml(o, directionKey) : ''}
+      ${projectDirectionCanMove(o) ? projectDirectionMoveHtml(o, directionKey) : ''}
       ${edit && money ? `<label class="rp-dirwin-toggle"><input type="checkbox" ${excludedDir ? '' : 'checked'} onchange="projectToggleDirectionIncluded('${o.id}','${jsQuote(directionKey)}',this.checked); openProjectDirectionWindow('${o.id}','${jsQuote(directionKey)}','services')"> Направление входит в расчёт и КП</label>` : ''}`;
   }
   const next = index < steps.length - 1
@@ -1611,6 +1634,7 @@ function invoiceFormValues() {
   return { number: v('inv-number'), issued: v('inv-issued'), terms: v('inv-terms'), mode: v('inv-mode'), custom: v('inv-custom'), po: v('inv-po'), billName: v('inv-bill'), note: v('inv-note') };
 }
 function openProjectInvoice(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   const inv = invoiceDraft(o, state._invoiceForm?.oid === oid ? state._invoiceForm : {});
@@ -1804,9 +1828,12 @@ function saveWindowManualFilm(oid, rid, wid, inMeasurement = false) {
 // windows are already measured (all with another service) it waited for a
 // measurement that had already happened — $0 forever. Now the owner picks the
 // windows right away; a window has one film service, so it is moved over.
+// Owner, 2026-11-22: «удалил приватную, внёс размеры — декоративная их не видит».
+// Windows and sizes belong to the project, not to a direction: a service sees the
+// windows of its own direction plus every window that has no film service yet.
 function offeringWindowCandidates(o, offering) {
   const scope = offeringServiceType(offering);
-  return measureAllWindows(o).filter(({ win }) => (win.measureScope || o.serviceType) === scope);
+  return measureAllWindows(o).filter(({ win }) => (win.measureScope || o.serviceType) === scope || !win.offeringId);
 }
 function openOfferingWindowsPicker(oid, offeringId, returnTo = 'card') {
   const o = getOrder(oid);
@@ -1835,17 +1862,22 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
   const checked = new Set([...document.querySelectorAll('[data-offering-window]')].filter(box => box.checked).map(box => box.dataset.offeringWindow));
   const film = projectOfferingCatalogId(o, offering.id);
   projectCardEdit(() => {
+    const left = new Set();
     offeringWindowCandidates(o, offering).forEach(({ win }) => {
       if (!checked.has(win.id) || win.offeringId === offering.id) return;
+      left.add(win.measureScope || o.serviceType);
+      win.measureScope = offeringServiceType(offering) || win.measureScope;
       applyWindowOffering(win, offering);
       if (film && !win.catalogId) { win.catalogId = film; win.filmType = catalogLabel(getCatalogItem(film)); }
     });
     o.offeringIds = [...new Set([...(o.offeringIds || []), offering.id])];
+    left.forEach(scope => { if (scope && scope !== offeringServiceType(offering)) projectReleaseDirection(o, scope); });
     projectEstimateMarkChanged(o, `Услуга «${offering.name}» поставлена на окна: ${checked.size}`);
     save();
   });
   closeModal();
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
+  else if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   else render();
 }
 
@@ -2455,6 +2487,64 @@ async function googleAdsCrmRevokeKey() {
   if (currentUser()?.role !== 'owner' || !confirm('Отключить ключ? Скрипт в Google Ads перестанет присылать расходы.')) return;
   await fetch('/api/v1/settings/integration-keys?integration=google_ads', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
   loadGoogleAdsCrm(true);
+}
+
+// ---------- КЛЮЧ ДЛЯ БОТА-АССИСТЕНТА (Owner, 2026-11-22 21:55) ----------
+// «Дай API ключ нашей CRM для бота-ассистента», «полный доступ». The key acts as
+// the owner on every /api/v1 route; it is shown once and can be switched off here.
+async function loadAssistantKey(force = false) {
+  if (currentUser()?.role !== 'owner') return;
+  const s = state.assistantKey || {};
+  if (s.loading || (!force && s.loadedAt)) return;
+  state.assistantKey = { ...s, loading: true };
+  const response = await fetch('/api/v1/settings/integration-keys?integration=assistant', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => null) : null;
+  state.assistantKey = { key: payload?.data || null, loadedAt: Date.now(), loading: false, error: response?.ok ? '' : `Сервер ответил ${response?.status || 'нет ответа'}` };
+  render();
+}
+function assistantKeyPanelHtml() {
+  if (currentUser()?.role !== 'owner') return '';
+  const a = state.assistantKey;
+  if (!a || (!a.loadedAt && !a.loading)) setTimeout(() => loadAssistantKey(), 0);
+  const key = a?.key;
+  return `<div class="p-4 border ${key?.active ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}" data-assistant-key>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold text-sm mb-1">🤖 API-ключ для бота-ассистента</div>
+        <p class="text-xs text-gray-600">${key?.active ? `Ключ активен (${academyEsc(key.key_prefix || '')}…)${key.last_used_at ? ` · бот обращался ${academyEsc(new Date(key.last_used_at).toLocaleString('ru-RU'))}` : ' · бот ещё не обращался'}` : 'Не создан.'} Полный доступ владельца ко всем данным CRM — храните ключ только в настройках бота.</p>
+        ${a?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(a.error)}</p>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn-primary text-sm" onclick="assistantKeyCreate()">${key?.active ? 'Новый ключ' : 'Создать ключ'}</button>
+        ${key?.active ? `<button class="btn-ghost text-sm text-red-600" onclick="assistantKeyRevoke()">Отключить</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+async function assistantKeyCreate() {
+  if (currentUser()?.role !== 'owner') return;
+  if (state.assistantKey?.key?.active && !confirm('Создать новый ключ? Старый сразу перестанет работать — в боте нужно будет заменить ключ.')) return;
+  try {
+    const response = await fetch('/api/v1/settings/integration-keys', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ integration: 'assistant' }) });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.data?.key) throw new Error(payload?.errors?.[0]?.message || `Сервер ответил ${response.status}`);
+    const base = location.origin;
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:40rem">
+      <h3 class="font-semibold text-lg mb-1">Ключ для бота-ассистента</h3>
+      <p class="text-sm text-gray-600 mb-3">Показан один раз — скопируйте сейчас и вставьте в настройки бота. Бот отправляет его в заголовке <code>Authorization: Bearer …</code> на адреса <code>${academyEsc(base)}/api/v1/…</code>.</p>
+      <textarea id="assistant-key-value" readonly style="width:100%;height:4.5rem;font-family:monospace;font-size:13px">${academyEsc(payload.data.key)}</textarea>
+      <div class="flex gap-2 mt-3 justify-end"><button class="btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('assistant-key-value').value); this.textContent='Скопировано'">Скопировать ключ</button><button class="btn-ghost" onclick="closeModal()">Готово</button></div>
+    </div></div>`;
+    state.assistantKey = { ...(state.assistantKey || {}), loadedAt: 0 };
+    loadAssistantKey(true);
+  } catch (error) {
+    alert('Не удалось создать ключ: ' + (error?.message || error));
+  }
+}
+async function assistantKeyRevoke() {
+  if (currentUser()?.role !== 'owner' || !confirm('Отключить ключ? Бот-ассистент сразу потеряет доступ к CRM.')) return;
+  await fetch('/api/v1/settings/integration-keys?integration=assistant', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
+  loadAssistantKey(true);
 }
 
 // ---------- GOOGLE ADS: КОНВЕРСИИ ИЗ CRM (Owner, 2026-10-25, спецификация) ----------
@@ -3823,6 +3913,8 @@ function quickEntryDefaultForm(keep = {}) {
     date: keep.date || localDateKey(), measurementDate: keep.measurementDate || '', manager: keep.manager || currentOfficeUser?.id || managers[0]?.id || '', method: keep.method || 'zelle',
     client: '', clientId: '', clientNewConfirmed: false, phone: '', street: '', city: '', source: 'google', site: 'RESIDENTIAL',
     measurer: keep.measurer || '', notes: '', paid: '', complexity: 'standard',
+    // Owner, 2026-11-22: оплата подтверждается и попадает на счёт — баланс и прибыль считаются верно.
+    account: keep.account || '', paidConfirmed: false,
     pricingMode: keep.pricingMode || 'auto', manualTotal: keep.manualTotal || '',
     lines: [quickEntryNewLine(keep)],
     // Owner, 2026-11-06: прямые расходы проекта — аренда, доставка, бензин, другое — списываются в этот проект.
@@ -3879,8 +3971,10 @@ function quickEntryReadForm() {
   const s = quickEntryState();
   const v = id => document.getElementById(id)?.value;
   const f = s.form;
-  const keys = ['date','measurementDate','manager','method','client','clientId','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
+  const keys = ['date','measurementDate','manager','method','account','client','clientId','phone','street','city','source','site','measurer','notes','paid','complexity','pricingMode','manualTotal'];
   keys.forEach(k => { const val = v('qe-' + k); if (val != null) f[k] = val; });
+  const confirmedBox = document.getElementById('qe-paidConfirmed');
+  if (confirmedBox) f.paidConfirmed = !!confirmedBox.checked;
   const clientNewConfirmed = v('qe-clientNewConfirmed');
   if (clientNewConfirmed != null) f.clientNewConfirmed = clientNewConfirmed === '1';
   quickEntryLines().forEach((line, i) => {
@@ -4373,7 +4467,7 @@ function quickEntryCreateDraft() {
   db.orders.push(o);
   save();
   const s = quickEntryState();
-  s.form = quickEntryDefaultForm({ date: f.date, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: f.date, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
   s.notice = `${o.number} · ${client.name} — черновик создан`;
   openQuickProjectEntry(o.id);
 }
@@ -4440,6 +4534,11 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   if (problems.length) { alert('Заполните: ' + problems.join(', ') + '.'); return; }
   const total = prepared.reduce((sum, p) => sum + p.price, 0);
   const paid = String(f.paid ?? '').trim() === '' ? total : Math.min(total, Math.max(0, Number(f.paid) || 0));
+  if (closeProject && paid > 0 && !f.paidConfirmed) {
+    alert(`Подтвердите оплату ${fmtMoney(paid)}: отметьте «Деньги получены» и выберите счёт. Если денег не было — поставьте «Оплачено» 0, проект закроется с долгом.`);
+    return;
+  }
+  if (closeProject && paid > 0 && !f.account) { alert('Выберите счёт, на который пришли деньги.'); return; }
   const starts = prepared.map(p => p.date).sort();
   const ends = prepared.map(p => p.endDate).sort();
   const firstDate = starts[0], lastDate = ends[ends.length - 1];
@@ -4478,7 +4577,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     // Менеджер всегда оставляет черновик. Владелец может явно сохранить
     // заполненную карточку, не проводя склад, зарплату и финансовый результат.
     save();
-    s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+    s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
     s.notice = actor?.role === 'owner'
       ? `${o.number} · ${client.name} · ${fmtMoney(total)} — черновик сохранён; склад и зарплата ещё не проведены`
       : `${o.number} · ${client.name} · ${fmtMoney(total)} — черновик сохранён, закроет владелец`;
@@ -4499,7 +4598,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   try {
     save();
     if (cloud && !await cloudPersistConfirmed()) {
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.notice = `${o.number} · ${client.name} — черновик ещё не сохранён на сервере, проект не закрыт. Когда вверху появится «Сохранено», закройте его в «Не завершён перенос».`;
       render();
       return;
@@ -4508,13 +4607,13 @@ async function quickEntryCommit({ closeProject = true } = {}) {
     // поэтому берём проект заново по id и закрываем именно текущий экземпляр.
     const current = db.orders.find(item => item.id === o.id);
     if (!current) {
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.notice = `${o.number} · ${client.name} — черновик сохранён, но после обновления данных проект не найден, он не закрыт. Проверьте «Не завершён перенос».`;
       render();
       return;
     }
     const persistedDraft = cloud ? cloneCloudWorkspaceValue(cloudBaseSnapshot?.orders?.find(item => item.id === o.id) || null) : null;
-    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', silent: true });
+    closeQuickProjectAsCompletedWith(current, { requestedPaid: paid, paidDate: lastDate, method: f.method || 'zelle', accountId: f.account || null, confirmed: !!f.paidConfirmed, silent: true });
     if (cloud && !await cloudPersistConfirmed()) {
       if (persistedDraft) {
         // Сервер не принял закрытие: возвращаем только этот проект к
@@ -4525,7 +4624,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
         else db.orders.push(persistedDraft);
         save();
       }
-      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+      s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
       s.openProject = o.id;
       s.notice = `${o.number} · ${client.name} — черновик сохранён, но закрыть проект не удалось. Откройте его в «Не завершён перенос» и нажмите «Закрыть выполненный проект» ещё раз.`;
       render();
@@ -4534,7 +4633,7 @@ async function quickEntryCommit({ closeProject = true } = {}) {
   } finally {
     s.committing = false;
   }
-  s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method });
+  s.form = quickEntryDefaultForm({ date: lastLine.date, dir: lastLine.dir, measurementDate: f.measurementDate, manager: managerId, measurer: f.measurer, method: f.method, account: f.account });
   s.openProject = o.id;
   s.notice = `${o.number} · ${client.name} · ${prepared.length} ${projectPlural(prepared.length, 'услуга', 'услуги', 'услуг')} · ${fmtMoney(total)} — внесён`;
   render();
@@ -4764,6 +4863,8 @@ function renderQuickEntry() {
       <label>Сложность объекта<select id="qe-complexity" onchange="quickEntrySet('complexity', this.value)">${Object.entries(coefs).map(([k, v]) => opt(k, `${coefName(k)} ×${v}`, f.complexity)).join('')}</select><span class="qe-hint">умножает оплату монтажа плёнки</span></label>
       <label>Оплачено, $<input id="qe-paid" type="number" min="0" step="1" value="${academyEsc(f.paid)}" placeholder="= ${fmtMoney(total)}" onchange="quickEntrySet('paid', this.value)"></label>
       <label>Как<select id="qe-method">${PAYMENT_METHODS.map(m => opt(m.id, m.label, f.method)).join('')}</select></label>
+      <label>Куда пришли деньги<select id="qe-account"><option value="">выберите счёт</option>${financePaymentAccounts().map(a => opt(a.id, a.name, f.account)).join('')}</select></label>
+      <label class="qe-confirm"><input id="qe-paidConfirmed" type="checkbox" ${f.paidConfirmed ? 'checked' : ''} onchange="quickEntrySet('paidConfirmed', this.checked)"> Деньги получены — подтверждаю</label>
       <label>Заметка<input id="qe-notes" value="${academyEsc(f.notes)}" placeholder="необязательно"></label>
     </div>
     ${s.notice ? `<div class="qe-notice">✓ ${academyEsc(s.notice)}</div>` : ''}
@@ -4915,7 +5016,18 @@ function renderQuickEntry() {
 // защитная — и нет возможности удалить или сменить». Размеры окон — труд
 // замерщика, они остаются; меняется направление: окна переходят в новое,
 // услуги старого направления снимаются (у нового свои), материал подбирается
-// заново. Кнопка живёт в окне направления, пока проект не закрыт.
+// заново.
+// Owner, 2026-11-22 (#592): «С TintWiz загрузил проекты, но они там
+// неправильно: там солнцезащитные, а по факту приватная — нужна возможность
+// менять направление». Направление меняется и на закрытом проекте (монтаж
+// сделан, оплачен). У закрытого проекта деньги не трогаются: цена, плёнка,
+// оплаты, акт и выплаты остаются как были, меняется только направление. То,
+// что привязано к услуге справочника старого направления, на закрытом проекте
+// остаётся на месте — снять её значило бы поменять сумму и зарплату.
+function projectDirectionCanMove(o, user = currentUser()) {
+  // A closed project stays locked for a manager without the owner's grant.
+  return !!o && !!user && orderUserCanSeeMoney(o, user) && !(typeof projectEditLocked === 'function' && projectEditLocked(o, user));
+}
 function projectDirectionMoveTargets(o, fromKey) {
   const have = new Set(projectDirectionGroups(o).map(direction => direction.key));
   return ORDER_PRIMARY_SERVICES.filter(service => !service.general && service.id !== fromKey && !have.has(service.id));
@@ -4924,57 +5036,332 @@ function projectDirectionMoveHtml(o, fromKey) {
   const targets = projectDirectionMoveTargets(o, fromKey);
   if (!targets.length) return '';
   const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
-  return `<details class="rp-dirwin-move"><summary>Ошиблись направлением? Перенести «${academyEsc(from?.title || fromKey)}» в другое…</summary>
-    <p class="rp-dirwin-hint">Размеры окон и помещения останутся. Услуги и плёнка этого направления снимутся — у нового направления свои, выберите их заново.</p>
+  const closed = CLOSED_PROJECT_STATUSES.includes(o.status);
+  const hint = closed
+    ? 'Проект закрыт: сумма, оплаты, акт и выплаты не изменятся. Окна и строки перейдут в новое направление вместе со своей ценой и плёнкой.'
+    : 'Размеры окон и помещения останутся. Услуги и плёнка этого направления снимутся — у нового направления свои, выберите их заново.';
+  return `<details class="rp-dirwin-move" ${closed || o._importSource === 'wiz' ? 'open' : ''}><summary>${closed ? 'Сменить направление' : 'Ошиблись направлением? Перенести'} «${academyEsc(from?.title || fromKey)}» в другое…</summary>
+    <p class="rp-dirwin-hint">${hint}</p>
     <div class="rp-dirwin-move-row">${targets.map(service => { const tone = typeof rpDir === 'function' ? rpDir(service.id) : { color: '#2563eb', tint: '#eff6ff' }; return `<button type="button" class="rp-dirwin-pick" style="border-left:4px solid ${academyEsc(tone.color)}" onclick="projectDirectionMove('${o.id}','${jsQuote(fromKey)}','${jsQuote(service.id)}')"><b>${service.icon || ''} ${academyEsc(service.title)}</b><span>перенести сюда</span></button>`; }).join('')}</div>
   </details>`;
 }
-function projectDirectionMove(oid, fromKey, toKey) {
-  const o = getOrder(oid);
+/** Windows of the direction: an old window without its own direction belongs to the project's direction. */
+function projectDirectionMoveWindows(o, fromKey) {
+  const defaultScope = orderMeasureScope(o);
+  return measureAllWindows(o).filter(({ win }) => (win.measureScope || defaultScope) === fromKey);
+}
+/**
+ * Moves one direction of the project into another and writes it to the
+ * project's history. No confirm and no render: the card button and the bulk
+ * fix of the TintWiz import both call it. Returns what moved, or null.
+ */
+function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, source = '', { keepMoney = false } = {}) {
   const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
-  // Старые заказы могут не нести направление на окнах: тогда их направление — направление проекта.
+  if (!o || !to) return null;
   const defaultScope = orderMeasureScope(o);
   fromKey = fromKey || defaultScope;
-  if (!o || !to || fromKey === toKey || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
-  const windows = measureAllWindows(o).filter(({ win }) => (win.measureScope || defaultScope) === fromKey);
-  const fromTitle = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey)?.title || fromKey;
-  if (!confirm(`Перенести «${fromTitle}» в «${to.title}»? ${windows.length ? `${windows.length} ${projectWindowsWord(windows.length)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`)) return;
-  projectCardEdit(() => {
-    windows.forEach(({ room, win }) => {
-      win.measureScope = toKey;
-      win.offeringId = ''; win.catalogId = ''; win.filmType = '';
-      if (typeof normalizeMeasureWindowTypeForScope === 'function') win.winType = normalizeMeasureWindowTypeForScope(toKey, win.winType);
-      if (typeof syncWindowPanelsForType === 'function') syncWindowPanelsForType(win, toKey);
-      if (room?.defaultCatalogByScope) delete room.defaultCatalogByScope[fromKey];
-    });
-    const fromDir = serviceOfferingDirection(fromKey);
-    const gone = new Set();
-    o.extraServices = (o.extraServices || []).filter(line => {
-      const dirKey = line.serviceType || o.serviceType;
-      if (line.quickProjectLine) { if (dirKey === fromKey) { line.serviceType = toKey; line.offeringId = ''; line.offeringName = ''; line.catalogId = ''; line.manualFilmName = ''; line.label = to.title; } return true; }
-      const offering = serviceOffering(line.offeringId);
-      const own = dirKey === fromKey && (!offering || serviceOfferingDirection(dirKey) === fromDir);
-      if (own) { if (line.offeringId) gone.add(line.offeringId); return false; }
+  if (fromKey === toKey) return null;
+  // The bulk fix of an import keeps the money of every project, open or closed.
+  const closed = keepMoney || CLOSED_PROJECT_STATUSES.includes(o.status);
+  const from = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey);
+  const fromTitle = from?.title || fromKey;
+  const fromId = `direction:${fromKey}`, toId = `direction:${toKey}`;
+  if (closed) {
+    // Finished work is never merged into a direction the project already has:
+    // two crews, stages or approvals under one service would change the pay.
+    // Such a direction stays where it is and the owner moves it by hand.
+    const keyed = id => (o.serviceSchedules || []).some(plan => plan.id === id)
+      || (o.productionStages || []).some(stage => stage.serviceId === id)
+      || !!o.serviceProgress?.[id];
+    if (projectDirectionGroups(o).some(direction => direction.key === toKey) || keyed(toId)) {
+      return { fromKey, toKey, fromTitle, toTitle: to.title, windows: 0, lines: 0, kept: 0, closed, skipped: 'target_exists' };
+    }
+    // Stages of finished work keep their service and pay: a closed project keeps its history.
+    if ((o.productionStages || []).some(stage => stage.serviceId === fromId)) {
+      return { fromKey, toKey, fromTitle, toTitle: to.title, windows: 0, lines: 0, kept: 0, closed, skipped: 'has_stages' };
+    }
+  }
+  // Approvals that matched before the move are kept matching after it.
+  const approvedBefore = closed && Array.isArray(o.serviceScopeApprovals) && typeof projectServiceGroups === 'function'
+    ? (() => { const groups = projectServiceGroups(o); return o.serviceScopeApprovals.filter(approval => { const group = groups.find(item => item.id === approval.serviceId); return !!group && approval.scope === projectServiceScope(o, group); }); })()
+    : [];
+  const fromDir = serviceOfferingDirection(fromKey);
+  const ownOffering = id => !!id && serviceOffering(id)?.direction === fromDir;
+  let windowsMoved = 0, linesMoved = 0, kept = 0;
+  projectDirectionMoveWindows(o, fromKey).forEach(({ room, win }) => {
+    // A closed project keeps what is priced and paid by the old direction's service.
+    if (closed && ownOffering(win.offeringId)) { kept++; return; }
+    win.measureScope = toKey;
+    windowsMoved++;
+    if (closed) return; // price, film and pay of finished work stay as they are
+    win.offeringId = ''; win.catalogId = ''; win.filmType = '';
+    if (typeof normalizeMeasureWindowTypeForScope === 'function') win.winType = normalizeMeasureWindowTypeForScope(toKey, win.winType);
+    if (typeof syncWindowPanelsForType === 'function') syncWindowPanelsForType(win, toKey);
+    if (room?.defaultCatalogByScope) delete room.defaultCatalogByScope[fromKey];
+  });
+  const gone = new Set();
+  o.extraServices = (o.extraServices || []).filter(line => {
+    if (line.autoWindowRemoval) return true; // removal of old film is a general work
+    const dirKey = line.serviceType || o.serviceType || defaultScope;
+    if (dirKey !== fromKey) return true;
+    const offering = serviceOffering(line.offeringId);
+    if (line.quickProjectLine) {
+      if (closed && ownOffering(line.offeringId)) { kept++; return true; }
+      if (closed) {
+        // The rate of a quick line follows its direction: keep the pay of finished work.
+        if (line.offeringInstallerRate == null && typeof installerRateForQuickLine === 'function') line.offeringInstallerRate = installerRateForQuickLine(null, line);
+        if (!line.label || line.label === fromTitle) line.label = to.title;
+      } else {
+        line.offeringId = ''; line.offeringName = ''; line.catalogId = ''; line.manualFilmName = ''; line.label = to.title;
+      }
+      line.serviceType = toKey; linesMoved++;
       return true;
-    });
+    }
+    if (offering && offering.direction !== fromDir) return true; // a service of another direction
+    if (offering) {
+      if (closed) { kept++; return true; }
+      gone.add(line.offeringId);
+      return false;
+    }
+    // A row without a directory service: on an open project it goes with the old
+    // direction, as before. A closed project and a TintWiz import keep its price
+    // (the TintWiz revenue line), so it moves with the project.
+    if (!closed && !projectIsWizImport(o)) return false;
+    line.serviceType = toKey; linesMoved++;
+    return true;
+  });
+  if (!closed) {
     o.offeringIds = (o.offeringIds || []).filter(id => !gone.has(id) && !(serviceOffering(id) && serviceOffering(id).direction === fromDir && serviceOfferingNeedsSizes(serviceOffering(id))));
     if (o.offeringId && (gone.has(o.offeringId) || serviceOffering(o.offeringId)?.direction === fromDir)) { o.offeringId = ''; o.offeringName = ''; }
-    o.serviceTypes = [...new Set((o.serviceTypes || [o.serviceType]).map(key => key === fromKey ? toKey : key).filter(Boolean))];
-    if (!o.serviceTypes.includes(toKey)) o.serviceTypes.push(toKey);
-    if (o.serviceType === fromKey) { o.serviceType = toKey; o.serviceCategory = to.catalogCategory; o.serviceWorkflow = [...(to.workflow || [])]; }
-    o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
-    o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+  }
+  const stays = kept > 0; // the old direction keeps its paid service on a closed project
+  const types = Array.isArray(o.serviceTypes) && o.serviceTypes.length ? o.serviceTypes : [o.serviceType || defaultScope];
+  o.serviceTypes = [...new Set(types.flatMap(key => key === fromKey ? (stays ? [fromKey, toKey] : [toKey]) : [key]).filter(Boolean))];
+  if (!o.serviceTypes.includes(toKey)) o.serviceTypes.push(toKey);
+  if (!stays && (o.serviceType || defaultScope) === fromKey) {
+    o.serviceType = toKey; o.serviceCategory = to.catalogCategory;
+    if (!closed) o.serviceWorkflow = [...(to.workflow || [])];
+  }
+  if (!stays && o.measureScope === fromKey) o.measureScope = toKey;
+  if (!stays && Array.isArray(o.tags) && from?.tag) {
+    o.tags = o.tags.filter(tag => tag !== from.tag);
+    if (to.tag && !o.tags.includes(to.tag)) o.tags.push(to.tag);
+  }
+  o.leadIntentServiceType = o.leadIntentServiceType === fromKey ? toKey : o.leadIntentServiceType;
+  o.excludedProjectDirections = (o.excludedProjectDirections || []).filter(key => key !== fromKey && key !== toKey);
+  // Direct costs of the moved work go with it, so the direction totals still show them.
+  (o.extraExpenses || []).forEach(expense => {
+    if (!expense || typeof expense !== 'object') return;
+    if (expense.serviceId === fromId) expense.serviceId = toId;
+    if (!stays && expense.direction === fromKey) expense.direction = toKey;
+  });
+  if (closed) {
+    // Finished work keeps its dates, crew and progress under the new direction.
+    const rekey = key => (key === fromKey ? toKey : key === fromId ? toId : key);
+    if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).map(([key, value]) => [rekey(key), value]));
+    if (Array.isArray(o.serviceSchedules)) o.serviceSchedules.forEach(plan => { plan.id = rekey(plan.id); });
+    if (Array.isArray(o.serviceScopeApprovals)) {
+      o.serviceScopeApprovals.forEach(approval => { approval.serviceId = rekey(approval.serviceId); });
+      if (approvedBefore.length) {
+        const groups = projectServiceGroups(o);
+        approvedBefore.forEach(approval => { const group = groups.find(item => item.id === approval.serviceId); if (group) approval.scope = projectServiceScope(o, group); });
+      }
+    }
+    // This CRM's memory of done services follows the move, so nothing reopens.
+    if (typeof projectDoneScopes !== 'undefined') projectDoneScopes.delete(o.id);
+    if (typeof projectServiceSignatures !== 'undefined') projectServiceSignatures.delete(o.id);
+  } else {
     if (o.serviceProgress) delete o.serviceProgress[fromKey];
     syncProjectIncludedServices(o);
     if (typeof projectPrunePlans === 'function') projectPrunePlans(o);
     if (typeof projectCardSyncCrew === 'function') projectCardSyncCrew(o);
     projectEstimateMarkChanged(o, `Направление «${fromTitle}» перенесено в «${to.title}»`);
-    o.timeline = o.timeline || [];
-    o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: state.currentUserId, note: `${fromTitle} → ${to.title}${windows.length ? ` · ${windows.length} ${projectWindowsWord(windows.length)} с размерами` : ''}` });
-    save();
+  }
+  // A paid directory service of the old direction stays: the project is not checked yet.
+  if (kept) delete o._directionCheckedAt; else o._directionCheckedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  const parts = [
+    windowsMoved ? `${windowsMoved} ${projectWindowsWord(windowsMoved)} с размерами` : '',
+    closed ? 'сумма и оплаты без изменений' : '',
+    kept ? `${kept} ${projectPlural(kept, 'услуга осталась', 'услуги остались', 'услуг осталось')} в «${fromTitle}»` : '',
+    source,
+  ].filter(Boolean);
+  o.timeline.push({ at: new Date().toISOString(), key: 'direction_moved', by: by || null, from: fromKey, to: toKey, note: `Направление: ${fromTitle} → ${to.title}${parts.length ? ` · ${parts.join(' · ')}` : ''}` });
+  return { fromKey, toKey, fromTitle, toTitle: to.title, windows: windowsMoved, lines: linesMoved, kept, closed };
+}
+/** Why a closed project keeps its direction: its finished work and pay stay as they are. */
+function projectDirectionSkipNote(result) {
+  return result.skipped === 'has_stages'
+    ? `Направление «${result.fromTitle}» не сменилось: у этой работы есть этапы с начислениями, а закрытый проект сохраняет их как есть.`
+    : `Направление «${result.fromTitle}» не сменилось: в проекте уже есть «${result.toTitle}», а выполненную работу двух направлений нельзя слить без изменения выплат.`;
+}
+/** A closed project keeps a paid directory service of the old direction where it is. */
+function projectDirectionKeptNote(result) {
+  return `В «${result.fromTitle}» ${projectPlural(result.kept, 'осталась оплаченная услуга', 'остались оплаченные услуги', 'осталось оплаченных услуг')} справочника (${result.kept}): её переносят вручную, а проект остаётся в списке непроверенных.`;
+}
+function projectDirectionMove(oid, fromKey, toKey) {
+  const o = getOrder(oid);
+  const to = ORDER_PRIMARY_SERVICES.find(service => service.id === toKey);
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return;
+  if (!o || !to || !projectDirectionCanMove(o)) return;
+  fromKey = fromKey || orderMeasureScope(o);
+  if (fromKey === toKey) return;
+  const closed = CLOSED_PROJECT_STATUSES.includes(o.status);
+  const count = projectDirectionMoveWindows(o, fromKey).length;
+  const fromTitle = ORDER_PRIMARY_SERVICES.find(service => service.id === fromKey)?.title || fromKey;
+  const question = closed
+    ? `Сменить направление «${fromTitle}» на «${to.title}»? Проект закрыт: сумма, оплаты, акт и выплаты не изменятся. В истории проекта останется запись.`
+    : `Перенести «${fromTitle}» в «${to.title}»? ${count ? `${count} ${projectWindowsWord(count)} с размерами перейдут в новое направление, ` : ''}услуги и плёнка старого направления снимутся.`;
+  if (!confirm(question)) return;
+  let result = null;
+  projectCardEdit(() => {
+    result = projectDirectionMoveApply(o, fromKey, toKey, state.currentUserId);
+    if (!result?.skipped) save();
   });
+  if (result?.skipped) { alert(projectDirectionSkipNote(result)); return; }
+  if (result?.kept) {
+    alert(`${projectDirectionKeptNote(result)}${result.windows || result.lines ? '' : ' Ничего не перенесено.'}`);
+    if (!result.windows && !result.lines) return;
+  }
   state._directionWindow = { oid, key: toKey, step: 'services', pick: '' };
   openProjectDirectionWindow(oid, toKey, 'services');
+}
+
+// ---------- ИМПОРТ TINTWIZ: ПРОВЕРКА НАПРАВЛЕНИЯ (Owner, 2026-11-22, #592) ----------
+// В выгрузке TintWiz нет направления, старый импорт ставил солнцезащитную всем.
+// Карточка такого проекта просит проверить направление, а владелец может
+// исправить сразу много проектов: отметить галочками и выбрать направление.
+// Живая база скриптом не правится — правку делает владелец сам, и у каждого
+// проекта остаётся запись в истории.
+function projectIsWizImport(o) {
+  return o?._importSource === 'wiz';
+}
+function projectMainDirectionKeys(o) {
+  const keys = projectDirectionGroups(o).map(direction => direction.key).filter(key => !primaryServiceInfo(key)?.general);
+  return keys.length ? keys : [orderMeasureScope(o)];
+}
+function projectWizDirectionNoticeHtml(o) {
+  if (!projectIsWizImport(o) || o._directionCheckedAt || !projectDirectionCanMove(o)) return '';
+  const keys = projectMainDirectionKeys(o);
+  const titles = keys.map(key => primaryServiceInfo(key)?.title || key).join(', ');
+  return `<div class="rp-wiz-direction" data-wiz-direction-notice>
+    <div><b>Проект из TintWiz: проверьте направление</b><span>В выгрузке TintWiz нет направления. Сейчас стоит: ${academyEsc(titles)}.</span></div>
+    <div class="rp-wiz-direction-actions"><button type="button" class="btn-primary" onclick="openProjectDirectionWindow('${o.id}','${jsQuote(keys[0])}','services')">Сменить направление</button><button type="button" class="btn-ghost" onclick="projectWizDirectionConfirm('${o.id}')">Направление верное</button></div>
+  </div>`;
+}
+function projectWizDirectionConfirm(oid) {
+  const o = getOrder(oid);
+  if (!o || !projectDirectionCanMove(o)) return;
+  o._directionCheckedAt = new Date().toISOString();
+  o.timeline = o.timeline || [];
+  o.timeline.push({ at: o._directionCheckedAt, key: 'direction_checked', by: state.currentUserId, note: `Направление проверено: ${projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.title || key).join(', ')}` });
+  save(); preservePositionForNextRender(); render();
+}
+function wizImportOrders() {
+  return (db.orders || []).filter(projectIsWizImport);
+}
+function wizDirectionBulkRows() {
+  const s = state._wizBulk || {};
+  return wizImportOrders()
+    .filter(o => !s.onlyUnchecked || !o._directionCheckedAt)
+    .filter(o => !s.fromKey || projectMainDirectionKeys(o).includes(s.fromKey))
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+function openWizDirectionBulk() {
+  if (currentUser()?.role !== 'owner') return;
+  state._wizBulk = { picked: [], toKey: 'privacy_film', fromKey: '', onlyUnchecked: true };
+  renderWizDirectionBulk();
+}
+function renderWizDirectionBulk() {
+  state.modal = wizDirectionBulkHtml();
+  render();
+}
+function wizDirectionBulkSet(field, value) {
+  if (!state._wizBulk) return;
+  state._wizBulk[field] = value;
+  if (field !== 'toKey') state._wizBulk.picked = [];
+  renderWizDirectionBulk();
+}
+function wizDirectionBulkToggle(oid, on) {
+  const s = state._wizBulk;
+  if (!s) return;
+  s.picked = on ? [...new Set([...s.picked, oid])] : s.picked.filter(id => id !== oid);
+  const btn = document.querySelector('[data-wiz-bulk-apply]');
+  if (btn) btn.textContent = wizDirectionBulkApplyLabel();
+}
+function wizDirectionBulkPickAll(on) {
+  const s = state._wizBulk;
+  if (!s) return;
+  s.picked = on ? wizDirectionBulkRows().map(o => o.id) : [];
+  renderWizDirectionBulk();
+}
+function wizDirectionBulkApplyLabel() {
+  const s = state._wizBulk || {};
+  const n = (s.picked || []).length;
+  return n ? `Сменить у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')} на «${primaryServiceInfo(s.toKey)?.title || ''}»` : 'Отметьте проекты';
+}
+function wizDirectionBulkHtml() {
+  const s = state._wizBulk || {};
+  const rows = wizDirectionBulkRows();
+  const all = wizImportOrders();
+  const targets = ORDER_PRIMARY_SERVICES.filter(service => !service.general);
+  const picked = new Set(s.picked || []);
+  const row = o => {
+    const client = getClient(o.clientId);
+    const dirs = projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.short || primaryServiceInfo(key)?.title || key).join(', ');
+    return `<label class="rp-wiz-bulk-row"><input type="checkbox" ${picked.has(o.id) ? 'checked' : ''} onchange="wizDirectionBulkToggle('${o.id}',this.checked)"><span><b>${academyEsc(o.number || '')}</b> ${academyEsc(client?.name || '')}</span><span>${academyEsc(dirs)}${o._directionCheckedAt ? ' · проверено' : ''}</span><span>${fmtMoney(orderRevenue(o))}</span></label>`;
+  };
+  return `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content p-5 rp-wiz-bulk" style="max-width:46rem" onclick="event.stopPropagation()" data-wiz-bulk role="dialog" aria-modal="true" aria-label="Импорт TintWiz: направление">
+    <h3 class="text-lg font-semibold">Импорт TintWiz: направление</h3>
+    <p class="text-sm text-gray-600 mt-1">В выгрузке TintWiz нет направления, поэтому старый импорт поставил всем солнцезащитную. Отметьте проекты и выберите правильное направление. Сумма, оплаты и выплаты не изменятся, у каждого проекта в истории будет запись.</p>
+    <div class="rp-wiz-bulk-filters">
+      <label>Сейчас стоит<select onchange="wizDirectionBulkSet('fromKey',this.value)"><option value="">любое</option>${targets.map(service => `<option value="${service.id}" ${s.fromKey === service.id ? 'selected' : ''}>${academyEsc(service.title)}</option>`).join('')}</select></label>
+      <label class="rp-wiz-bulk-check"><input type="checkbox" ${s.onlyUnchecked ? 'checked' : ''} onchange="wizDirectionBulkSet('onlyUnchecked',this.checked)"> только непроверенные</label>
+      <label>Новое направление<select onchange="wizDirectionBulkSet('toKey',this.value)">${targets.map(service => `<option value="${service.id}" ${s.toKey === service.id ? 'selected' : ''}>${academyEsc(service.title)}</option>`).join('')}</select></label>
+    </div>
+    <div class="rp-wiz-bulk-head"><span>Показано ${rows.length} из ${all.length}</span><span><button type="button" class="btn-ghost text-xs" onclick="wizDirectionBulkPickAll(true)">Отметить все показанные</button><button type="button" class="btn-ghost text-xs" onclick="wizDirectionBulkPickAll(false)">Снять отметки</button></span></div>
+    <div class="rp-wiz-bulk-list">${rows.map(row).join('') || '<div class="p-4 text-sm text-gray-500">Нет проектов по этому фильтру.</div>'}</div>
+    <div class="rp-wiz-bulk-foot"><button type="button" class="btn-ghost" onclick="closeModal()">Закрыть</button><button type="button" class="btn-primary" data-wiz-bulk-apply onclick="wizDirectionBulkApply()">${academyEsc(wizDirectionBulkApplyLabel())}</button></div>
+  </div></div>`;
+}
+/** Moves every picked project into the chosen direction; one history entry per project. */
+function wizDirectionBulkMove(ids, toKey, by = state.currentUserId, { wantSkipped = false } = {}) {
+  let projects = 0, skipped = 0;
+  ids.forEach(id => {
+    const o = getOrder(id);
+    if (!o || !projectIsWizImport(o)) return;
+    const results = projectMainDirectionKeys(o).filter(key => key !== toKey)
+      .map(key => projectDirectionMoveApply(o, key, toKey, by, 'массовая правка импорта TintWiz', { keepMoney: true }))
+      .filter(Boolean);
+    if (results.some(result => result.skipped || result.kept)) {
+      // Part of the project is still in the old direction (finished work with stages,
+      // a paid service of the old direction): it stays on the list to fix by hand.
+      delete o._directionCheckedAt;
+      skipped++; return;
+    }
+    if (!results.length) {
+      // Already right: the owner's check is written to the history like a move.
+      o._directionCheckedAt = new Date().toISOString();
+      o.timeline = o.timeline || [];
+      o.timeline.push({ at: o._directionCheckedAt, key: 'direction_checked', by: by || null, note: `Направление проверено: ${projectMainDirectionKeys(o).map(key => primaryServiceInfo(key)?.title || key).join(', ')} · массовая правка импорта TintWiz` });
+    }
+    projects++;
+  });
+  return wantSkipped ? { projects, skipped } : projects;
+}
+function wizDirectionBulkApply() {
+  const s = state._wizBulk;
+  if (!s || currentUser()?.role !== 'owner') return;
+  const ids = (s.picked || []).filter(id => getOrder(id));
+  const to = primaryServiceInfo(s.toKey);
+  if (!ids.length) { alert('Отметьте проекты, которым нужно сменить направление.'); return; }
+  if (!confirm(`Сменить направление у ${ids.length} ${projectPlural(ids.length, 'проекта', 'проектов', 'проектов')} на «${to.title}»?\n\nСумма, оплаты, акт и выплаты не изменятся. У каждого проекта в истории будет запись.`)) return;
+  const { projects: n, skipped } = wizDirectionBulkMove(ids, s.toKey, state.currentUserId, { wantSkipped: true });
+  save();
+  state._wizBulk = { ...s, picked: [] };
+  renderWizDirectionBulk();
+  const rest = skipped ? `\n\nВ ${skipped} ${projectPlural(skipped, 'проекте', 'проектах', 'проектах')} часть работ осталась в прежнем направлении: там уже есть «${to.title}», этапы с начислениями или оплаченная услуга справочника, а выплаты по выполненной работе не меняются. Эти проекты остались в списке непроверенных.` : '';
+  setTimeout(() => alert(`Готово: направление «${to.title}» у ${n} ${projectPlural(n, 'проекта', 'проектов', 'проектов')}.${rest}`), 0);
 }
 
 // ---------- ВАРИАНТЫ ПЛЁНКИ В КП: «КЛИЕНТ ВЫБИРАЕТ» (Owner, 2026-11-12) ----------

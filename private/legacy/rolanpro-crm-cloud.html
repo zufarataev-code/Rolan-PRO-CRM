@@ -1646,6 +1646,13 @@
   .project-service-row:hover { background:#f8fbfd; }
   .project-service-row.selected { background:#eef9fc;box-shadow:inset 4px 0 #159bc4; }
   .project-service-row:last-child { border-bottom:0; }
+  /* Owner, 2026-11-22: a collapsed service is one line — name, scope, price, «Изменить», 🗑. */
+  .project-service-row { grid-template-columns:minmax(0,1fr) auto auto; }
+  .project-service-price { font-weight:900; font-size:.9rem; color:#0f172a; white-space:nowrap; }
+  .project-service-buttons { display:inline-flex; align-items:center; gap:.35rem; }
+  .project-service-row.selected .project-service-buttons { align-self:start; }
+  .project-service-remove { min-width:34px; min-height:34px; border:1px solid #fecaca; border-radius:4px; background:#fff1f2; color:#b91c1c; font-size:.85rem; cursor:pointer; }
+  .project-service-row:not(.selected) .project-service-meta { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .project-service-summary { min-width:0; }
   .project-service-heading { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
   .project-service-name { font-size:.82rem;font-weight:950; }
@@ -1763,8 +1770,15 @@
   .project-cashier-lead { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:.15rem .5rem; min-width:0; max-width:100%; min-height:34px; padding:.35rem .75rem; border:1px solid #9ed4e6; border-left:4px solid #167ca6; border-radius:6px; background:#f2fafd; color:#10213b; text-align:left; font-size:.82rem; }
   .project-cashier-lead-kicker { color:#167ca6; font-size:.66rem; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
   .project-cashier-lead > span:last-child { color:#167ca6; font-weight:800; }
+  .project-command-contacts { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .project-command-contact { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:4px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; font-size:12.5px; font-weight:700; text-decoration:none; cursor:pointer; }
+  .project-command-contact.wa { border-color:#bbf7d0; background:#f0fdf4; color:#15803d; }
+  .project-command-contact.edit { color:#475569; font-weight:600; }
+  .project-command-contact.muted { color:#94a3b8; font-weight:600; border-style:dashed; cursor:default; }
   /* «Следующий шаг» stays one compact row, at most 44px. */
   .project-feed-next .order-action-card { max-height:44px; overflow:hidden; }
+  .project-service-progress-inline { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.35rem .9rem .55rem; font-size:.66rem; font-weight:700; color:#526176; }
+  .project-service-progress-inline .flex { margin-top:0 !important; }
   .project-feed-next .order-action-card > span:last-child { display:flex; align-items:baseline; gap:.5rem; min-width:0; }
   .project-feed-next .order-action-card .order-action-title { flex:none; white-space:nowrap; }
   .project-feed-next .order-action-card .order-action-sub { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -1855,7 +1869,7 @@
     .project-command-grid { gap:.75rem; }
     .project-command-side { grid-template-columns:1fr; }
     .project-command-side > :first-child { grid-column:auto; }
-    .project-service-row { grid-template-columns:minmax(0,1fr) auto;padding:.8rem; }
+    .project-service-row { grid-template-columns:minmax(0,1fr) auto auto;padding:.8rem; }
     .project-service-row > div:not(:first-child):not(:last-child) { display:none; }
     .project-service-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .project-service-fact:last-child:nth-child(odd) { grid-column:1/-1; }
@@ -2237,6 +2251,16 @@
   .crm-import-banner button { border:1px solid #B45309;background:#fff;color:#78350F;border-radius:4px;padding:5px 12px;font-weight:800; }
   .crm-import-panel { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; } .crm-import-panel p { margin:4px 0 0;font-size:13px;color:#5A6577;max-width:34rem; }
   .rp-dirwin-move { margin-top:14px;border-top:1px dashed #D9DEE6;padding-top:10px; } .rp-dirwin-move summary { cursor:pointer;font-size:12px;font-weight:600;color:#5A6577; } .rp-dirwin-move-row { display:grid;gap:6px;margin-top:8px; }
+  /* #592: TintWiz import — check the direction on the card, fix many projects at once. */
+  .rp-wiz-direction { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 12px;padding:10px 12px;border:1px solid #F3D19C;border-left:4px solid #D97706;border-radius:10px;background:#FFFBEB; }
+  .rp-wiz-direction > div:first-child { display:grid;gap:2px;min-width:0;flex:1 1 240px; } .rp-wiz-direction b { font-size:14px; } .rp-wiz-direction span { font-size:12px;color:#5A6577; }
+  .rp-wiz-direction-actions { display:flex;flex-wrap:wrap;gap:6px; }
+  .rp-wiz-bulk-filters { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:12px 0 8px; } .rp-wiz-bulk-filters label { display:grid;gap:4px;font-size:12px;font-weight:600;color:#5A6577; } .rp-wiz-bulk-filters label.rp-wiz-bulk-check { display:flex;align-items:center;gap:6px;align-self:end; }
+  .rp-wiz-bulk-head { display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;font-size:12px;color:#5A6577; }
+  .rp-wiz-bulk-list { max-height:min(52vh,460px);overflow-y:auto;overflow-x:hidden;border:1px solid #E3E8EF;border-radius:10px;margin-top:6px; }
+  .rp-wiz-bulk-row { display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:8px 10px;border-bottom:1px solid #EEF1F5;font-size:13px;cursor:pointer; } .rp-wiz-bulk-row > span { min-width:0;overflow-wrap:anywhere; } .rp-wiz-bulk-row > span:nth-child(3) { color:#5A6577;font-size:12px; }
+  @media (max-width:560px) { .rp-wiz-bulk-row { grid-template-columns:auto minmax(0,1fr); } .rp-wiz-bulk-row > span:nth-child(3), .rp-wiz-bulk-row > span:nth-child(4) { grid-column:2; } }
+  .rp-wiz-bulk-foot { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px; }
   /* Быстрый ввод заказов (Owner, 2026-11-03) */
   .qe { display:flex;flex-direction:column;gap:14px;max-width:1400px; }
   .qe-top { display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap; } .qe-top > div:first-child { flex:1;min-width:260px; }
@@ -5999,6 +6023,71 @@
     color: #94a3b8;
     font-size: 0.82rem;
   }
+  /* Компактная доска проектов (2026-11-22): все стадии на одном экране,
+     у карточки три строки — номер, клиент, деньги. «Подробно» возвращает прежний вид. */
+  .kanban-board-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(148,163,184,0.24);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+  }
+  .kanban-board-toolbar-label { font-size: .72rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+  .kanban-board-toolbar .kanban-density-toggle { margin-left: auto; }
+  .kanban-fullscreen-bar .kanban-board-toolbar { position: static; margin: 0; padding: 0; border: 0; background: none; backdrop-filter: none; }
+  .kanban-compact-line { display: none; }
+  .kanban-funnel.is-compact {
+    grid-auto-flow: row;
+    grid-template-columns: var(--kanban-cols, repeat(7, minmax(158px, 1fr)));
+    grid-auto-columns: unset;
+    gap: 8px;
+  }
+  .kanban-funnel.is-compact .kanban-column { min-width: 0; min-height: 220px; max-height: calc(100vh - 215px); }
+  .kanban-fullscreen .kanban-funnel.is-compact .kanban-column { min-height: calc(100svh - 120px); max-height: calc(100svh - 120px); }
+  .kanban-funnel.is-compact .kanban-col-head { padding: 8px 9px 7px; }
+  .kanban-funnel.is-compact .kanban-col-head .text-xs.mt-2 { display: none; }
+  .kanban-funnel.is-compact .kanban-card { margin: 6px; box-shadow: 0 3px 10px rgba(15,23,42,0.06); animation: none; }
+  .kanban-funnel.is-compact .kanban-card:hover { transform: none; }
+  .kanban-funnel.is-compact .kanban-card-top { height: 3px; }
+  .kanban-funnel.is-compact .kanban-card-main { padding: 6px 8px 0 10px; }
+  .kanban-funnel.is-compact .kanban-title { -webkit-line-clamp: 1; font-size: .86rem; }
+  .kanban-funnel.is-compact .kanban-card-main .mt-2 { margin-top: 4px; }
+  .kanban-funnel.is-compact .kanban-card-main .status-badge,
+  .kanban-funnel.is-compact .kanban-card-main .kanban-chip { font-size: .62rem; padding: .1rem .38rem; }
+  .kanban-funnel.is-compact .kanban-col-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    align-content: start;
+    gap: 0;
+  }
+  .kanban-funnel.is-compact .kanban-col-cards > .kanban-empty { grid-column: 1 / -1; }
+  /* The stage is the column itself; the status chip repeated it. Urgency stays in the money line colour. */
+  .kanban-funnel.is-compact .kanban-card-chips,
+  .kanban-funnel.is-compact .kanban-card-stripes,
+  .kanban-funnel.is-compact .kanban-card-details,
+  .kanban-funnel.is-compact .kanban-card-meta,
+  .kanban-funnel.is-compact .kanban-extra-action { display: none; }
+  .kanban-funnel.is-compact .kanban-compact-line {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+    margin-top: 4px; font-size: .76rem; color: #475569;
+  }
+  .kanban-funnel.is-compact .kanban-card-actions { gap: 4px; padding: 5px 8px 7px; flex-wrap: nowrap; }
+  .kanban-funnel.is-compact .kanban-drag-handle,
+  .kanban-funnel.is-compact .kanban-icon-btn { min-height: 24px; font-size: .7rem; padding: 0 6px; }
+  .kanban-funnel.is-compact .kanban-drag-handle { flex: 1 1 auto; }
+  .kanban-funnel.is-compact .kanban-empty { margin: 6px; padding: 12px 8px; font-size: .74rem; }
+  @media (max-width: 900px) {
+    .kanban-funnel.is-compact { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: min(78vw, 260px); }
+    .kanban-board-toolbar .kanban-density-toggle { margin-left: 0; }
+  }
   @keyframes kanbanRise {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -7966,6 +8055,7 @@ const I18N = {
     proposal_accepted: 'КП принято',
     installation_forced: 'Монтаж начат без полной готовности (владелец)',
     direction_moved: 'Направление проекта изменено',
+    direction_checked: 'Направление проверено',
     installation_scheduled: 'Монтаж назначен',
     installation_accepted: '✓ Специалист по установке принял',
     installation_en_route: '🚗 Бригада выехала',
@@ -8395,6 +8485,7 @@ const I18N = {
     proposal_accepted: 'Proposal accepted',
     installation_forced: 'Installation started before full readiness (owner)',
     direction_moved: 'Project direction changed',
+    direction_checked: 'Direction checked',
     installation_scheduled: 'Installation scheduled',
     installation_accepted: '✓ Installer accepted',
     installation_en_route: '🚗 Crew en route',
@@ -8682,6 +8773,7 @@ let state = {
   ordersView: null, // Phone defaults to cards; desktop to the existing kanban.
   ordersPeriod: 'all',
   ordersKanbanFullscreen: false,
+  ordersKanbanDensity: null, // 'compact' (default) | 'detailed'; remembered per device.
   proposalsRegistry: null,
   proposalsRegistryLoading: false,
   proposalsRegistryError: '',
@@ -11142,7 +11234,22 @@ function filmCutOptimizePieces(pieces, rollWidths) {
   );
   return candidates[0];
 }
+// Owner, 2026-11-22: «CRM не должна тормозить». The project card asked for the
+// same film plan seven times per screen (sum, cost, margin, PSS…) — ~80 ms on a Mac,
+// several times more on a phone, on every keystroke. During one screen render the
+// project does not change, so the plan is computed once per project per render.
+let __filmPlanRenderCache = null;
 function calcFilmPlan(o) {
+  if (__filmPlanRenderCache && o && typeof o === 'object') {
+    const hit = __filmPlanRenderCache.get(o);
+    if (hit) return hit;
+    const plan = calcFilmPlanCompute(o);
+    __filmPlanRenderCache.set(o, plan);
+    return plan;
+  }
+  return calcFilmPlanCompute(o);
+}
+function calcFilmPlanCompute(o) {
   const pieces = filmCutCreatePiecesForOrder(o);
   const byCatalog = {};
   pieces.forEach(piece => {
@@ -15440,7 +15547,79 @@ function inboundMessageVisibleToUser(message, user = currentUser()) {
   if (!message || message.direction !== 'in' || !user) return false;
   if (user.role === 'owner') return true;
   const order = getOrder(message.orderId);
+  // A new WhatsApp lead from an ad has no project yet: managers must see it
+  // to answer it (Owner, 2026-11-22).
+  if (!order && message.channel === 'whatsapp' && user.role === 'manager') return true;
   return !!order && orderUserCanAccess(order, user);
+}
+function whatsappThreadPhone(message) {
+  return String((message?.direction === 'in' ? message?.meta?.from : message?.meta?.to) || '').trim();
+}
+function whatsappPhoneThreadMessages(phone) {
+  const digits = String(phone || '').replace(/\D/g, '').slice(-10);
+  if (digits.length < 10) return [];
+  return twilioRemoteMessages
+    .filter(x => x.channel === 'whatsapp')
+    .filter(x => String(x.direction === 'in' ? x.meta?.from : x.meta?.to).replace(/\D/g, '').slice(-10) === digits)
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+function renderWhatsAppPhoneThread(phone) {
+  const items = whatsappPhoneThreadMessages(phone);
+  if (!items.length) return '<div class="text-center text-sm text-slate-500">Сообщений пока нет.</div>';
+  return items.map(x => {
+    const mine = x.direction !== 'in';
+    const who = !mine ? 'Клиент' : x.kind === 'whatsapp_bot' ? '🤖 Бот' : (getUser(x.by)?.name || 'Менеджер');
+    return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${mine ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border'}">${academyEsc(x.body || '')}${messageMediaHtml(x, mine)}<div class="text-[10px] mt-1 ${mine ? 'text-emerald-100' : 'text-slate-400'}">${academyEsc(who)} · ${fmtDateTime(x.at)}${x.status === 'failed' || x.status === 'undelivered' ? ' · не доставлено' : ''}</div></div></div>`;
+  }).join('');
+}
+function openWhatsAppPhoneThread(phone) {
+  state.whatsappThreadPhone = phone;
+  state.modal = `
+    <div class="modal-backdrop" onclick="if(event.target===this) closeWhatsAppPhoneThread()">
+      <div class="modal-content workspace-modal overflow-hidden p-0" style="max-width:44rem;height:min(760px,92vh);display:flex;flex-direction:column;">
+        <div class="flex items-start justify-between gap-3 px-5 py-4 border-b bg-white">
+          <div class="min-w-0"><div class="text-xs font-black text-emerald-700 uppercase">WhatsApp · новый клиент</div><h3 class="text-xl font-black truncate">${academyEsc(phone)}</h3><div class="text-xs text-slate-500 mt-1">После вашего ответа бот молчит 12 часов</div></div>
+          <button class="btn-ghost" onclick="closeWhatsAppPhoneThread()">✕</button>
+        </div>
+        <div id="whatsapp-phone-thread" class="flex-1 overflow-y-auto bg-slate-100 p-4 space-y-2">${renderWhatsAppPhoneThread(phone)}</div>
+        <div class="border-t bg-white p-4">
+          <div id="whatsapp-phone-thread-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
+          <textarea id="whatsapp-phone-thread-text" rows="3" class="w-full" placeholder="Ответ клиенту в WhatsApp…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendWhatsAppPhoneThreadMessage();}"></textarea>
+          <div class="flex items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div><label class="btn-ghost text-sm cursor-pointer" title="Фото, видео или PDF">📎 Файл<input type="file" accept="image/*,video/*,application/pdf" multiple class="hidden" onchange="whatsappThreadSendFiles(this)"></label><button id="whatsapp-phone-thread-send" class="btn-primary" onclick="sendWhatsAppPhoneThreadMessage()">Отправить в WhatsApp</button></div>
+        </div>
+      </div>
+    </div>`;
+  render();
+  setTimeout(() => { const el = document.getElementById('whatsapp-phone-thread'); if (el) el.scrollTop = el.scrollHeight; }, 30);
+}
+function closeWhatsAppPhoneThread() {
+  state.whatsappThreadPhone = null;
+  closeModal();
+}
+function refreshWhatsAppPhoneThread() {
+  const el = document.getElementById('whatsapp-phone-thread');
+  if (!el || !state.whatsappThreadPhone) return;
+  el.innerHTML = renderWhatsAppPhoneThread(state.whatsappThreadPhone);
+  el.scrollTop = el.scrollHeight;
+}
+async function sendWhatsAppPhoneThreadMessage() {
+  const phone = state.whatsappThreadPhone;
+  const input = document.getElementById('whatsapp-phone-thread-text');
+  const button = document.getElementById('whatsapp-phone-thread-send');
+  const notice = document.getElementById('whatsapp-phone-thread-notice');
+  const body = input?.value.trim() || '';
+  if (!phone || !body) return;
+  if (button) { button.disabled = true; button.textContent = 'Отправляю…'; }
+  try {
+    await sendWhatsAppViaTwilio(phone, body, {});
+    if (input) input.value = '';
+    await syncTwilioMessages();
+    refreshWhatsAppPhoneThread();
+  } catch (e) {
+    if (notice) { notice.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; notice.textContent = 'Не отправилось: ' + e.message; }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Отправить в WhatsApp'; }
+  }
 }
 function visibleInboundClientMessages() {
   return twilioRemoteMessages
@@ -15492,14 +15671,62 @@ function openInboundMessagesInbox() {
                 <div class="min-w-0"><div class="font-black text-slate-900">${message.channel === 'whatsapp' ? '💬' : '📱'} ${academyEsc(sender)}</div><div class="text-xs text-slate-500 mt-1">${channel}${order ? ` · ${academyEsc(order.number || '')}` : ' · заказ из прежней базы или без привязки'}</div></div>
                 <div class="text-xs text-slate-400 whitespace-nowrap">${fmtDateTime(message.at)}</div>
               </div>
-              <div class="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">${academyEsc(message.body || '')}</div>
-              ${order ? `<button class="btn-primary text-sm mt-3" onclick="openClientConversation('${order.id}','${message.channel === 'whatsapp' ? 'whatsapp' : 'sms'}')">Открыть весь диалог</button>` : `<div class="text-xs text-amber-700 mt-3">Сообщение можно прочитать здесь, но ответ привязать нельзя: исходного заказа уже нет в текущей базе.</div>`}
+              <div class="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">${academyEsc(message.body || '')}</div>${messageMediaHtml(message)}
+              ${order ? `<button class="btn-primary text-sm mt-3" onclick="openClientConversation('${order.id}','${message.channel === 'whatsapp' ? 'whatsapp' : 'sms'}')">Открыть весь диалог</button>` : message.channel === 'whatsapp' && whatsappThreadPhone(message) ? `<button class="btn-primary text-sm mt-3" onclick="openWhatsAppPhoneThread('${academyEsc(whatsappThreadPhone(message))}')">💬 Открыть переписку и ответить</button>` : `<div class="text-xs text-amber-700 mt-3">Сообщение можно прочитать здесь, но ответ привязать нельзя: исходного заказа уже нет в текущей базе.</div>`}
             </div>`;
           }).join('') : `<div class="card text-center text-gray-500">Входящих сообщений по вашим заказам пока нет.</div>`}
         </div>
       </div>
     </div>`;
   render();
+}
+// Owner, 2026-11-22: «обмениваться файлами по WhatsApp в CRM». Photos show inline,
+// PDFs and videos as a link; the 📎 button uploads to storage and sends in WhatsApp.
+function messageMediaHtml(message, light = false) {
+  const media = Array.isArray(message?.media) ? message.media : [];
+  if (!media.length) return '';
+  return `<div class="flex flex-wrap gap-2 mt-2">${media.map(item => {
+    const url = academyEsc(item.url || '');
+    const type = String(item.contentType || '');
+    if (type.startsWith('image/')) return `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="фото" loading="lazy" style="max-width:220px;max-height:220px;border-radius:10px;display:block"></a>`;
+    const label = type === 'application/pdf' ? '📄 PDF' : type.startsWith('video/') ? '🎬 Видео' : '📎 Файл';
+    return `<a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-bold ${light ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}">${label} — открыть</a>`;
+  }).join('')}</div>`;
+}
+async function whatsappUploadFiles(fileList) {
+  const files = Array.from(fileList || []).slice(0, 10);
+  const media = [];
+  for (const file of files) {
+    const uploaded = await crmUploadMedia(file, 'whatsapp');
+    media.push({ key: uploaded.key, contentType: uploaded.mime });
+  }
+  return media;
+}
+async function sendWhatsAppFiles(inputEl, phone, context, onDone) {
+  const files = inputEl?.files;
+  if (!files?.length || !phone) return;
+  const caption = (context.captionEl?.value || '').trim();
+  try {
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-slate-50 text-slate-600'; context.statusEl.textContent = `Загружаю файлы: ${files.length}…`; }
+    const media = await whatsappUploadFiles(files);
+    await twilioApi('/messages', { method: 'POST', body: JSON.stringify({ to: phone, body: caption, channel: 'whatsapp', orderId: context.orderId || null, clientId: context.clientId || null, media }) });
+    if (context.captionEl) context.captionEl.value = '';
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-emerald-50 text-emerald-700'; context.statusEl.textContent = `Отправлено файлов: ${media.length}`; }
+    await syncTwilioMessages();
+    onDone?.();
+  } catch (e) {
+    if (context.statusEl) { context.statusEl.className = 'mb-2 rounded-lg p-2 text-sm bg-rose-50 text-rose-700'; context.statusEl.textContent = 'Файл не отправился: ' + (e.message || e); }
+  } finally {
+    if (inputEl) inputEl.value = '';
+  }
+}
+function clientConversationSendFiles(inputEl) {
+  const o = getOrder(state.clientConversationOrderId);
+  const c = getClient(o?.clientId);
+  sendWhatsAppFiles(inputEl, c?.whatsappPhone || c?.phone, { orderId: o?.id, clientId: c?.id, captionEl: document.getElementById('client-conversation-text'), statusEl: document.getElementById('client-conversation-notice') }, refreshClientConversationDialog);
+}
+function whatsappThreadSendFiles(inputEl) {
+  sendWhatsAppFiles(inputEl, state.whatsappThreadPhone, { captionEl: document.getElementById('whatsapp-phone-thread-text'), statusEl: document.getElementById('whatsapp-phone-thread-notice') }, refreshWhatsAppPhoneThread);
 }
 function clientConversationMessages(orderId) {
   return twilioRemoteMessages
@@ -15515,7 +15742,7 @@ function renderClientConversationMessages(orderId) {
     return `<div class="flex ${incoming ? 'justify-start' : 'justify-end'} mb-3">
       <div class="max-w-[82%] rounded-2xl px-4 py-3 ${incoming ? 'bg-white border border-slate-200 rounded-bl-md' : 'bg-blue-600 text-white rounded-br-md'} shadow-sm">
         <div class="text-[11px] font-bold ${incoming ? 'text-emerald-700' : 'text-blue-100'} mb-1">${x.channel === 'whatsapp' ? '💬' : '📱'} ${channel} · ${incoming ? 'клиент' : 'ROLANPRO'}</div>
-        <div class="text-sm whitespace-pre-wrap break-words">${academyEsc(x.body || '')}</div>
+        <div class="text-sm whitespace-pre-wrap break-words">${academyEsc(x.body || '')}</div>${messageMediaHtml(x, !incoming)}
         <div class="text-[10px] mt-2 ${incoming ? 'text-slate-400' : 'text-blue-100'}">${fmtDateTime(x.at)}${incoming ? '' : ' · ' + communicationStatusLabel(x.status)}</div>
       </div>
     </div>`;
@@ -15555,8 +15782,8 @@ function openClientConversation(orderId, preferredChannel = 'sms') {
         <div id="client-conversation-history" class="flex-1 overflow-y-auto bg-slate-100 p-5">${renderClientConversationMessages(orderId)}</div>
         <div class="border-t bg-white p-4">
           <div id="client-conversation-notice" class="hidden mb-2 rounded-lg p-2 text-sm"></div>
-          <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
-          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">⌘/Ctrl + Enter — отправить</span><div class="flex-1"></div><button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
+          <textarea id="client-conversation-text" rows="3" class="w-full" placeholder="Напишите сообщение клиенту…" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendClientConversationMessage();}">${academyEsc(state.clientConversationDraft || '')}</textarea>
+          <div class="flex flex-wrap items-center gap-2 mt-3"><span class="text-xs text-slate-400">Enter — отправить · Shift+Enter — новая строка</span><div class="flex-1"></div>${channel === 'whatsapp' ? `<label class="btn-ghost text-sm cursor-pointer" title="Фото, видео или PDF — отправится в WhatsApp, текст из поля станет подписью">📎 Файл<input type="file" accept="image/*,video/*,application/pdf" multiple class="hidden" onchange="clientConversationSendFiles(this)"></label>` : ''}<button class="btn-ghost text-sm" onclick="aiDraftClientConversationReply()">✨ AI-черновик</button><button id="client-conversation-send" class="btn-primary" onclick="sendClientConversationMessage()">Отправить ${channel === 'whatsapp' ? 'в WhatsApp' : 'SMS'}</button></div>
         </div>
       </div>
     </div>`;
@@ -18248,6 +18475,7 @@ function addOrderPayment(orderId, data) {
     date: data.date || paymentLocalDate(),
     method: data.method || 'zelle',
     note: data.note || '',
+    accountId: data.accountId || null,
     recordedBy: state.currentUserId || null,
     recordedAt: new Date().toISOString(),
   });
@@ -18318,6 +18546,7 @@ function ensurePaidForStatus(o, newStatus, open = true) {
  * проект получит, когда поступления покроют всю сумму.
  */
 function openPaymentModal(orderId, opts = {}) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   if (!o) return;
   const c = getClient(o.clientId);
@@ -18339,6 +18568,9 @@ function openPaymentModal(orderId, opts = {}) {
       <select id="pay-method">
         ${PAYMENT_METHODS.map(m => `<option value="${m.id}" ${kpOnlinePaymentMethod(o.kpOnline?.method) === m.id ? 'selected' : ''}>${m.label}</option>`).join('')}
       </select>
+
+      <label class="mt-3">На какой счёт пришли деньги</label>
+      ${typeof financePaymentAccountSelect === 'function' ? financePaymentAccountSelect('pay-account') : ''}
 
       <label class="mt-3">Дата поступления</label>
       <input id="pay-date" type="date" value="${paymentLocalDate()}">
@@ -18384,6 +18616,7 @@ function confirmPayment(orderId) {
     method: document.getElementById('pay-method')?.value,
     date: document.getElementById('pay-date')?.value,
     note: document.getElementById('pay-note')?.value || (flow.kind === 'deposit' ? 'Аванс' : ''),
+    accountId: document.getElementById('pay-account')?.value || null,
   });
   const o = getOrder(orderId);
   // A payment that covers the KP deposit is the deposit, whichever button
@@ -18919,6 +19152,7 @@ function ensureOrderWorkflowTransition(o, newStatus, openWorkspace = true) {
 }
 
 function changeStatus(orderId, newStatus, by, opts = {}) {
+  if (!opts?.system && typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return false; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   if (!o) return false;
   if (o?.quickEntryDraft === true && o?.quickProjectImportedCompleted !== true) {
@@ -20072,7 +20306,10 @@ function renderNow() {
   if (state.clientPortalOrderId) { root.innerHTML = renderClientPortal(); return; }
   if (!state.currentUserId) { root.innerHTML = renderLogin(); return; }
 
-  const html = renderAppShell();
+  // One film plan per project for the whole screen (see calcFilmPlan).
+  __filmPlanRenderCache = new WeakMap();
+  let html;
+  try { html = renderAppShell(); } finally { __filmPlanRenderCache = null; }
 
   // Тридцать обработчиков вызывают render() при каждом изменении поля,
   // но большинство изменений не меняют то, что на экране: ввод размера
@@ -22223,15 +22460,59 @@ function renderOrdersPeriodToggle(compact = false) {
     ${items.map(([id, label]) => `<button class="${active===id?'active':''}" onclick="setOrdersPeriod('${id}')">${label}</button>`).join('')}
   </div>`;
 }
+// Owner, 2026-11-22: «карточки растянуты, не вижу всех проектов — в одном окне
+// должны быть видны все карточки, сверху фильтр день/неделя/месяц и режим на весь
+// экран». Compact cards are the default; the choice is remembered on the device.
+function ordersKanbanDensity() {
+  if (state.ordersKanbanDensity) return state.ordersKanbanDensity;
+  try { state.ordersKanbanDensity = localStorage.getItem('rp.ordersKanbanDensity') === 'detailed' ? 'detailed' : 'compact'; }
+  catch (_) { state.ordersKanbanDensity = 'compact'; }
+  return state.ordersKanbanDensity;
+}
+function setOrdersKanbanDensity(density) {
+  state.ordersKanbanDensity = density === 'detailed' ? 'detailed' : 'compact';
+  try { localStorage.setItem('rp.ordersKanbanDensity', state.ordersKanbanDensity); } catch (_) {}
+  render();
+}
+function renderOrdersKanbanToolbar(fullscreen = false) {
+  const density = ordersKanbanDensity();
+  return `<div class="kanban-board-toolbar">
+    <span class="kanban-board-toolbar-label">Период</span>
+    ${renderOrdersPeriodToggle(true)}
+    <div class="orders-view-toggle kanban-density-toggle" role="group" aria-label="Вид карточек">
+      <button class="${density==='compact'?'active':''}" onclick="setOrdersKanbanDensity('compact')" title="Все проекты на одном экране">▤ Компактно</button>
+      <button class="${density==='detailed'?'active':''}" onclick="setOrdersKanbanDensity('detailed')" title="Карточки со всеми деталями">▣ Подробно</button>
+    </div>
+    ${fullscreen
+      ? `<button class="btn-ghost" onclick="closeOrdersKanbanFullscreen()">✕ Закрыть</button>`
+      : `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>`}
+  </div>`;
+}
 function openOrdersKanbanFullscreen() {
   state.ordersView = 'kanban';
   state.ordersKanbanFullscreen = true;
   render();
+  // Real browser full screen when allowed; the overlay works without it too.
+  try {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  } catch (_) {}
 }
 function closeOrdersKanbanFullscreen() {
   state.ordersKanbanFullscreen = false;
+  try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } catch (_) {}
   render();
 }
+document.addEventListener('fullscreenchange', () => {
+  // Esc in browser full screen also closes the board overlay.
+  if (!document.fullscreenElement && state.ordersKanbanFullscreen) {
+    state.ordersKanbanFullscreen = false;
+    render();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && state.ordersKanbanFullscreen && !state.modal) closeOrdersKanbanFullscreen();
+});
 function orderKanbanDebt(o) {
   return Math.max(0, orderKanbanRevenue(o) - (Number(o.paid) || 0));
 }
@@ -22285,6 +22566,7 @@ function projectKanbanNextStatus(o) {
   return next;
 }
 function orderKanbanAdvance(orderId, event) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) { event?.stopPropagation?.(); return; } // Owner, 2026-11-22: closed project needs the owner's approval.
   if (event) event.stopPropagation();
   const o = getOrder(orderId);
   const next = o ? projectKanbanNextStatus(o) : null;
@@ -22304,6 +22586,7 @@ function kanbanColumnForStatus(status) {
   return ORDER_KANBAN_FUNNEL.find(column => column.statuses.includes(status)) || null;
 }
 function kanbanMoveOrder(orderId, targetStatus) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return false; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(orderId);
   const viewer = currentUser();
   if (!o || !targetStatus) return false;
@@ -22489,6 +22772,15 @@ function moveKanbanOrderFromPicker(orderId, targetStatus) {
   state.modal = null;
   kanbanMoveOrder(orderId, targetStatus);
 }
+// Owner, 2026-11-22 09:09: «в рамках недели не вижу все заказы, уходят за горизонт».
+// In compact mode a busy stage takes the width the empty stages do not need, and
+// its cards lay out in several rows-of-columns inside it, so a week fits one screen.
+function ordersKanbanCompactColumns(filtered) {
+  return ORDER_KANBAN_FUNNEL.map(col => {
+    const count = filtered.filter(o => col.statuses.includes(o.status)).length;
+    return count ? `minmax(190px, ${Math.min(count, 8)}fr)` : 'minmax(120px, 0.6fr)';
+  }).join(' ');
+}
 function renderOrdersKanban(filtered, opts = {}) {
   const totalRevenue = filtered.reduce((s,o) => s + orderKanbanRevenue(o), 0);
   const totalDebt = filtered.reduce((s,o) => s + orderKanbanDebt(o), 0);
@@ -22499,7 +22791,7 @@ function renderOrdersKanban(filtered, opts = {}) {
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Остаток к оплате</div><div class="text-xl font-black ${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</div></div>
       <div class="p-3 rounded-lg border bg-white"><div class="text-xs text-gray-500">Средний чек</div><div class="text-xl font-black">${fmtMoney(filtered.length ? totalRevenue / filtered.length : 0)}</div></div>
     </div>`}
-    <div class="kanban-funnel" data-scroll-key="kanban">
+    <div class="kanban-funnel ${ordersKanbanDensity() === 'compact' ? 'is-compact' : ''}" data-scroll-key="kanban" ${ordersKanbanDensity() === 'compact' ? `style="--kanban-cols:${ordersKanbanCompactColumns(filtered)}"` : ''}>
       ${ORDER_KANBAN_FUNNEL.map(col => {
         const orders = filtered.filter(o => col.statuses.includes(o.status));
         const colRevenue = orders.reduce((s,o) => s + orderKanbanRevenue(o), 0);
@@ -22519,7 +22811,7 @@ function renderOrdersKanban(filtered, opts = {}) {
               </div>
               ${colDebt > 0 ? `<div class="text-xs text-red-600 mt-2">Долг: ${fmtMoney(colDebt)}</div>` : `<div class="text-xs text-gray-400 mt-2">Без просроченного долга</div>`}
             </div>
-            <div class="py-1">
+            <div class="py-1 kanban-col-cards">
               ${orders.length ? orders.map(o => renderOrderKanbanCard(o)).join('') : `<div class="kanban-empty">Перетащите проект сюда</div>`}
             </div>
           </section>
@@ -22538,14 +22830,13 @@ function renderOrdersKanbanFullscreen(filtered, meta = {}) {
             <div class="text-xs text-gray-500 font-semibold">ROLANPRO CRM · Канбан проектов</div>
             <div class="text-2xl font-black text-slate-900">${meta.periodLabel || ordersPeriodLabel()}</div>
           </div>
-          ${renderOrdersPeriodToggle(true)}
           <div class="hidden md:flex items-center gap-2 text-sm">
             <span class="kanban-chip dark">${filtered.length} проектов</span>
             <span class="kanban-chip">Потенциал ${fmtMoney(meta.totalSum || 0)}</span>
             <span class="kanban-chip ${totalDebt>0?'bg-rose-50 text-rose-700 border-rose-100':''}">Долг ${fmtMoney(totalDebt)}</span>
             <span class="kanban-chip">${(meta.totalArea || 0).toFixed(0)} sqft</span>
           </div>
-          <button class="btn-ghost" onclick="closeOrdersKanbanFullscreen()">Закрыть</button>
+          ${renderOrdersKanbanToolbar(true)}
         </div>
       </div>
       ${renderOrdersKanban(filtered, { hideStats: true })}
@@ -22582,12 +22873,18 @@ function renderOrderKanbanCard(o) {
             <span class="kanban-chip" style="background:${accent.soft};border-color:${accent.soft};color:${accent.color}">${premiumEsc(accent.label)}</span>
           </div>
         </div>
-        <div class="mt-2 flex flex-wrap gap-1">
+        <div class="kanban-card-chips mt-2 flex flex-wrap gap-1">
           <span class="status-badge ${getOrderStatus(o).color}">${T(o.status)}</span>${typeof orderFilmChoiceBadge === 'function' ? orderFilmChoiceBadge(o) : ''}
           ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
         </div>
-        ${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}
-        <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div class="kanban-card-stripes">${typeof installStripesHtml === 'function' ? installStripesHtml(o) : ''}</div>
+        <div class="kanban-compact-line">
+          <b class="text-emerald-700">${fmtMoney(revenue)}</b>
+          <span>${sqft.toFixed(0)} sqft</span>
+          ${debt > 0 ? `<b class="text-red-600">долг ${fmtMoney(debt)}</b>` : ''}
+          ${urgency ? `<span class="kanban-chip ${urgency.cls}">${urgency.label}</span>` : ''}
+        </div>
+        <div class="kanban-card-details mt-3 grid grid-cols-2 gap-2 text-sm">
           <div>
             <div class="text-xs text-gray-500">Сумма</div>
             <div class="font-black text-emerald-700">${fmtMoney(revenue)}</div>
@@ -22605,7 +22902,7 @@ function renderOrderKanbanCard(o) {
             <div class="font-semibold">${rooms} / ${windows}</div>
           </div>
         </div>
-        <div class="mt-3 text-xs text-gray-600 space-y-1">
+        <div class="kanban-card-meta mt-3 text-xs text-gray-600 space-y-1">
           <div class="kanban-meta-line"><span>📍</span><span>${premiumEsc(projectAddress || 'Адрес не указан')}</span></div>
           <div class="kanban-meta-line"><span>📅</span><span>${fmtDateTime(o.installationAt)}</span></div>
           <div class="kanban-meta-line"><span>👤</span><span>${premiumEsc(manager)}${installers ? ` · 🔧 ${premiumEsc(installers)}` : ''}</span></div>
@@ -22615,9 +22912,9 @@ function renderOrderKanbanCard(o) {
           <button class="kanban-drag-handle" title="Перетащить или выбрать этап" aria-label="Переместить проект"
             onclick="event.stopPropagation(); openKanbanStagePicker('${o.id}')">↕ Этап</button>
           <button class="kanban-icon-btn" title="Открыть проект" onclick="event.stopPropagation(); openOrder('${o.id}')">↗</button>
-          <a class="kanban-icon-btn" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
-          <a class="kanban-icon-btn" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
-          <button class="kanban-icon-btn" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
+          <a class="kanban-icon-btn kanban-extra-action" title="Позвонить" href="${callLink(c.phone)}" onclick="event.stopPropagation()">☎</a>
+          <a class="kanban-icon-btn kanban-extra-action" title="WhatsApp" href="${whatsappLink(c.phone, text)}" target="_blank" onclick="event.stopPropagation()">WA</a>
+          <button class="kanban-icon-btn kanban-extra-action" title="Единое КП ROLANPRO" onclick="event.stopPropagation(); openProfessionalKP('${o.id}')">КП</button>
           <button class="kanban-icon-btn" title="${next ? 'Перевести дальше: ' + T(next) : 'Финальный этап'}" onclick="orderKanbanAdvance('${o.id}', event)" ${next ? '' : 'disabled'}>→</button>
         </div>
       </div>
@@ -22772,6 +23069,7 @@ function renderOrders() {
   const totalSum  = filtered.reduce((s,o)=>s+orderKanbanRevenue(o),0);
   const hasFilters = state.search || state.statusFilter || (u?.role === 'owner' && state.managerFilter) || state.dateFrom || state.dateTo;
   const periodLabel = ordersPeriodLabel();
+  const totalDebt = filtered.reduce((s,o)=>s+orderKanbanDebt(o),0);
 
   return `
   <div class="orders-command-panel mb-4">
@@ -22782,8 +23080,8 @@ function renderOrders() {
       </div>
       <div class="orders-primary-actions">
         ${hasFilters ? `<button class="btn-ghost" onclick="clearOrderFilters()">✕ ${T('clearFilters')}</button>` : ''}
-        ${ordersView === 'kanban' ? `<button class="btn-ghost" onclick="openOrdersKanbanFullscreen()">⛶ Весь экран</button>` : ''}
         <button class="btn-ghost" onclick="location.hash='#/projects'">📐 Проверенные замеры</button>
+        ${currentUser()?.role === 'owner' && typeof wizImportOrders === 'function' && wizImportOrders().length ? `<button class="btn-ghost" onclick="openWizDirectionBulk()" title="Проверить направление проектов из TintWiz">🧾 Импорт TintWiz (${wizImportOrders().filter(o => !o._directionCheckedAt).length})</button>` : ''}
         ${currentUser()?.role === 'owner' ? `<button class="btn-ghost" onclick="openProjectArchive()">🗄 Архив${(db.archivedOrders || []).length ? ` (${db.archivedOrders.length})` : ''}</button>` : ''}
         <button class="btn-primary" onclick="openOrderModal()">+ ${T('newOrder')}</button>
       </div>
@@ -22801,7 +23099,7 @@ function renderOrders() {
           <button class="${ordersView==='list'?'active':''}" onclick="state.ordersView='list'; render();">Список</button>
         </div>
       </div>
-      <details class="pulse-order-filters" ${isCompactViewport() ? '' : 'open'}><summary>Период и фильтры${hasFilters ? ' · активны' : ''}</summary><div class="pulse-order-filter-grid">
+      <details class="pulse-order-filters" ${isCompactViewport() || ordersView === 'kanban' ? '' : 'open'}><summary>Период и фильтры${hasFilters ? ' · активны' : ''}</summary><div class="pulse-order-filter-grid">
       <div class="orders-filter-field compact">
         <label>Период</label>
         ${renderOrdersPeriodToggle()}
@@ -22839,20 +23137,21 @@ function renderOrders() {
       <span>${T('area')}: <b class="text-slate-800">${totalArea.toFixed(0)} sqft</b></span>
       <span class="orders-summary-dot"></span>
       <span>${T('sum')}: <b class="text-emerald-600">${fmtMoney(totalSum)}</b></span>
+      ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Долг: <b class="${totalDebt>0?'text-red-600':'text-slate-800'}">${fmtMoney(totalDebt)}</b></span>` : ''}
       ${ordersView === 'kanban' ? `<span class="orders-summary-dot"></span><span>Перетащите карточку или нажмите «Этап»</span>` : ''}
     </div>
   </div>
 
-  <div class="orders-kpi-grid">
+  ${ordersView === 'kanban' ? '' : `<div class="orders-kpi-grid">
     <div class="orders-kpi-card"><div class="orders-kpi-label">В воронке</div><div class="orders-kpi-value">${filtered.length}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Потенциал</div><div class="orders-kpi-value text-emerald-700">${fmtMoney(totalSum)}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Остаток к оплате</div><div class="orders-kpi-value ${filtered.reduce((s,o)=>s+orderKanbanDebt(o),0)>0?'text-red-600':'text-slate-800'}">${fmtMoney(filtered.reduce((s,o)=>s+orderKanbanDebt(o),0))}</div></div>
     <div class="orders-kpi-card"><div class="orders-kpi-label">Средний чек</div><div class="orders-kpi-value">${fmtMoney(filtered.length ? totalSum / filtered.length : 0)}</div></div>
-  </div>
+  </div>`}
 
   ${state.ordersKanbanFullscreen && ordersView === 'kanban' ? renderOrdersKanbanFullscreen(filtered, { totalSum, totalArea, periodLabel }) : ''}
 
-  ${ordersView === 'kanban' ? renderOrdersKanban(filtered, { hideStats: true }) : `
+  ${ordersView === 'kanban' ? renderOrdersKanbanToolbar(false) + renderOrdersKanban(filtered, { hideStats: true }) : `
   <div class="card p-0 overflow-hidden">
     <table class="w-full">
       <thead class="bg-gray-50 border-b">
@@ -24204,6 +24503,7 @@ const LEAD_SOURCES = {
   website:  { label: 'Сайт',      icon: '🌐', cls: 'bg-blue-50 text-blue-700',   crmSource: 'direct' },
   facebook: { label: 'Facebook',  icon: '📘', cls: 'bg-indigo-50 text-indigo-700', crmSource: 'facebook' },
   facebook_messenger: { label: 'Messenger', icon: '💬', cls: 'bg-blue-50 text-blue-700', crmSource: 'facebook' },
+  whatsapp: { label: 'WhatsApp', icon: '🟢', cls: 'bg-emerald-50 text-emerald-700', crmSource: 'facebook' },
   meta_lead_ads: { label: 'Meta · Lead Ads', icon: '📘', cls: 'bg-indigo-50 text-indigo-700', crmSource: 'facebook' },
   callrail: { label: 'Звонок · CallRail', icon: '📞', cls: 'bg-emerald-50 text-emerald-700', crmSource: 'callrail' },
   'ai-chat':{ label: 'ИИ-чат',    icon: '🤖', cls: 'bg-purple-50 text-purple-700', crmSource: 'direct' },
@@ -25030,6 +25330,7 @@ function renderSettings() {
 
       <div class="space-y-4">
         ${typeof googleAdsCrmPanelHtml === 'function' ? googleAdsCrmPanelHtml() : ''}
+        ${typeof assistantKeyPanelHtml === 'function' ? assistantKeyPanelHtml() : ''}
         <div class="p-4 border ${zadarmaServerStatus?.connected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -26336,6 +26637,7 @@ function projectSiteSummary(o, c = null) {
   ].filter(Boolean).join(' · ');
 }
 function updateProjectSiteInfo(oid, field, value) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanManage(currentUser())) return;
   const allowed = ['gateCode','parkingAvailable','customerParking','parkingInstructions','accessRestrictions','loadingInstructions','contactName','contactPhone','notes'];
@@ -27599,9 +27901,19 @@ function projectAddOfferingLine(oid, offeringId, serviceType = '') {
   const direction = offeringServiceTypeIn(offering, serviceType);
   if (!direction) return;
   if (serviceOfferingNeedsSizes(offering)) {
-    (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
-      if (!win.offeringId && (win.measureScope || o.serviceType) === direction) applyWindowOffering(win, offering);
-    }));
+    // Windows belong to the project (Owner, 2026-11-22): free windows of this direction
+    // take the service; if there are none, every window without a film service does —
+    // e.g. sizes left after the privacy service was removed go to the decorative one.
+    const free = measureAllWindows(o).filter(({ win }) => !win.offeringId);
+    const own = free.filter(({ win }) => (win.measureScope || o.serviceType) === direction);
+    const left = new Set();
+    (own.length ? own : free).forEach(({ win }) => {
+      left.add(win.measureScope || o.serviceType);
+      win.measureScope = direction;
+      applyWindowOffering(win, offering);
+    });
+    // A direction the windows just left (and nothing else uses) leaves the measurement too.
+    left.forEach(scope => { if (scope && scope !== direction) projectReleaseDirection(o, scope); });
   } else {
     o.extraServices = o.extraServices || [];
     o.extraServices.push(projectOfferingLine(offering, 1, direction));
@@ -27703,12 +28015,15 @@ function serviceCashierSteps(offering) {
 }
 
 function openServiceCashier(oid, returnTo = 'card') {
-  const mode = ['estimate', 'intake', 'direction'].includes(returnTo) ? returnTo : 'card';
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
+  const mode = ['estimate', 'intake', 'direction', 'editor'].includes(returnTo) ? returnTo : 'card';
   if (mode === 'intake') {
     if (!orderUserCanManage()) return;
   } else {
     const o = getOrder(oid);
-    if (!o || !orderUserCanSeeMoney(o, currentUser()) || CLOSED_PROJECT_STATUSES.includes(o.status)) return;
+    // The «Редактировать проект» window lets the owner add to a closed project (Owner, 2026-11-22).
+    const editorMayEditClosed = mode === 'editor' && typeof projectEditorCanEdit === 'function' && projectEditorCanEdit(o);
+    if (!o || !orderUserCanSeeMoney(o, currentUser()) || (CLOSED_PROJECT_STATUSES.includes(o.status) && !editorMayEditClosed)) return;
   }
   state._serviceCashier = { oid: mode === 'intake' ? '' : oid, returnTo: mode, step: 'direction', directionId: '', offeringId: '', catalogId: '', addonIds: [], clientChoice: false, variantIds: [] };
   renderServiceCashier();
@@ -27718,6 +28033,7 @@ function serviceCashierReturn(oid, returnTo) {
   if (returnTo === 'intake') { serviceCashierLayer()?.remove(); return; }
   state.modal = null;
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  else if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   else if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function' && returnToProjectDirectionWindow()) return;
   else { preservePositionForNextRender(); render(); }
 }
@@ -27849,7 +28165,7 @@ function serviceCashierCommit() {
     addons.forEach(item => projectAddOfferingLine(oid, item.id, directionId));
     if (film) save();
   };
-  if (returnTo === 'card' || returnTo === 'direction') projectCardEdit(apply); else apply();
+  if (returnTo === 'card' || returnTo === 'direction' || returnTo === 'editor') projectCardEdit(apply); else apply();
   // A per-sq-ft service in a project with measured windows: choose the windows now,
   // otherwise it would wait for a measurement that already happened ($0).
   if (serviceOfferingNeedsSizes(offering) && typeof openOfferingWindowsPicker === 'function'
@@ -27858,7 +28174,36 @@ function serviceCashierCommit() {
     return;
   }
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
+  if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
+  try { serviceCashierAnnounce(o, offering); } catch (error) { /* the notice is a convenience only */ }
+}
+/**
+ * Owner, 2026-11-22: «добавил услугу, а в карточке не отобразилась сразу».
+ * Say exactly what happened and open that service in the card.
+ */
+function serviceCashierAnnounce(o, offering) {
+  const line = projectLines(o).find(item => item.offeringId === offering.id);
+  if (line) state.projectCardSelection = { ...(state.projectCardSelection || {}), [o.id]: line.key };
+  const windows = measureAllWindows(o).filter(({ win }) => win.offeringId === offering.id).length;
+  const text = line
+    ? `Добавлено: «${offering.name}»${windows ? ` — окон: ${windows}` : ''}${orderUserCanSeeMoney(o, currentUser()) ? `, ${fmtMoney(line.price)}` : ''}`
+    : serviceOfferingNeedsSizes(offering)
+      ? `«${offering.name}» добавлена, но окон с размерами нет — внесите размеры (кнопка «📐 Окна и размеры»)`
+      : `«${offering.name}» добавлена`;
+  projectNotice(text, line ? 'ok' : 'warn');
+}
+/** A short notice in the corner: what the last action changed in the project. */
+function projectNotice(text, tone = 'ok') {
+  if (typeof document === 'undefined' || !document.body) return;
+  document.getElementById('project-notice')?.remove();
+  const el = document.createElement('div');
+  el.id = 'project-notice';
+  el.setAttribute('role', 'status');
+  el.textContent = text;
+  el.style.cssText = `position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;max-width:min(560px,92vw);padding:12px 16px;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(15,23,42,.2);${tone === 'ok' ? 'background:#15803d;color:#fff' : 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d'}`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
 }
 
 function serviceCashierCardStyle(directionId) {
@@ -28946,7 +29291,9 @@ function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
+  const removed = (o.extraServices || []).filter(line => line.id === sid);
   if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(line => line.id !== sid); })) return;
+  projectForgetRemovedLines(o, removed);
   // Its package leaves with it; then the plans of services that are gone, and
   // the project crew and date follow what remains.
   syncProjectIncludedServices(o);
@@ -28961,21 +29308,115 @@ function projectPrunePlans(o) {
   if (o.serviceSchedules?.length) o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
   if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => ids.has(key)));
 }
-function projectCardRemovePending(oid, offeringId) {
-  const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.offeringId === offeringId) return;
+/**
+ * A direction nothing in the project uses any more leaves it — the main one too
+ * (Owner, 2026-11-22, Zakaz #908: «удалил направление, а оно сидит в замерах»).
+ * «Uses» = a chosen service, a window or a work line of that direction. When the
+ * main direction goes, the next one in use becomes the main; the only direction
+ * of a project stays, and a closed project keeps its history.
+ */
+function projectDirectionsInUse(o) {
+  const main = orderMeasureScope(o);
+  return new Set([
+    // A per-sq-ft service holds its direction while it waits for sizes; a quantity
+    // or work service holds it only through its row below.
+    ...[o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id)).filter(offering => offering && serviceOfferingNeedsSizes(offering)).map(offeringServiceType),
+    // Removal of old film is a general work, it holds no direction; a work line without a
+    // direction of its own follows the main one and does not hold it either (Zakaz #908).
+    ...(o.extraServices || []).filter(line => !line.autoWindowRemoval).map(line => line.serviceType || offeringServiceType(serviceOffering(line.offeringId))),
+    ...measureAllWindows(o).map(({ win }) => win.measureScope || main),
+  ].filter(Boolean).map(value => measureScopeInfo(value).key));
+}
+/** What keeps a direction in the project, in words the manager can act on. */
+function projectDirectionHolders(o, direction) {
+  if (!o || !direction) return [];
+  const main = orderMeasureScope(o);
+  const key = value => measureScopeInfo(value).key;
+  direction = key(direction);
+  const out = [];
+  const windows = measureAllWindows(o).filter(({ win }) => key(win.measureScope || main) === direction);
+  if (windows.length) out.push(`в замере ${windows.length} окон этой услуги (${[...new Set(windows.map(({ room }) => room.name || 'комната'))].join(', ')})`);
+  [o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id))
+    .filter(offering => offering && serviceOfferingNeedsSizes(offering) && key(offeringServiceType(offering)) === direction)
+    .forEach(offering => out.push(`в проекте услуга «${offering.name || 'услуга'}»`));
+  (o.extraServices || []).filter(line => !line.autoWindowRemoval)
+    .filter(line => { const type = line.serviceType || offeringServiceType(serviceOffering(line.offeringId)); return type && key(type) === direction; })
+    .forEach(line => out.push(`в смете строка «${line.name || line.title || 'работа'}»`));
+  if (!out.length && direction === key(main) && CLOSED_PROJECT_STATUSES.includes(o.status)) out.push('это главная услуга закрытого проекта');
+  return [...new Set(out)];
+}
+function projectReleaseDirection(o, direction) {
+  if (!o || !direction) return false;
+  const main = orderMeasureScope(o);
+  const key = value => measureScopeInfo(value).key;
+  const used = projectDirectionsInUse(o);
+  direction = key(direction);
+  if (used.has(direction)) return false;
+  if (direction !== key(main)) {
+    if (!(o.serviceTypes || []).some(type => key(type) === direction)) return false;
+    o.serviceTypes = o.serviceTypes.filter(type => key(type) !== direction);
+    return true;
+  }
+  if (CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  const next = [...(o.serviceTypes || []).map(key), ...used].find(type => type !== direction && used.has(type));
+  const to = ORDER_PRIMARY_SERVICES.find(service => service.id === next);
+  if (!to) return false;
+  const from = ORDER_PRIMARY_SERVICES.find(service => service.id === direction);
+  o.serviceTypes = [...new Set([next, ...(o.serviceTypes || []).map(key)])].filter(type => type !== direction);
+  o.serviceType = next;
+  o.serviceCategory = to.catalogCategory;
+  if ((o.serviceWorkflow || []).length) o.serviceWorkflow = [...(to.workflow || [])];
+  if (o.measureScope && key(o.measureScope) === direction) o.measureScope = next;
+  if (Array.isArray(o.tags) && from?.tag) {
+    o.tags = o.tags.filter(tag => tag !== from.tag);
+    if (to.tag && !o.tags.includes(to.tag)) o.tags.push(to.tag);
+  }
+  return true;
+}
+/** A service that left the project takes its material with it and frees its direction when nothing else uses it. */
+function projectForgetOffering(o, offeringId) {
+  if (!o || !offeringId) return;
   o.offeringIds = (o.offeringIds || []).filter(id => id !== offeringId);
+  if (o.offeringId === offeringId) { o.offeringId = ''; o.offeringName = ''; }
   if (o.offeringCatalogIds) delete o.offeringCatalogIds[offeringId];
   if (o.orderBuilder?.offeringCatalogIds) delete o.orderBuilder.offeringCatalogIds[offeringId];
-  // The direction leaves the project too when nothing else of it remains, so
-  // the measurement no longer asks for it.
-  const direction = offeringServiceType(serviceOffering(offeringId));
-  const stillUsed = !direction || o.serviceType === direction
-    || (o.offeringIds || []).some(id => offeringServiceType(serviceOffering(id)) === direction)
-    || (o.extraServices || []).some(line => line.serviceType === direction)
-    || measureAllWindows(o).some(({ win }) => (win.measureScope || o.serviceType) === direction);
-  if (!stillUsed) o.serviceTypes = (o.serviceTypes || []).filter(type => type !== direction);
+  // The intake copy is a fallback for new windows: a removed service must not come back through it.
+  if (o.orderBuilder?.offeringId === offeringId) o.orderBuilder.offeringId = '';
+  if (Array.isArray(o.orderBuilder?.offeringIds)) o.orderBuilder.offeringIds = o.orderBuilder.offeringIds.filter(id => id !== offeringId);
+  projectReleaseDirection(o, offeringServiceType(serviceOffering(offeringId)));
+}
+/** After rows of quantity / work services were deleted: a service with no row left leaves the project, a direction with nothing left too. */
+function projectForgetRemovedLines(o, removed) {
+  (removed || []).forEach(line => {
+    if (!line || line.includedBy) return;
+    const offering = serviceOffering(line.offeringId);
+    const rowLeft = !!line.offeringId && (o.extraServices || []).some(item => item.offeringId === line.offeringId && !item.includedBy);
+    if (offering && !serviceOfferingNeedsSizes(offering) && !rowLeft) projectForgetOffering(o, offering.id);
+    else projectReleaseDirection(o, line.serviceType || offeringServiceType(offering));
+  });
+}
+function projectCardRemovePending(oid, offeringId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  projectForgetOffering(o, offeringId);
   projectEstimateMarkChanged(o, `Убрана услуга «${serviceOffering(offeringId)?.name || 'услуга'}»`);
+  save(); preservePositionForNextRender(); render();
+}
+/** An empty service tab may be closed: no window, service or work line of that direction, and the user may change the project. */
+function measureScopeRemovable(o, scopeKey) {
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return false;
+  const key = measureScopeInfo(scopeKey).key;
+  if (key === measureScopeInfo(orderMeasureScope(o)).key && CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  return !projectDirectionsInUse(o).has(key);
+}
+/** «✕» on an empty service tab of the measurement: the direction leaves the project. */
+function managerRemoveMeasureScope(oid, scopeKey) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const title = measureScopeInfo(scopeKey).short;
+  if (!projectReleaseDirection(o, scopeKey)) { alert(`«${title}» нельзя убрать: ${projectDirectionHolders(o, scopeKey).join('; ') || 'в проекте нет другой услуги с окнами, которая станет главной'}.`); return; }
+  if (state._managerActiveScopeByOrder) delete state._managerActiveScopeByOrder[oid];
+  projectEstimateMarkChanged(o, `Убрано направление «${title}»`);
   save(); preservePositionForNextRender(); render();
 }
 
@@ -29196,8 +29637,24 @@ function projectCardCrewPicker(o, line) {
  * Production: specialist and date in the row too.
  */
 function projectCardSelectLine(oid, key) {
-  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: key };
+  // A second tap on the open service closes it again, including one that opened by itself.
+  const o = getOrder(oid);
+  const current = o ? projectCardExpandedLine(o)?.key : state.projectCardSelection?.[oid];
+  state.projectCardSelection = { ...(state.projectCardSelection || {}), [oid]: current === key ? '' : key };
+  preservePositionForNextRender();
   render();
+}
+
+function projectCardExpandedLine(o, lines = projectLines(o)) {
+  const selection = state.projectCardSelection || {};
+  // '' means the user closed the service; a key of a deleted service is stale and falls through.
+  if (selection[o.id] === '') return null;
+  const picked = selection[o.id] && lines.find(line => line.key === selection[o.id]);
+  if (picked) return picked;
+  const main = lines.filter(line => line.kind !== 'included');
+  // A service still waiting for its measurement is a row on the card too.
+  const pending = typeof projectPendingSizedServices === 'function' ? projectPendingSizedServices(o).length : 0;
+  return main.length === 1 && !pending ? main[0] : null;
 }
 
 function projectCardChosenLine(o, lines = projectLines(o)) {
@@ -29268,7 +29725,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       </div>` : ''}
     </div>`;
   }).join('');
-  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне' : 'ждёт замера'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; }).join('');
+  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне' : 'ждёт замера'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>`; }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
     <div class="project-service-list">${rows || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}${pendingRows}</div>
@@ -29348,6 +29805,7 @@ function projectConfirmServicesDone(o, lines) {
   return !warnings.length || confirm(`Проверьте перед закрытием:\n\n• ${warnings.join('\n• ')}\n\nВсё равно отметить выполненным?`);
 }
 function projectSetServiceProgress(oid, key, status) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const user = currentUser();
   const line = projectLines(o).find(item => item.key === key);
@@ -29721,11 +30179,26 @@ function renderProjectCommandSide(o, { money = false, economics = false, install
   </aside>`;
 }
 
+// Owner, 2026-11-22: «слева карточка клиента — почта, телефон, имя и адрес проекта».
+// Phone, WhatsApp and email sit under the address so the left column is the client card.
+function projectCommandContactsHtml(o, c) {
+  if (!c) return '';
+  const phone = String(c.phone || '').trim();
+  const email = String(c.email || '').trim();
+  const tel = phone.replace(/[^+\d]/g, '');
+  const items = [
+    phone ? `<a class="project-command-contact" href="tel:${academyEsc(tel)}">📞 ${academyEsc(phone)}</a>` : '<span class="project-command-contact muted">📞 телефон не указан</span>',
+    phone ? `<button type="button" class="project-command-contact wa" onclick="openClientConversation('${o.id}','whatsapp')">💬 WhatsApp</button>` : '',
+    email ? `<a class="project-command-contact" href="mailto:${academyEsc(email)}">✉️ ${academyEsc(email)}</a>` : '<span class="project-command-contact muted">✉️ почта не указана</span>',
+    `<button type="button" class="project-command-contact edit" onclick="openClientContactProfile('${jsQuote(c.id || '')}','${o.id}')">Изменить</button>`,
+  ].filter(Boolean);
+  return `<div class="project-command-contacts" data-project-contacts>${items.join('')}</div>`;
+}
 function renderProjectCommandHeader(o, c, primary, { money = false, pendingRequests = [], nextEvent = null } = {}) {
   const address = orderAddress(o, c) || 'адрес объекта не указан';
   const manager = getUser(o.managerId || o.ownerId)?.name || 'ответственный не назначен';
   return `<section class="project-command-hero">
-    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div></div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
+    <div class="project-command-hero-main"><div><div class="project-command-kicker">Проект ${academyEsc(o.number)} · ${academyEsc(T(o.status))}</div><h1 class="project-command-title">${c ? `<button type="button" class="project-command-client" onclick="projectCardOpenWorkspace('client')">${academyEsc(c.name || 'Клиент')} <span class="project-command-client-go">›</span></button>` : 'Проект без клиента'}</h1><div class="project-command-meta">${academyEsc(address)} · ${academyEsc(manager)}</div>${projectCommandContactsHtml(o, c)}</div><div class="project-command-hero-actions">${renderOrderActionCard(primary)}</div></div>
     <div class="project-command-facts">${money ? `<div class="project-command-fact"><span>Сумма</span><strong>${fmtMoney(orderRevenue(o))}</strong></div><div class="project-command-fact"><span>Оплачено</span><strong>${fmtMoney(Math.max(orderPaidTotal(o), Number(o.paid) || 0))}</strong></div><div class="project-command-fact"><span>Остаток</span><strong>${fmtMoney(orderDebt(o))}</strong></div>` : `<div class="project-command-fact"><span>Запросы клиента</span><strong>${pendingRequests.length || 'нет'}</strong></div><div class="project-command-fact"><span>Статус</span><strong>${academyEsc(T(o.status))}</strong></div>`}</div>${o.actSignature ? `<div class="project-command-signed">✍️ Акт подписан клиентом: <b>${academyEsc(o.actSignature.name)}</b> · ${fmtDateTime(o.actSignature.signedAt)} <button type="button" class="btn-ghost text-xs" onclick="openSignedActDocument('${o.id}')">Открыть акт</button></div>` : ''}
     ${renderOrderCleanProgress(o)}
   </section>`;
@@ -30386,6 +30859,29 @@ function projectEstimateUpdateWindowPrice(oid, rid, wid, value) {
   save(); refreshProjectEstimateWorkspace(oid);
 }
 
+/** Client revenue of the project if every window sold at one price per sqft (per-window prices off). */
+function projectRevenueAtFlatPrice(o, perSqft) {
+  const copy = JSON.parse(JSON.stringify(o));
+  copy.priceOverridePerSqft = perSqft;
+  (copy.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => { win.pricePerSqft = null; }));
+  return orderRevenue(copy);
+}
+/** The owner types the project total; the film price per sqft follows it (Owner, 2026-11-22, Zakaz #908). */
+function projectEstimateSetTotal(oid, value) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const total = parseFloat(String(value).replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(total) || total < 0) { refreshProjectEstimateWorkspace(oid); return; }
+  const other = projectRevenueAtFlatPrice(o, 0);
+  const perSqftUnit = projectRevenueAtFlatPrice(o, 1) - other;
+  if (perSqftUnit <= 0) { alert('В проекте нет окон с размерами — цену за sqft не из чего посчитать.'); refreshProjectEstimateWorkspace(oid); return; }
+  if (total < other) { alert(`Итого не может быть меньше услуг без плёнки: ${fmtMoney(other)}.`); refreshProjectEstimateWorkspace(oid); return; }
+  const perSqft = Math.round((total - other) / perSqftUnit * 10000) / 10000;
+  (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => { win.pricePerSqft = null; }));
+  o.priceOverridePerSqft = perSqft;
+  projectEstimateMarkChanged(o, `Итого проекта ${fmtMoney(total)} → плёнка $${perSqft.toFixed(2)}/sqft`);
+  save(); refreshProjectEstimateWorkspace(oid);
+}
 function projectEstimateUpdateSetting(oid, field, value) {
   const o = getOrder(oid);
   if (!o) return;
@@ -30608,19 +31104,21 @@ function closeQuickProjectAsCompleted(oid) {
   const range = projectQuickDateRange(o);
   const paidDate = projectQuickDateValue(document.getElementById('quick-close-paid-date')?.value || range.endDate);
   const method = document.getElementById('quick-close-payment-method')?.value || 'zelle';
+  const accountId = document.getElementById('quick-close-account')?.value || null;
   const revenue = orderRevenue(o);
   const requestedPaid = Math.min(revenue, Math.max(0, Number(document.getElementById('quick-close-paid-amount')?.value) || 0));
   if (requestedPaid > 0 && !paidDate) { alert('Укажите дату оплаты.'); return; }
   const willBePaidInFull = requestedPaid >= revenue - 0.5;
-  if (!confirm(`Закрыть ${o.number} как выполненный? Оплачено ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
-  closeQuickProjectAsCompletedWith(o, { requestedPaid, paidDate, method });
+  if (requestedPaid > 0 && !accountId) { alert('Выберите счёт, на который пришли деньги.'); return; }
+  if (!confirm(`Закрыть ${o.number} как выполненный? Подтверждаю оплату ${fmtMoney(requestedPaid)} из ${fmtMoney(revenue)}${requestedPaid > 0 ? ` на счёт «${financePaymentAccounts().find(a => a.id === accountId)?.name || ''}»` : ''}${willBePaidInFull ? '' : `, долг ${fmtMoney(revenue - requestedPaid)}`}.`)) return;
+  closeQuickProjectAsCompletedWith(o, { requestedPaid, paidDate, method, accountId, confirmed: true });
   closeModal(); openOrder(oid);
 }
 /**
  * Закрытие исторического проекта по уже проверенным фактам (projectQuickCompletionIssues).
  * Тот же код для кнопки в редакторе и для панели быстрого ввода в одно окно (Owner, 2026-11-05).
  */
-function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '', method = 'zelle' } = {}) {
+function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '', method = 'zelle', accountId = null, confirmed = false } = {}) {
   if (!o || currentUser()?.role !== 'owner') return;
   const range = projectQuickDateRange(o);
   const revenue = orderRevenue(o);
@@ -30634,14 +31132,22 @@ function closeQuickProjectAsCompletedWith(o, { requestedPaid = 0, paidDate = '',
   const existingLegacyPaid = Math.max(0, Number(o.paid) || 0);
   const payments = orderPayments(o);
   if (!payments.length && existingLegacyPaid > 0) {
-    payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', recordedBy: state.currentUserId || null, recordedAt });
+    payments.push({ id: 'pay_' + uid(), amount: Math.min(existingLegacyPaid, revenue), date: paidDate, method, note: 'Оплата из старой CRM', accountId: accountId || null, confirmed: !!confirmed, confirmedBy: confirmed ? (state.currentUserId || null) : null, confirmedAt: confirmed ? recordedAt : null, recordedBy: state.currentUserId || null, recordedAt });
   }
   const remainingToRecord = Math.max(0, requestedPaid - orderPaidTotal(o));
   if (remainingToRecord > 0) {
-    payments.push({ id: 'pay_' + uid(), amount: remainingToRecord, date: paidDate, method, note: 'Фактическая оплата при переносе проекта', recordedBy: state.currentUserId || null, recordedAt });
+    payments.push({ id: 'pay_' + uid(), amount: remainingToRecord, date: paidDate, method, note: 'Фактическая оплата при переносе проекта', accountId: accountId || null, confirmed: !!confirmed, confirmedBy: confirmed ? (state.currentUserId || null) : null, confirmedAt: confirmed ? recordedAt : null, recordedBy: state.currentUserId || null, recordedAt });
   }
   syncOrderPaid(o);
   o.paid = orderPaidTotal(o);
+  // Owner, 2026-11-22: only when the historical project is closed do its direct
+  // expenses become paid cash — from the account the money came to. A draft stays plan.
+  (o.extraExpenses || []).forEach(e => {
+    if (e.actual === true || e.paid === true || e.paidAt) return;
+    e.actual = true;
+    e.paidAt = e.date || range.endDate;
+    if (accountId && !e.accountId) e.accountId = accountId;
+  });
   const full = o.paid >= revenue - 0.5;
   o.depositReceived = o.paid > 0;
   o.depositReceivedAt = o.paid > 0 ? (o.depositReceivedAt || paidAt) : null;
@@ -30752,6 +31258,7 @@ function renderQuickProjectEntry(o) {
       <div><label>Оплачено клиентом, $</label><input id="quick-close-paid-amount" type="number" min="0" max="${Number(total || 0)}" step="0.01" value="${Number.isFinite(Number(o.paid)) ? Math.max(0, Number(o.paid)) : 0}"></div>
       <div><label>Дата оплаты</label><input id="quick-close-paid-date" type="date" value="${projectQuickDateValue(o.paidAt?.slice?.(0,10)) || quickRange.endDate || new Date().toISOString().slice(0,10)}"></div>
       <div><label>Способ оплаты</label><select id="quick-close-payment-method">${PAYMENT_METHODS.map(item => `<option value="${item.id}">${item.label}</option>`).join('')}</select></div>
+      <div><label>Куда пришли деньги</label>${financePaymentAccountSelect('quick-close-account')}</div>
       <div class="flex items-end"><button class="btn-primary w-full" onclick="closeQuickProjectAsCompleted('${o.id}')" ${completionIssues.length || o.quickProjectImportedCompleted ? 'disabled' : ''}>✓ Закрыть выполненный проект</button></div>
     </div>
     ${!availableInstallers.length ? '<div class="text-xs text-amber-700 mt-2">Сначала добавьте Рината и Нурика в «Сотрудники» с ролью «Монтажник» и схемой оплаты — после этого они появятся у каждой услуги.</div>' : ''}
@@ -30956,9 +31463,10 @@ function renderProjectEstimateWorkspace(o) {
 
     <section class="project-estimate-section">
       <div class="project-estimate-section-head"><div><h4>${canSeeInternalEconomics ? '5. Параметры и себестоимость' : '3. Параметры цены'}</h4><div class="text-xs text-gray-500">${canSeeInternalEconomics ? 'Владелец видит внутренние расходы и прибыль.' : 'Менеджер назначает только цену продажи, которая попадёт в КП.'}</div></div></div>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
         <div><label>Сложность</label><select onchange="projectEstimateUpdateSetting('${o.id}','complexity',this.value)">${['standard','ladder','tower','alpinism'].map(key => `<option value="${key}" ${(o.complexity||'standard')===key?'selected':''}>${T('complexity'+key.charAt(0).toUpperCase()+key.slice(1))} ×${db.settings.complexityCoefs[key].toFixed(2)}</option>`).join('')}</select></div>
-        <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.5" value="${o.priceOverridePerSqft == null ? '' : Number(o.priceOverridePerSqft)}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        <div><label>Цена продажи / sqft</label><input type="number" min="0" step="0.01" value="${o.priceOverridePerSqft == null ? '' : Number(Number(o.priceOverridePerSqft).toFixed(2))}" placeholder="Из каталога" onchange="projectEstimateUpdateSetting('${o.id}','priceOverridePerSqft',this.value)"></div>
+        <div><label>Итого по проекту, $</label><input type="number" min="0" step="1" value="${Math.round(orderRevenue(o) * 100) / 100}" title="Введите итог — цена за sqft пересчитается сама" onchange="projectEstimateSetTotal('${o.id}',this.value)"></div>
         <div><label>Условия оплаты</label><select onchange="projectEstimateSetPaymentTerms('${o.id}',this.value)"><option value="deposit_before_work" ${(o.paymentTerms||'deposit_before_work')==='deposit_before_work'?'selected':''}>Аванс до производства</option><option value="after_completion" ${o.paymentTerms==='after_completion'?'selected':''}>Оплата после выполнения</option></select></div>
         ${canSeeInternalEconomics ? `<div><label>Расстояние, км</label><input type="number" min="0" step="1" value="${Number(o.distanceKm || 0)}" onchange="projectEstimateUpdateSetting('${o.id}','distanceKm',this.value)"></div>` : ''}
       </div>
@@ -31000,6 +31508,7 @@ function renderProjectEstimateWorkspace(o) {
 }
 
 function openProjectEstimateWorkspace(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o) return;
   if (!orderUserCanSeeMoney(o, currentUser())) { alert('Расчёт проекта доступен только владельцу и назначенному менеджеру.'); return; }
@@ -31297,7 +31806,10 @@ function renderOrderDetails(id) {
       </div>
     </div>`;
   }
-  const canManage = orderUserCanManage(u);
+  // Owner, 2026-11-22: a closed project is read-only for a manager until the owner approves his request.
+  const editLocked = typeof projectEditLocked === 'function' && projectEditLocked(o, u);
+  const editBanner = typeof projectEditBanner === 'function' ? projectEditBanner(o, u) : '';
+  const canManage = orderUserCanManage(u) && !editLocked;
   const canMeasure = orderUserCanMeasure(o, u);
   const canSeeMoney = orderUserCanSeeMoney(o, u);
   const visibleTimeline = orderTimelineForUser(o, u);
@@ -31306,9 +31818,9 @@ function renderOrderDetails(id) {
     return renderInstallerTechnicalWorkspace(o, c, u);
   }
   // «Кабинет проекта» — пробный вид владельца (private/legacy/project-cabinet.js).
-  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u)) return projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
+  if (typeof projectCabinetEnabled === 'function' && projectCabinetEnabled(u) && state.projectCabinetBypass !== o.id) return editBanner + projectCabinetHtml(o, c, u, { canManage, canMeasure, canSeeMoney });
   if (!state.orderClassicMode || u.role !== 'owner') {
-    return (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
+    return editBanner + (typeof projectCabinetEntryBar === 'function' ? projectCabinetEntryBar(o, u) : '') + renderOrderCleanDetails(o, c, u, { canManage, canMeasure, canSeeMoney, visibleTimeline });
   }
 
   return `
@@ -32798,7 +33310,7 @@ function renderManagerMeasureModal(oid) {
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
         </details>
-        <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
+        <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>${projectScopes.length > 1 && measureScopeRemovable(o, key) ? `<button class="btn-ghost text-sm text-red-600" title="Убрать «${academyEsc(item.short)}» из проекта" aria-label="Убрать «${academyEsc(item.short)}» из проекта" onclick="managerRemoveMeasureScope('${oid}','${key}')">✕</button>` : ''}`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
         ${projectSelectedSizedOfferings(o, activeScopeKey).length > 1 ? `<div class="manager-measure-services"><span class="text-xs font-bold text-slate-600">Конкретная услуга новых окон:</span>${projectSelectedSizedOfferings(o, activeScopeKey).map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<button class="btn-ghost text-sm ${managerActiveOffering(o)?.id === offering.id ? 'bg-blue-50 text-blue-700' : ''}" onclick="managerSelectOffering('${oid}','${offering.id}')">${academyEsc(offering.name)}${film ? ` · ${academyEsc(catalogFilmModel(film) || catalogFilmName(film))}` : ''}</button>`; }).join('')}</div>` : ''}
         ${managerMeasureProgressHtml(o, activeScopeKey)}
         ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}
@@ -32936,6 +33448,7 @@ function managerMeasureDetailsToggle(oid, key, open) {
   state._managerMeasureDetails[oid][key] = open;
 }
 function openManagerMeasureModal(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   // One measurement window for every role (Owner, 2026-10-24, the mock-up «Одно
   // окно замера»): the measurer gets the same window without prices and may
   // leave the film to the manager (completeManagerMeasurement).
@@ -33522,6 +34035,7 @@ async function saveManagerFilmReceipt(oid, rid, serviceCategory) {
 }
 
 function scheduleConsultationPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const measurers = usersByRole('measurer');
   const opts = measurers.map(m => `<option value="${m.id}" ${o?.measurerId===m.id?'selected':''}>${m.name}</option>`).join('');
@@ -33555,6 +34069,7 @@ function confirmScheduleConsultation(oid) {
 }
 
 function scheduleMeasurementPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const measurers = usersByRole('measurer');
   const opts = measurers.map(m => `<option value="${m.id}" ${o?.measurerId===m.id?'selected':''}>${m.name}</option>`).join('');
@@ -33776,6 +34291,7 @@ function addWorkType(oid) {
 }
 
 function openProjectProductionWorkspace(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanManage(currentUser())) return;
   const blockingIssues = projectProductionReadiness(o, { requireReady: false });
@@ -33833,6 +34349,7 @@ function confirmProjectProductionReady(oid) {
 }
 
 function scheduleInstallationPrompt(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   // Owner, 2026-10-25: one window, services in order, each planned on its own.
@@ -33912,6 +34429,7 @@ function confirmScheduleInstallation(oid) {
 }
 
 function openAssignTeam(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const o = getOrder(oid);
   const viewer = currentUser();
   if (!orderUserOwns(o, viewer)) { alert('Нет доступа к этому заказу'); return; }
@@ -34504,6 +35022,7 @@ function renderClientPortal() {
 }
 
 function markDepositReceived(orderId) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(orderId)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   // The deposit is a payment like any other: amount, method and date are
   // recorded, so «получено» and «долг» agree everywhere (Owner, 2026-10-23).
   if (!getOrder(orderId)) return;
@@ -36378,6 +36897,7 @@ function addWindowMeasurementPhoto(oid, roomId, windowId) {
   inp.click();
 }
 function addOrderPhoto(oid) {
+  if (typeof projectEditBlocked === 'function' && projectEditBlocked(oid)) return; // Owner, 2026-11-22: closed project needs the owner's approval.
   const cat = state.photoCategory || 'measurement';
   const inp = document.createElement('input');
   const useStorage = __crmStorageEnabled === true;
@@ -36580,14 +37100,19 @@ function importWizRows(rows) {
     const rooms = [];
     if (totalAreaSqft > 0) {
       const sideMM = Math.round(Math.sqrt((totalAreaSqft / 10.7639104) * 1_000_000));
-      // Pick first catalog item by direction guess (no direction column → solar default)
-      const cat = db.settings.catalog.find(c => c.category === 'solar') || db.settings.catalog[0];
+      // Owner, 2026-11-22 (#592): the TintWiz export has no direction column, so
+      // the import guesses neither the direction nor the film (it used to put
+      // solar film on every project). The window keeps only the area: no price
+      // and no installer rate, because the project's revenue is the
+      // «Услуга по проекту (импорт Wiz)» line below. The card asks to check the
+      // direction; the owner fixes it there or for many projects at once.
       rooms.push({
         id: uid(), name: 'Импорт',
         windows: [{
           id: uid(), name: 'Импорт', width: sideMM, height: sideMM, qty: 1,
           actualWidth: sideMM, actualHeight: sideMM, actualQty: 1,
-          glassType: '', side: 'in', filmType: cat ? `${cat.brand} — ${cat.model}` : '', catalogId: cat?.id || null,
+          glassType: '', side: 'in', filmType: '', catalogId: null,
+          pricePerSqft: 0, offeringInstallerRate: 0, importPlaceholder: true,
         }],
       });
     }
@@ -39487,6 +40012,16 @@ const FINANCE_CATEGORY_OPTIONS = [
   ['utilities', 'Коммунальные'], ['other', 'Прочее'],
 ];
 
+/** Счета, на которые клиент может заплатить (без «Не распределено»). Owner, 2026-11-22. */
+function financePaymentAccounts() {
+  try { return financeData().accounts.filter(a => a.active !== false && a.id !== 'fin_unallocated'); }
+  catch (error) { return []; }
+}
+function financePaymentAccountSelect(id, selected = '') {
+  const accounts = financePaymentAccounts();
+  return `<select id="${id}"><option value="">не распределено</option>${accounts.map(a => `<option value="${academyEsc(a.id)}" ${selected === a.id ? 'selected' : ''}>${academyEsc(a.name || 'Счёт')}</option>`).join('')}</select>`;
+}
+
 function financeData() {
   db.finance = db.finance || { version: 1, accounts: [], transactions: [], importedSources: [] };
   db.finance.accounts = Array.isArray(db.finance.accounts) ? db.finance.accounts : [];
@@ -39603,7 +40138,22 @@ function financeSystemRows() {
   (db.orders || []).forEach(o => {
     const paid = Math.max(0, Number(o.paid) || 0);
     const linked = financeLinkedAmount(manual, t => t.type === 'income' && t.orderId === o.id);
-    const remainder = Math.max(0, paid - linked);
+    // Owner, 2026-11-22: a payment recorded with its account goes straight to that
+    // account's balance; only the rest waits in «Не распределено».
+    let allocated = 0;
+    (Array.isArray(o.payments) ? o.payments : []).forEach(p => {
+      const amount = Math.max(0, Number(p.amount) || 0);
+      if (!p.accountId || !amount || allocated + linked + amount > paid + 0.005) return;
+      allocated += amount;
+      rows.push({
+        id: `sys_order_payment_${p.id}`, type: 'income', amount,
+        date: p.date || p.recordedAt || o.paidAt || o.createdAt,
+        accountId: p.accountId, category: 'client_payment', orderId: o.id,
+        scope: 'business', costBehavior: 'variable', tags: ['клиент', 'заказ'],
+        note: `Оплата клиента · ${o.number || o.id}${p.confirmed ? ' · подтверждена' : ''}`, source: 'orders', sourceLabel: 'Заказы', editable: false,
+      });
+    });
+    const remainder = Math.max(0, paid - linked - allocated);
     if (remainder > 0) rows.push({
       id: `sys_order_${o.id}`, type: 'income', amount: remainder,
       date: o.paidAt || o.stripe?.paidAt || o.depositReceivedAt || o.updatedAt || o.createdAt,
@@ -39663,7 +40213,18 @@ function financeSystemRows() {
   // Расчёт проекта хранит плановые прямые расходы. В денежный журнал попадают
   // только явно отмеченные как оплаченные — план не должен уменьшать кассу.
   (db.orders || []).forEach(o => {
-    const actualExpenses = (o.extraExpenses || []).filter(e => e.actual === true || e.paid === true || e.paidAt);
+    const allActual = (o.extraExpenses || []).filter(e => e.actual === true || e.paid === true || e.paidAt);
+    // Expenses paid from a known account (historical entry) reduce that account.
+    allActual.filter(e => e.accountId).forEach(e => {
+      const amount = Math.max(0, Number(e.amount) || 0);
+      if (amount) rows.push({
+        id: `sys_expense_item_${e.id}`, type: 'expense', amount,
+        date: e.paidAt || e.date || e.createdAt, accountId: e.accountId, category: 'project_expense', orderId: o.id,
+        scope: 'business', costBehavior: 'variable', tags: ['заказ'],
+        note: `${e.label || 'Расход'} · ${o.number || o.id}`, source: 'orders', sourceLabel: 'Заказы', editable: false,
+      });
+    });
+    const actualExpenses = allActual.filter(e => !e.accountId);
     const total = actualExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const linked = financeLinkedAmount(manual, t => t.type === 'expense' && t.orderId === o.id && t.category === 'project_expense');
     const remainder = Math.max(0, total - linked);
@@ -41837,6 +42398,8 @@ async function syncTwilioMessages() {
         const recipients = new Set([
           o?.managerId,
           ...(db.users || []).filter(u => u.role === 'owner').map(u => u.id),
+          // New WhatsApp lead without a project: every manager can pick it up.
+          ...(!o && message.channel === 'whatsapp' ? (db.users || []).filter(u => u.role === 'manager' && u.active !== false).map(u => u.id) : []),
         ].filter(Boolean));
         recipients.forEach(userId => db.notifications.push({
           id: 'client_message_notice_' + message.id + '_' + userId,
@@ -41855,6 +42418,7 @@ async function syncTwilioMessages() {
     }
     if (before !== after) {
       if (state.clientConversationOrderId) refreshClientConversationDialog();
+      else if (state.whatsappThreadPhone) refreshWhatsAppPhoneThread();
       else renderBackground();
     }
   } catch (e) {

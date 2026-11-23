@@ -96,3 +96,30 @@ export type CrmCalendarEvent = {
 };
 
 export type CrmCalendar = { user: CrmShellUser; from: string; to: string; today: string; events: CrmCalendarEvent[] };
+
+export type CrmClientRow = {
+  id: string;
+  name: string;
+  companyType: string;
+  representative: string;
+  phone: string;
+  phoneVerified: boolean;
+  email: string;
+  address: string;
+  b2b: boolean;
+  regular: boolean;
+  relationship: string;
+  source: string;
+  referredBy: string;
+  projects: number;
+  addresses: number;
+  revenue: number;
+  debt: number;
+  portal: boolean;
+  lastAt: string;
+  recent: { id: string; number: string; status: string }[];
+  /** Lower-case name, company, person, phone, email and every address, for the search box. */
+  search: string;
+};
+
+export type CrmClients = { user: CrmShellUser; counts: { all: number; b2c: number; b2b: number; regular: number }; clients: CrmClientRow[] };

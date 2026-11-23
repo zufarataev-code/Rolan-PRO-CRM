@@ -1,4 +1,4 @@
-import { serviceGroupIds, serviceGroupScope } from './service-solutions';
+import { directionMoveAllowed, projectDirectionMoves, renameProjectDirections, serviceGroupIds, serviceGroupScope } from './service-solutions';
 type Row = Record<string, any>;
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value : [];
 const approvedStatuses = ['proposal_accepted','installation_scheduled','installation_accepted','installation_en_route','installation_in_progress','installation_done','act_signed','payment_received','completed','review_received'];
@@ -25,7 +25,35 @@ export function prepareServiceScopeApprovals(current: Row, next: Row, owner: boo
       if(index < 0) baseline.push(entry); else baseline[index]=entry;
       order.timeline ||= [];order.timeline.push({at:entry.approvedAt,key:'service_change_approved',by:actor,serviceId:entry.serviceId,note:entry.note});
     }
+    if (directionMoveAllowed(before, owner, managerIds)) followDirectionMoves(before, order, baseline);
     order.serviceScopeApprovals = baseline;
   }
   return null;
+}
+/**
+ * #592: the owner moves a finished project to another direction (the TintWiz
+ * import came in as solar, the work was privacy). Only the direction changes:
+ * the same windows and lines, sizes and prices. Approvals that matched the
+ * project before follow it, so its revenue stays. Anything else that changed
+ * still needs the client's approval.
+ */
+function followDirectionMoves(before: Row, order: Row, baseline: Row[]): void {
+  // The caller checked directionMoveAllowed: only a closed project or a TintWiz import
+  // keeps its money through a move. An open project picks the new direction's services
+  // again, and the client approves them.
+  const moves = projectDirectionMoves(before, order);
+  if (!moves.size) return;
+  const groupsNow = new Set(serviceGroupIds(order));
+  const renamed = renameProjectDirections(before, moves, order.serviceType);
+  for (const entry of baseline) {
+    if (serviceGroupScope(order, entry.serviceId) === entry.scope) continue;
+    if (entry.scope !== serviceGroupScope(before, entry.serviceId)) continue; // it did not match before either
+    const [kind, key] = [entry.serviceId.slice(0, entry.serviceId.indexOf(':')), entry.serviceId.slice(entry.serviceId.indexOf(':') + 1)];
+    const id = kind === 'direction' && moves.has(key) ? `direction:${moves.get(key)}` : entry.serviceId;
+    if (!groupsNow.has(id) || baseline.some(other => other !== entry && other.serviceId === id)) continue;
+    const scope = serviceGroupScope(order, id);
+    if (scope !== serviceGroupScope(renamed, id)) continue;
+    entry.serviceId = id;
+    entry.scope = scope;
+  }
 }

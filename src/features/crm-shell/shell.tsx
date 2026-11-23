@@ -9,13 +9,52 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
-import { WorkingSections } from "@/features/crm-shell/working-frame";
+import { allFramesSaved, signedOut } from "@/features/crm-shell/logout";
+import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
 
 type Role = "owner" | "manager";
 
 const RoleContext = createContext<Role>("manager");
 /** The signed-in office role, for screens that differ between the owner and a manager. */
 export const useCrmRole = () => useContext(RoleContext);
+
+/**
+ * /crm is now where the owner and managers land after signing in, so it has its
+ * own «Выйти». Edits still waiting in the working CRM frame are confirmed first.
+ */
+function LogoutButton({ className }: { className?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const leave = async () => {
+    setBusy(true);
+    setProblem(null);
+    // An edit the server has not confirmed would be lost with the session: stay signed in.
+    if (!(await allFramesSaved(Array.from(document.querySelectorAll("iframe")), saveWorkingFrame))) {
+      setProblem("Последние изменения ещё не сохранились. Проверьте связь и нажмите «Выйти» снова.");
+      setBusy(false);
+      return;
+    }
+    // Until the server ends the session, going to /login would only look like leaving.
+    if (!(await signedOut(() => fetch("/api/v1/auth/logout", { method: "POST" })))) {
+      setProblem("Выйти не получилось: сервер не ответил. Нажмите «Выйти» ещё раз.");
+      setBusy(false);
+      return;
+    }
+    window.location.assign("/login");
+  };
+  return (
+    <>
+      <Button variant="ghost" size="sm" className={className} disabled={busy} onClick={leave}>
+        {busy ? "Выхожу…" : "Выйти"}
+      </Button>
+      {problem ? (
+        <p role="alert" className="text-destructive px-3 text-xs">
+          {problem}
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 function NavLink({ item, pathname, onNavigate }: { item: CrmNavItem; pathname: string; onNavigate?: () => void }) {
   const active = crmNavActive(pathname, item.href);
@@ -95,8 +134,9 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <div className="text-muted-foreground text-xs">{role === "owner" ? "Владелец" : "Менеджер"}</div>
           </div>
           <Button asChild variant="outline" size="sm">
-            <a href="/legacy-crm">Рабочая CRM</a>
+            <a href="/legacy-crm">Прежний интерфейс</a>
           </Button>
+          <LogoutButton />
         </div>
       </aside>
 
@@ -121,10 +161,11 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
           <div className="flex-1 overflow-y-auto px-3 py-4">
             <NavGroups role={role} pathname={pathname} onNavigate={() => setMenuOpen(false)} />
           </div>
-          <div className="border-t p-3">
+          <div className="flex flex-col gap-2 border-t p-3">
             <Button asChild variant="outline" className="w-full">
-              <a href="/legacy-crm">Рабочая CRM</a>
+              <a href="/legacy-crm">Прежний интерфейс</a>
             </Button>
+            <LogoutButton className="w-full" />
           </div>
         </SheetContent>
       </Sheet>

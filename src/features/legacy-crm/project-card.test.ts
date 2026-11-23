@@ -37,6 +37,9 @@ function load(role = 'owner') {
   const context: any = vm.createContext({
     db, console, state: { currentUserId: 'u' },
     ORDER_PRIMARY_SERVICES: services,
+    CLOSED_PROJECT_STATUSES: ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'],
+    measureScopeInfo: (key: string) => ({ key }),
+    orderMeasureScope: (o: Row) => o.measureScope || o.serviceType,
     primaryServiceInfo: (id: string) => services.find(item => item.id === id),
     canonicalCatalogCategory: (value: string) => value,
     currentUser: () => ({ role }),
@@ -110,10 +113,10 @@ test('while priced, the card shows services with quantity and price only; a per-
   assert.match(out, /onclick="openProjectDirectionPicker\('o'\)">\+ Направление \/ услуга</);
   assert.match(out, /Клиенту \$720\.00/);
   assert.match(out, /Материал \$0\.00 · работа \$280\.00/);
-  // The incoming request cannot be removed from its own project.
+  // Owner, 2026-11-22 (Zakaz #908): the incoming request is removed like any other service.
   const own = project();
   own.measurements.rooms[0].windows = [];
-  assert.doesNotMatch(c.renderProjectCardServices(own, { money: true, manage: true }), /projectCardRemovePending\('o','a1'\)/);
+  assert.match(c.renderProjectCardServices(own, { money: true, manage: true }), /projectCardRemovePending\('o','a1'\)/);
 });
 
 test('in production each row gets its specialist and date; the schedule is built from the rows', () => {
@@ -513,7 +516,7 @@ test('server: a project planned as a whole counts as planned; its first per-serv
 test('every way into installation refreshes the film purchase deadline; a historical close writes its per-service plan', () => {
   const status = html.slice(html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {'), html.indexOf('\n}\n', html.indexOf('function changeStatus(orderId, newStatus, by, opts = {}) {')) + 2);
   assert.match(status, /o\.status = newStatus;\n  if \(entersInstallation\) refreshManualFilmNeededBy\(o\);/);
-  const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 4000);
+  const close = html.slice(html.indexOf('function closeQuickProjectAsCompleted('), html.indexOf('function closeQuickProjectAsCompleted(') + 7000);
   assert.match(close, /if \(!o\.serviceSchedules\?\.length\) o\.serviceSchedules = projectPlannedSchedules\(o\);\n  o\.status = full \? 'completed' : 'act_signed';/);
   const { c } = load();
   const draft: Row = { id: 'd', status: 'proposal_accepted', serviceType: 'protective_film', offeringIds: ['a1'], offeringUnits: { a1: 'sqft' }, measurements: { rooms: [] }, extraServices: [{ id: 'k', quickProjectLine: true, offeringId: 'a1', unit: 'sqft', qty: 10, price: 100, serviceType: 'protective_film' }] };

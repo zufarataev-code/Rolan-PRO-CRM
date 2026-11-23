@@ -37,6 +37,9 @@ function load(user: Row) {
   const context: any = vm.createContext({
     db, console, state: { currentUserId: user.id },
     ORDER_PRIMARY_SERVICES: services,
+    CLOSED_PROJECT_STATUSES: ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'],
+    measureScopeInfo: (key: string) => ({ key }),
+    orderMeasureScope: (o: any) => o.measureScope || o.serviceType,
     primaryServiceInfo: (id: string) => services.find(item => item.id === id),
     canonicalCatalogCategory: (value: string) => value,
     currentUser: () => user,
@@ -74,7 +77,7 @@ function load(user: Row) {
   vm.runInContext(html.slice(start, html.indexOf('function projectQuickLineCatalog(', start)), context);
   vm.runInContext(html.slice(html.indexOf('function windowRetailPrice('), html.indexOf('function orderInstallerPayout(o)')), context);
   vm.runInContext(html.slice(html.indexOf('function installerAdditionalWorkRate('), html.indexOf('function orderAdditionalWorkPayoutForUser(')), context);
-  for (const name of ['projectStages','projectStagesHtml','projectScopeApproved','projectLineDirectionInfo','projectDirectionKeyFromScope','projectDirectionExcluded','projectIncludedDirectionOrder','projectDirectionGroups','projectDirectionExpenseTotals','projectDirectionOfferingPickerHtml','projectLineNoteValue','projectRecommendations','projectRecommendationsHtml','projectExpenseScopeValue','projectExpenseScopeOptions','projectDirectExpensesHtml','projectLineUnitPrice','projectLineRateText','projectTotalIsManual','projectTotalEditHtml']) { const at=html.indexOf('function '+name+'('); vm.runInContext(html.slice(at,html.indexOf('\n}',at)+2),context); }
+  for (const name of ['projectStages','projectStagesHtml','projectStagesCompactHtml','projectScopeApproved','projectLineDirectionInfo','projectDirectionKeyFromScope','projectDirectionExcluded','projectIncludedDirectionOrder','projectDirectionGroups','projectDirectionExpenseTotals','projectDirectionOfferingPickerHtml','projectLineNoteValue','projectRecommendations','projectRecommendationsHtml','projectExpenseScopeValue','projectExpenseScopeOptions','projectDirectExpensesHtml','projectLineUnitPrice','projectLineRateText','projectTotalIsManual','projectTotalEditHtml']) { const at=html.indexOf('function '+name+'('); vm.runInContext(html.slice(at,html.indexOf('\n}',at)+2),context); }
   context.getOrder = (id: string) => db.orders.find((item: Row) => item.id === id);
   return { c: context, db, calls };
 }

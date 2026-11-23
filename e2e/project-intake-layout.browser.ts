@@ -190,6 +190,8 @@ async function main() {
         });
         report.push(`${name}@${label}: ${JSON.stringify(layout)}`);
         if (viewport.width >= 1600 && !layout.sideBySide) failures.push(`${name}@${label}: services are not beside the header: ${JSON.stringify(layout)}`);
+        // #577 follow-up: with service rows collapsed, the two-service card fits one 1920 screen.
+        if (viewport.width >= 1600 && layout.shellBottom > viewport.height) failures.push(`${name}@${label}: the card is taller than one screen: ${JSON.stringify(layout)}`);
         await check(name);
         if (viewport.width !== 375) await shot(page, `${name}-${label}`);
       }
