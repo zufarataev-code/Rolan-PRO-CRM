@@ -26,7 +26,7 @@ function sandbox(order: any) {
       (o.extraServices as any[]).reduce((sum, line) => sum + line.price, 0),
   });
   vm.runInContext(html.slice(from, to), context);
-  return { ...(context as any), calls };
+  return { ...(context as any), calls } as { calls: string[]; [key: string]: any };
 }
 const order = () => ({
   priceOverridePerSqft: null,
