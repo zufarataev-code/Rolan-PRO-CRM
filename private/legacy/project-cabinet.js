@@ -314,6 +314,7 @@ function projectCabinetHtml(o, c, u, opts = {}) {
     </section>
     <section class="rpc-card"><h2>Услуги проекта</h2>
       ${works || '<p class="rpc-note">Услуги ещё не добавлены. Добавить их можно в обычной карточке.</p>'}
+      ${model.canSeeMoney && works && typeof projectTotalEditHtml === 'function' && !CLOSED_PROJECT_STATUSES.includes(o.status) ? `<div style="display:flex;justify-content:flex-end;border-top:1px solid var(--line);margin-top:6px;padding-top:10px" data-cabinet-total>${projectTotalEditHtml(o)}</div>` : ''}
     </section>
     ${projectCabinetTourHtml(o, model, canManage)}
     <p class="rpc-note" style="text-align:center">Суммы, статусы и следующий шаг считают те же функции, что и в обычной карточке.</p>
