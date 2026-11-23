@@ -937,3 +937,6 @@ Owner requires Claude and Codex to work as one team: same repository and project
 - The architectural hard rule in `.agents/PROTOCOL.md` stays; only the owner grants per-task exceptions, and a post-hoc Codex review is still required.
 - The owner sees active, overlapping, stale and owner-blocked work in `/legacy-crm/control-center` → «Агенты».
 
+## 2026-11-22 — Направление из заявки удаляется из проекта как любое другое
+
+Owner, Zakaz #908: «удалил направление, а оно сидит в замерах». Прежнее правило «входящую заявку нельзя убрать из её проекта» отменено. Направление, у которого в проекте не осталось услуги, окна и строки работ, уходит из проекта и из замера; если оно было главным, главным становится следующее используемое. Единственное направление проекта и главное направление закрытого проекта остаются. `leadIntentServiceType` не меняется — это история заявки.

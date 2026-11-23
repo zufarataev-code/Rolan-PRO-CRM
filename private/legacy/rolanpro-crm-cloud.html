@@ -27905,10 +27905,14 @@ function projectAddOfferingLine(oid, offeringId, serviceType = '') {
     // e.g. sizes left after the privacy service was removed go to the decorative one.
     const free = measureAllWindows(o).filter(({ win }) => !win.offeringId);
     const own = free.filter(({ win }) => (win.measureScope || o.serviceType) === direction);
+    const left = new Set();
     (own.length ? own : free).forEach(({ win }) => {
+      left.add(win.measureScope || o.serviceType);
       win.measureScope = direction;
       applyWindowOffering(win, offering);
     });
+    // A direction the windows just left (and nothing else uses) leaves the measurement too.
+    left.forEach(scope => { if (scope && scope !== direction) projectReleaseDirection(o, scope); });
   } else {
     o.extraServices = o.extraServices || [];
     o.extraServices.push(projectOfferingLine(offering, 1, direction));
@@ -29286,7 +29290,9 @@ function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
+  const removed = (o.extraServices || []).filter(line => line.id === sid);
   if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(line => line.id !== sid); })) return;
+  projectForgetRemovedLines(o, removed);
   // Its package leaves with it; then the plans of services that are gone, and
   // the project crew and date follow what remains.
   syncProjectIncludedServices(o);
@@ -29301,21 +29307,96 @@ function projectPrunePlans(o) {
   if (o.serviceSchedules?.length) o.serviceSchedules = o.serviceSchedules.filter(item => ids.has(item.id));
   if (o.serviceProgress) o.serviceProgress = Object.fromEntries(Object.entries(o.serviceProgress).filter(([key]) => ids.has(key)));
 }
-function projectCardRemovePending(oid, offeringId) {
-  const o = getOrder(oid);
-  if (!o || !orderUserCanSeeMoney(o, currentUser()) || o.offeringId === offeringId) return;
+/**
+ * A direction nothing in the project uses any more leaves it — the main one too
+ * (Owner, 2026-11-22, Zakaz #908: «удалил направление, а оно сидит в замерах»).
+ * «Uses» = a chosen service, a window or a work line of that direction. When the
+ * main direction goes, the next one in use becomes the main; the only direction
+ * of a project stays, and a closed project keeps its history.
+ */
+function projectDirectionsInUse(o) {
+  const main = orderMeasureScope(o);
+  return new Set([
+    // A per-sq-ft service holds its direction while it waits for sizes; a quantity
+    // or work service holds it only through its row below.
+    ...[o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id)).filter(offering => offering && serviceOfferingNeedsSizes(offering)).map(offeringServiceType),
+    // Removal of old film is a general work, it holds no direction.
+    ...(o.extraServices || []).filter(line => !line.autoWindowRemoval).map(line => line.serviceType || offeringServiceType(serviceOffering(line.offeringId)) || main),
+    ...measureAllWindows(o).map(({ win }) => win.measureScope || main),
+  ].filter(Boolean).map(value => measureScopeInfo(value).key));
+}
+function projectReleaseDirection(o, direction) {
+  if (!o || !direction) return false;
+  const main = orderMeasureScope(o);
+  const key = value => measureScopeInfo(value).key;
+  const used = projectDirectionsInUse(o);
+  direction = key(direction);
+  if (used.has(direction)) return false;
+  if (direction !== key(main)) {
+    if (!(o.serviceTypes || []).some(type => key(type) === direction)) return false;
+    o.serviceTypes = o.serviceTypes.filter(type => key(type) !== direction);
+    return true;
+  }
+  if (CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  const next = [...(o.serviceTypes || []).map(key), ...used].find(type => type !== direction && used.has(type));
+  const to = ORDER_PRIMARY_SERVICES.find(service => service.id === next);
+  if (!to) return false;
+  const from = ORDER_PRIMARY_SERVICES.find(service => service.id === direction);
+  o.serviceTypes = [...new Set([next, ...(o.serviceTypes || []).map(key)])].filter(type => type !== direction);
+  o.serviceType = next;
+  o.serviceCategory = to.catalogCategory;
+  if ((o.serviceWorkflow || []).length) o.serviceWorkflow = [...(to.workflow || [])];
+  if (o.measureScope && key(o.measureScope) === direction) o.measureScope = next;
+  if (Array.isArray(o.tags) && from?.tag) {
+    o.tags = o.tags.filter(tag => tag !== from.tag);
+    if (to.tag && !o.tags.includes(to.tag)) o.tags.push(to.tag);
+  }
+  return true;
+}
+/** A service that left the project takes its material with it and frees its direction when nothing else uses it. */
+function projectForgetOffering(o, offeringId) {
+  if (!o || !offeringId) return;
   o.offeringIds = (o.offeringIds || []).filter(id => id !== offeringId);
+  if (o.offeringId === offeringId) { o.offeringId = ''; o.offeringName = ''; }
   if (o.offeringCatalogIds) delete o.offeringCatalogIds[offeringId];
   if (o.orderBuilder?.offeringCatalogIds) delete o.orderBuilder.offeringCatalogIds[offeringId];
-  // The direction leaves the project too when nothing else of it remains, so
-  // the measurement no longer asks for it.
-  const direction = offeringServiceType(serviceOffering(offeringId));
-  const stillUsed = !direction || o.serviceType === direction
-    || (o.offeringIds || []).some(id => offeringServiceType(serviceOffering(id)) === direction)
-    || (o.extraServices || []).some(line => line.serviceType === direction)
-    || measureAllWindows(o).some(({ win }) => (win.measureScope || o.serviceType) === direction);
-  if (!stillUsed) o.serviceTypes = (o.serviceTypes || []).filter(type => type !== direction);
+  // The intake copy is a fallback for new windows: a removed service must not come back through it.
+  if (o.orderBuilder?.offeringId === offeringId) o.orderBuilder.offeringId = '';
+  if (Array.isArray(o.orderBuilder?.offeringIds)) o.orderBuilder.offeringIds = o.orderBuilder.offeringIds.filter(id => id !== offeringId);
+  projectReleaseDirection(o, offeringServiceType(serviceOffering(offeringId)));
+}
+/** After rows of quantity / work services were deleted: a service with no row left leaves the project, a direction with nothing left too. */
+function projectForgetRemovedLines(o, removed) {
+  (removed || []).forEach(line => {
+    if (!line || line.includedBy) return;
+    const offering = serviceOffering(line.offeringId);
+    const rowLeft = !!line.offeringId && (o.extraServices || []).some(item => item.offeringId === line.offeringId && !item.includedBy);
+    if (offering && !serviceOfferingNeedsSizes(offering) && !rowLeft) projectForgetOffering(o, offering.id);
+    else projectReleaseDirection(o, line.serviceType || offeringServiceType(offering));
+  });
+}
+function projectCardRemovePending(oid, offeringId) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  projectForgetOffering(o, offeringId);
   projectEstimateMarkChanged(o, `Убрана услуга «${serviceOffering(offeringId)?.name || 'услуга'}»`);
+  save(); preservePositionForNextRender(); render();
+}
+/** An empty service tab may be closed: no window, service or work line of that direction, and the user may change the project. */
+function measureScopeRemovable(o, scopeKey) {
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return false;
+  const key = measureScopeInfo(scopeKey).key;
+  if (key === measureScopeInfo(orderMeasureScope(o)).key && CLOSED_PROJECT_STATUSES.includes(o.status)) return false;
+  return !projectDirectionsInUse(o).has(key);
+}
+/** «✕» on an empty service tab of the measurement: the direction leaves the project. */
+function managerRemoveMeasureScope(oid, scopeKey) {
+  const o = getOrder(oid);
+  if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
+  const title = measureScopeInfo(scopeKey).short;
+  if (!projectReleaseDirection(o, scopeKey)) { alert(`«${title}» ещё используется в проекте: сначала уберите её услуги и окна.`); return; }
+  if (state._managerActiveScopeByOrder) delete state._managerActiveScopeByOrder[oid];
+  projectEstimateMarkChanged(o, `Убрано направление «${title}»`);
   save(); preservePositionForNextRender(); render();
 }
 
@@ -29624,7 +29705,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       </div>` : ''}
     </div>`;
   }).join('');
-  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне' : 'ждёт замера'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}${o.offeringId !== offering.id ? `<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}` : ''}</div>`; }).join('');
+  const pendingRows = pending.map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<div class="project-service-pending" data-project-pending="${academyEsc(offering.id)}"><b>${academyEsc(offering.name)}</b> · ${film ? academyEsc(catalogLabel(film)) : 'материал уточняется'} · ${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? 'не стоит ни на одном окне' : 'ждёт замера'} ${edit ? `${(typeof offeringWindowCandidates === 'function' && offeringWindowCandidates(o, offering).length) ? `<button class="btn-ghost text-xs ml-2" onclick="openOfferingWindowsPicker('${o.id}','${jsQuote(offering.id)}')">Выбрать окна</button>` : `<button class="btn-ghost text-xs ml-2" onclick="openManagerMeasureModal('${o.id}')">Внести размеры</button>`}<button class="btn-ghost text-xs text-red-600 ml-1" onclick="projectCardRemovePending('${o.id}','${jsQuote(offering.id)}')">Убрать</button>` : ''}</div>`; }).join('');
   return `<section class="project-service-ledger" data-project-card-services>
     <div class="project-service-ledger-head"><div><div class="project-service-ledger-title">Состав проекта <span class="tag">${lines.length + pending.length}</span></div><div class="project-service-ledger-sub">Каждая услуга имеет собственный материал, объём, цену, дату и исполнителя.</div></div>${money && edit ? projectOfferingPickerHtml(o, 'projectCardAddService') : ''}</div>
     <div class="project-service-list">${rows || '<div class="p-4 text-sm text-gray-500">В проекте пока нет услуг.</div>'}${pendingRows}</div>
@@ -33185,7 +33266,7 @@ function renderManagerMeasureModal(oid) {
           <div class="manager-measure-kpi"><div>Площадь стекла</div><div>${orderActualAreaSqft(o).toFixed(2)} sqft</div></div>
         </div>
         </details>
-        <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
+        <div class="manager-measure-services" data-scroll-key="measure-services"><span class="text-xs font-bold text-slate-600">Услуга:</span>${projectScopes.map(key => { const item = measureScopeInfo(key); return `<button class="btn-ghost text-sm ${key===activeScopeKey?'bg-blue-50 text-blue-700':''}" onclick="managerSelectMeasureScope('${oid}','${key}')">${item.icon} ${academyEsc(item.short)} · ${measureAllWindows(o).filter(x => (x.win.measureScope || orderMeasureScope(o))===key).length}</button>${projectScopes.length > 1 && measureScopeRemovable(o, key) ? `<button class="btn-ghost text-sm text-red-600" title="Убрать «${academyEsc(item.short)}» из проекта" aria-label="Убрать «${academyEsc(item.short)}» из проекта" onclick="managerRemoveMeasureScope('${oid}','${key}')">✕</button>` : ''}`; }).join('')}<button class="btn-ghost text-sm" onclick="openManagerProjectServicesModal('${oid}')">+ Добавить услугу</button></div>
         ${projectSelectedSizedOfferings(o, activeScopeKey).length > 1 ? `<div class="manager-measure-services"><span class="text-xs font-bold text-slate-600">Конкретная услуга новых окон:</span>${projectSelectedSizedOfferings(o, activeScopeKey).map(offering => { const film = getCatalogItem(projectOfferingCatalogId(o, offering.id)); return `<button class="btn-ghost text-sm ${managerActiveOffering(o)?.id === offering.id ? 'bg-blue-50 text-blue-700' : ''}" onclick="managerSelectOffering('${oid}','${offering.id}')">${academyEsc(offering.name)}${film ? ` · ${academyEsc(catalogFilmModel(film) || catalogFilmName(film))}` : ''}</button>`; }).join('')}</div>` : ''}
         ${managerMeasureProgressHtml(o, activeScopeKey)}
         ${typeof measureFieldsBarHtml === 'function' ? measureFieldsBarHtml(oid) : ''}

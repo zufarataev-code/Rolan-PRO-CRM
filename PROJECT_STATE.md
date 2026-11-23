@@ -2,6 +2,19 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-22 — Удалённое направление уходит из замера, главное тоже (Claude)
+
+- Owner, 2026-11-22 20:20, Zakaz #908: «удалил направление, а оно сидит в замерах», «пока не добавлю размеры — не смогу КП сделать»; 20:21 «делай» — прямое поручение без предварительного решения Codex, проверка Codex в PR, мердж владельцем.
+- Branch `claude/remove-main-direction`, based on `origin/main` `856e6f2`.
+- Причина (проверено на сохранённых данных #908): `serviceType: privacy_film`, `serviceTypes: [privacy_film, decorative_film]`, а услуг, окон и строк приватной нет. Главное направление нельзя было убрать ни одним путём (`o.offeringId === offeringId → return`, `stillUsed` считал `o.serviceType` занятым, у главной услуги не было «Убрать»), а `orderMeasureScopes` всегда ставит его первым.
+- `projectReleaseDirection(o, direction)` (legacy HTML): направление без выбранной услуги, окна и строки работ уходит из `serviceTypes`; если оно главное — главным становится следующее используемое (`serviceType`, `serviceCategory`, `measureScope`, тег; `serviceWorkflow` — только если был заполнен). Единственное направление проекта и главное у закрытого проекта остаются.
+- `projectForgetOffering(o, offeringId)`: услуга уходит из `offeringIds`/`offeringId` вместе с материалом (`offeringCatalogIds`, `orderBuilder.offeringCatalogIds`) — иначе сервер отвечал «Материал проекта должен быть привязан к выбранной услуге». Через неё идут все пути удаления: `projectCardRemovePending`, `projectDirectionRemoveLine`, `projectEditorRemove`.
+- Окна, переехавшие на услугу другого направления (`projectAddOfferingLine`, `saveOfferingWindows`), освобождают прежнее направление.
+- В замере у пустой вкладки услуги — «✕» (`measureScopeRemovable`, `managerRemoveMeasureScope`; владелец и менеджер): так чинятся уже сохранённые проекты, включая #908. Автоматической миграции нет: пустое главное направление у нового проекта из заявки — нормальное состояние.
+- Verification: `remove-main-direction.test.ts` 6/6 (реальные функции страницы в vm); обновлены `project-card.test.ts`, `service-cashier.test.ts`, `project-shared-windows.test.ts`; legacy-crm + crm-shell 879/880 (film-variants — Prisma, падает и на main); скрипты компилируются. Логика прогнана в браузере на копии #908 без сохранения: приватная ушла, главным стала декоративная, вкладка в замере одна. Экран в браузере после деплоя не смотрел.
+- Ревью Codex (#605, два P2) учтено: удалённая штучная/быстрая строка уносит услугу без оставшихся строк из `offeringIds` и освобождает направление (`projectForgetRemovedLines` в `projectCardDeleteService` и `projectEditorRemove`); штучная услуга без строки сама направление не держит; `orderBuilder.offeringId/offeringIds` чистятся, чтобы удалённая услуга не вернулась через `makeManagerWindow`. Тесты 9/9, legacy-crm + crm-shell 882/883.
+- Not done: несохранённые правки #908 на iPad владельца остаются на устройстве до обновления страницы.
+
 ## 2026-11-22 — Окна общие для проекта; «Редактировать проект» = рабочая карточка; видно, что добавилось (Claude)
 
 - Owner, 2026-11-22 19:13–19:24: «добавил услугу — в карточке не отобразилась»; «удалил приватную, внёс размеры в декоративную — расчёт просит размеры, в карточке декоративной их нет»; «тысяча сущностей»; «кнопка „Редактировать проект“ → карточка проекта, где все услуги, удаление, добавление и вход в каждую услугу для размеров; система сама вносит изменения». Прямое поручение; мердж владельцем.

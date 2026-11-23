@@ -630,11 +630,13 @@ function projectEditorRemove(oid, key) {
   if (!confirm(`Удалить «${line.name}» из проекта?${done ? ' Услуга отмечена выполненной — зарплата и списание по ней пересчитаются.' : ''}`)) return;
   if (line.kind === 'windows') {
     measureAllWindows(o).forEach(({ win }) => { if (win.offeringId === line.offeringId) { win.offeringId = ''; win.catalogId = ''; } });
-    o.offeringIds = (o.offeringIds || []).filter(id => id !== line.offeringId);
+    projectForgetOffering(o, line.offeringId);
   } else {
     const ids = new Set((line.sources || []).map(source => source.id).filter(Boolean));
     if (!ids.size) return;
+    const removed = (o.extraServices || []).filter(item => ids.has(item.id));
     o.extraServices = (o.extraServices || []).filter(item => !ids.has(item.id));
+    projectForgetRemovedLines(o, removed);
   }
   if (o.serviceProgress) delete o.serviceProgress[line.key];
   syncProjectIncludedServices(o);
