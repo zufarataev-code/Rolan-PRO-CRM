@@ -11,6 +11,15 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - «✏️ Редактировать проект» (`projectEditStart`) открывает рабочую карточку (минуя «Кабинет», `state.projectCabinetBypass`), а не отдельное окно. У оконной услуги вместо «Замер · N окон» — кнопка «📐 N окон · изменить размеры».
 - Verification: `project-shared-windows.test.ts` 4/4; `project-editor-window.test.ts` обновлён; legacy-crm без Prisma — 858 зелёных (film-variants — Prisma, падает и на main); скрипты компилируются.
 - Not done: защита от затирания из старой вкладки (сохранение устаревших данных поверх новых) — следующий шаг.
+## 2026-11-22 — WhatsApp: фото и PDF в обе стороны прямо в CRM (Claude)
+
+- Owner, 2026-11-22 19:31: «как сделать, чтобы можно было по WhatsApp в CRM обмениваться файлами». Прямое поручение; мердж владельцем.
+- Branch `claude/whatsapp-files`, based on `origin/main` `450f726`.
+- Входящие: `recordIncomingSms` сохраняет `MediaUrl0..9` (только `https://api.twilio.com/…`) в `raw_payload.media`; staff-only прокси `GET /api/v1/integrations/twilio/media?sid=&i=` забирает файл у Twilio серверными ключами. `listSmsMessages` отдаёт `media: [{contentType,url}]` без ссылок Twilio.
+- Исходящие: `sendWhatsApp({ media: [{key,contentType}] })` — ключи хранилища (Spaces, `/api/v1/files/upload-url`, scope `whatsapp`), Twilio получает подписанные GET-ссылки на 1 ч; текст может быть пустым, если есть файл. API `/integrations/twilio/messages` принимает `media`.
+- Legacy: фото показываются в переписке («Диалог с клиентом», лента WhatsApp, «Входящие»), PDF/видео — ссылкой; кнопка «📎 Файл» в обоих окнах WhatsApp (текст из поля — подпись). Бот на «[фото/файл]» благодарит и передаёт замерщику.
+- Verification: `whatsapp-files.test.ts` (импорт service требует Prisma — CI), `whatsapp-bot.test.ts`, `legacy-sms-ui.test.ts` зелёные; скрипты компилируются.
+- Not done: пуш-уведомления на телефон о новом WhatsApp (сейчас — колокольчик и 💬 в CRM).
 
 ## 2026-11-22 — Карточка проекта: слева клиент, справа услуги одной строкой с «Изменить» и 🗑 (Claude)
 
