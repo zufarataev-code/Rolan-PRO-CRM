@@ -673,7 +673,7 @@ function renderProjectCardServices(o, { money = false, economics = false, manage
       ${selected ? projectStagesHtml(o,line.key) : ''}
       ${selected && (edit || plan) ? `<div class="project-service-edit">
         ${sizedOffering && typeof projectServiceMeasurementModeHtml === 'function' ? `<div class="project-card-service-measurement">${projectServiceMeasurementModeHtml(o, sizedOffering, projectLineDirectionInfo(line).key, edit)}</div>` : ''}
-        ${!sizedOffering ? (line.kind === 'windows' ? `<label>Замер<button type="button" class="btn-ghost w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">${line.windows.length} ${projectWindowsWord(line.windows.length)}</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
+        ${!sizedOffering ? (line.kind === 'windows' ? `<label>Окна и размеры<button type="button" class="btn-primary w-full mt-1" onclick="openManagerMeasureModal('${o.id}')">📐 ${line.windows.length} ${projectWindowsWord(line.windows.length)} · изменить размеры</button></label>` : edit && source ? `<label>Количество<input type="number" min="0" step="${line.unit === 'lft' ? '0.5' : '1'}" value="${Number(line.qty) || 0}" onchange="projectCardSetQty('${o.id}','${jsQuote(source.id)}',this.value)"></label>` : '<span></span>') : ''}
         ${edit && (!sizedOffering || calculation.mode === 'detailed') ? priceField : ''}
         ${plan ? `<label>Исполнитель${projectCardCrewPicker(o, line)}</label><label>Дата<input type="datetime-local" class="${date ? '' : 'project-card-missing'}" value="${date}" onchange="projectCardSetDate('${o.id}','${jsQuote(line.key)}',this.value)"></label>` : `<label>Состояние<div class="project-service-value">${academyEsc(statusLabel)}</div></label>`}
         <label>${tracking ? 'Ход работ' : 'Действия'}<div class="flex flex-wrap gap-1 mt-1">${tracking ? projectServiceProgressCell(o, line) : ''}<button class="btn-ghost" title="Выше" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',-1)">↑</button><button class="btn-ghost" title="Ниже" onclick="projectCardMoveLine('${o.id}','${jsQuote(line.key)}',1)">↓</button></div></label>
@@ -1828,9 +1828,12 @@ function saveWindowManualFilm(oid, rid, wid, inMeasurement = false) {
 // windows are already measured (all with another service) it waited for a
 // measurement that had already happened — $0 forever. Now the owner picks the
 // windows right away; a window has one film service, so it is moved over.
+// Owner, 2026-11-22: «удалил приватную, внёс размеры — декоративная их не видит».
+// Windows and sizes belong to the project, not to a direction: a service sees the
+// windows of its own direction plus every window that has no film service yet.
 function offeringWindowCandidates(o, offering) {
   const scope = offeringServiceType(offering);
-  return measureAllWindows(o).filter(({ win }) => (win.measureScope || o.serviceType) === scope);
+  return measureAllWindows(o).filter(({ win }) => (win.measureScope || o.serviceType) === scope || !win.offeringId);
 }
 function openOfferingWindowsPicker(oid, offeringId, returnTo = 'card') {
   const o = getOrder(oid);
@@ -1861,6 +1864,7 @@ function saveOfferingWindows(oid, offeringId, returnTo = 'card') {
   projectCardEdit(() => {
     offeringWindowCandidates(o, offering).forEach(({ win }) => {
       if (!checked.has(win.id) || win.offeringId === offering.id) return;
+      win.measureScope = offeringServiceType(offering) || win.measureScope;
       applyWindowOffering(win, offering);
       if (film && !win.catalogId) { win.catalogId = film; win.filmType = catalogLabel(getCatalogItem(film)); }
     });

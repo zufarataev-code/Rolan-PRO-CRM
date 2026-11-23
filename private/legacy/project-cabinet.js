@@ -364,7 +364,15 @@ function projectEditStart(oid) {
   const u = currentUser();
   if (!o || !u) return;
   if (projectEditLocked(o, u)) { projectEditRequest(oid); return; }
-  openProjectEditor(oid);
+  // Owner, 2026-11-22 19:24: «нажал „Редактировать проект“ — попадаю в карточку проекта,
+  // где видны все услуги, удаление, добавление и вход в каждую услугу для размеров».
+  // One place to edit — the working card itself, not a separate window.
+  if (!projectEditorCanEdit(o, u)) { alert('Нет прав на редактирование этого проекта.'); return; }
+  closeModal();
+  state.projectCabinetBypass = oid;
+  if (state.view !== 'orderDetails' || state.openOrderId !== oid) openOrder(oid);
+  else render();
+  setTimeout(() => document.querySelector('[data-service-row]')?.closest('section,.card,div')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60);
 }
 
 function projectEditRequest(oid) {

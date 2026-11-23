@@ -27852,9 +27852,15 @@ function projectAddOfferingLine(oid, offeringId, serviceType = '') {
   const direction = offeringServiceTypeIn(offering, serviceType);
   if (!direction) return;
   if (serviceOfferingNeedsSizes(offering)) {
-    (o.measurements?.rooms || []).forEach(room => (room.windows || []).forEach(win => {
-      if (!win.offeringId && (win.measureScope || o.serviceType) === direction) applyWindowOffering(win, offering);
-    }));
+    // Windows belong to the project (Owner, 2026-11-22): free windows of this direction
+    // take the service; if there are none, every window without a film service does —
+    // e.g. sizes left after the privacy service was removed go to the decorative one.
+    const free = measureAllWindows(o).filter(({ win }) => !win.offeringId);
+    const own = free.filter(({ win }) => (win.measureScope || o.serviceType) === direction);
+    (own.length ? own : free).forEach(({ win }) => {
+      win.measureScope = direction;
+      applyWindowOffering(win, offering);
+    });
   } else {
     o.extraServices = o.extraServices || [];
     o.extraServices.push(projectOfferingLine(offering, 1, direction));
@@ -28117,6 +28123,34 @@ function serviceCashierCommit() {
   if (returnTo === 'estimate') openProjectEstimateWorkspace(oid);
   if (returnTo === 'editor' && typeof openProjectEditor === 'function') openProjectEditor(oid);
   if (returnTo === 'direction' && typeof returnToProjectDirectionWindow === 'function') returnToProjectDirectionWindow();
+  try { serviceCashierAnnounce(o, offering); } catch (error) { /* the notice is a convenience only */ }
+}
+/**
+ * Owner, 2026-11-22: «добавил услугу, а в карточке не отобразилась сразу».
+ * Say exactly what happened and open that service in the card.
+ */
+function serviceCashierAnnounce(o, offering) {
+  const line = projectLines(o).find(item => item.offeringId === offering.id);
+  if (line) state.projectCardSelection = { ...(state.projectCardSelection || {}), [o.id]: line.key };
+  const windows = measureAllWindows(o).filter(({ win }) => win.offeringId === offering.id).length;
+  const text = line
+    ? `Добавлено: «${offering.name}»${windows ? ` — окон: ${windows}` : ''}${orderUserCanSeeMoney(o, currentUser()) ? `, ${fmtMoney(line.price)}` : ''}`
+    : serviceOfferingNeedsSizes(offering)
+      ? `«${offering.name}» добавлена, но окон с размерами нет — внесите размеры (кнопка «📐 Окна и размеры»)`
+      : `«${offering.name}» добавлена`;
+  projectNotice(text, line ? 'ok' : 'warn');
+}
+/** A short notice in the corner: what the last action changed in the project. */
+function projectNotice(text, tone = 'ok') {
+  if (typeof document === 'undefined' || !document.body) return;
+  document.getElementById('project-notice')?.remove();
+  const el = document.createElement('div');
+  el.id = 'project-notice';
+  el.setAttribute('role', 'status');
+  el.textContent = text;
+  el.style.cssText = `position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;max-width:min(560px,92vw);padding:12px 16px;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(15,23,42,.2);${tone === 'ok' ? 'background:#15803d;color:#fff' : 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d'}`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
 }
 
 function serviceCashierCardStyle(directionId) {
