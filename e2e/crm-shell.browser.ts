@@ -109,6 +109,7 @@ async function main() {
     console.log('New /crm interface is the landing page and its screens load on computer and phone: passed');
   } finally {
     await browser?.close();
+    await prisma.user.update({where: {user_id: owner.user_id}, data: {password_hash: owner.password_hash, must_change_password: owner.must_change_password}});
     await prisma.$disconnect();
   }
 }

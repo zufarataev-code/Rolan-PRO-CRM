@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
+import { allFramesSaved } from "@/features/crm-shell/logout";
 import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
 
 type Role = "owner" | "manager";
@@ -23,16 +24,30 @@ export const useCrmRole = () => useContext(RoleContext);
  */
 function LogoutButton({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
+  const [unsaved, setUnsaved] = useState(false);
   const leave = async () => {
     setBusy(true);
-    for (const frame of Array.from(document.querySelectorAll("iframe"))) await saveWorkingFrame(frame);
+    setUnsaved(false);
+    // An edit the server has not confirmed would be lost with the session: stay signed in.
+    if (!(await allFramesSaved(Array.from(document.querySelectorAll("iframe")), saveWorkingFrame))) {
+      setUnsaved(true);
+      setBusy(false);
+      return;
+    }
     await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
     window.location.assign("/login");
   };
   return (
-    <Button variant="ghost" size="sm" className={className} disabled={busy} onClick={leave}>
-      {busy ? "Выхожу…" : "Выйти"}
-    </Button>
+    <>
+      <Button variant="ghost" size="sm" className={className} disabled={busy} onClick={leave}>
+        {busy ? "Выхожу…" : "Выйти"}
+      </Button>
+      {unsaved ? (
+        <p role="alert" className="text-destructive px-3 text-xs">
+          Последние изменения ещё не сохранились. Проверьте связь и нажмите «Выйти» снова.
+        </p>
+      ) : null}
+    </>
   );
 }
 
