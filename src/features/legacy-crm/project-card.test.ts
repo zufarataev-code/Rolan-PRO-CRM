@@ -622,6 +622,11 @@ test('server: managers own only their historical drafts and completed imports ar
   colleagueEdit.orders[0].extraServices[0].qty = 20;
   assert.equal(prepareServiceSolutions(current, colleagueEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.');
 
+  const surveyorEdit = structuredClone(current);
+  surveyorEdit.orders[0].measurements = { rooms: [{ id: 'room', windows: [{ id: 'w', width: 43, height: 93, qty: 2 }] }] };
+  assert.equal(prepareServiceSolutions(current, surveyorEdit, false, [], true), null, 'the assigned surveyor enters sizes on an unfinished historical project');
+  assert.equal(prepareServiceSolutions(current, surveyorEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.', 'a colleague manager is still refused');
+
   const ownEdit = structuredClone(current);
   ownEdit.orders[0].extraServices[0].qty = 20;
   assert.equal(prepareServiceSolutions(current, ownEdit, false, ['manager-a']), null, 'the assigned manager may prepare their unfinished import');
