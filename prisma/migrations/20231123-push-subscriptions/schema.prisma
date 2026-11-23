@@ -1,0 +1,12 @@
+model PushSubscription { 
+  id           Int      @id @default(autoincrement()) 
+  user_id      Int 
+  endpoint     String   @unique 
+  p256dh       String 
+  auth         String 
+  user_agent   String 
+  created_at   DateTime @default(now()) 
+  last_success_at DateTime? 
+  fail_count   Int      @default(0) 
+} 
+
