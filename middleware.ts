@@ -131,6 +131,13 @@ export async function middleware(request: NextRequest) {
   const requiredRoles = getRolesForPath(pathname);
   const sessionToken = request.cookies.get(getEnv().sessionCookieName)?.value;
 
+  // The assistant bot's key (Bearer rpk_…) is checked against the database by the
+  // server auth helpers; the edge layer cannot reach the database.
+  const bearer = request.headers.get("authorization")?.trim() ?? "";
+  if (!sessionToken && isApiV1 && /^bearer rpk_/i.test(bearer)) {
+    return NextResponse.next();
+  }
+
   if (!sessionToken && (isApiV1 || requiredRoles)) {
     return deny(request, 401, "unauthorized", "Authentication is required.");
   }
