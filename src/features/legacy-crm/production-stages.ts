@@ -1,4 +1,4 @@
-import { canonicalFilmCategory, projectDirectionMoves, rekeyDirectionRecords, serviceGroupIds, serviceGroupScope, serviceGroupName, projectServicesFinished } from './service-solutions';
+import { canonicalFilmCategory, directionMoveAllowed, projectDirectionMoves, rekeyDirectionRecords, serviceGroupIds, serviceGroupScope, serviceGroupName, projectServicesFinished } from './service-solutions';
 import { serviceScopeApproved } from './service-scope-approvals';
 import { createHash } from 'node:crypto';
 
@@ -113,7 +113,7 @@ export function prepareProductionStages(current: Row, next: Row, owner: boolean,
     const before = rows(current.orders).find(value => value.id === order.id) || {};
     // #592: a closed project or a TintWiz import moved to another direction keeps
     // its done services under the new id; they are not newly completed work.
-    const moved = closed.includes(String(before.status)) || before._importSource === 'wiz'
+    const moved = directionMoveAllowed(before, owner, managerIds)
       ? rekeyDirectionRecords(before, projectDirectionMoves(before, order)) : before;
     // A service completed without a multi-stage plan is one complete stage.
     // Field progress was already merged and authorized before this preparation.

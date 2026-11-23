@@ -200,6 +200,22 @@ export function renameProjectDirections(before: Row, moves: Map<string, string>,
   renamed.serviceType = serviceType;
   return renamed;
 }
+// The owner's lock (project-cabinet.js, PROJECT_EDIT_LOCKED_STATUSES): once the act is
+// signed a manager changes the project only with the owner's active 24-hour grant.
+const PROJECT_EDIT_LOCKED_STATUSES = ['act_signed', 'payment_received', 'completed', 'review_received'];
+/**
+ * #592: whether this save may move the project's work to another direction with its
+ * crew, dates, progress and approvals. Only a closed project or a TintWiz import moves
+ * that way, and a locked project only for the owner or a manager the owner let in.
+ * The grant is read from the saved project, never from the incoming one.
+ */
+export function directionMoveAllowed(before: Row, owner: boolean, managerIds: readonly string[], now = Date.now()): boolean {
+  const status = String(before.status);
+  if (!CLOSED_PROJECT_STATUSES.includes(status) && before._importSource !== 'wiz') return false;
+  if (owner || !PROJECT_EDIT_LOCKED_STATUSES.includes(status)) return true;
+  const grant = before.editAccess;
+  return !!grant && managerIds.includes(String(grant.userId)) && new Date(String(grant.until)).getTime() > now;
+}
 /**
  * #592: the directions the owner moved on this project (solar → privacy after
  * the TintWiz import). A move counts only when it is a pure rename: the same
@@ -440,7 +456,12 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     // #592: a closed project or a TintWiz import moved to another direction keeps
     // its windows, crew, dates and progress under the new direction; compared with
     // the saved project renamed the same way, a pure move is no change at all.
-    const moves = CLOSED_PROJECT_STATUSES.includes(String(savedOrder.status)) || savedOrder._importSource === 'wiz'
+    // Only the owner opens a locked project to a manager (projectEditDecide); a
+    // manager's save cannot write that grant itself.
+    if (!owner) {
+      if (savedOrder.editAccess === undefined) delete order.editAccess; else order.editAccess = savedOrder.editAccess;
+    }
+    const moves = directionMoveAllowed(savedOrder, owner, managerIds)
       ? projectDirectionMoves(savedOrder, order) : new Map<string, string>();
     const oldOrder = moves.size
       ? rekeyDirectionRecords(renameProjectDirections(savedOrder, moves, order.serviceType), moves) : savedOrder;

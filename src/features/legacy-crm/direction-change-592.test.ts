@@ -460,3 +460,48 @@ test('a manager without the owner grant cannot move the direction of a closed pr
   assert.equal(ctx.projectDirectionCanMove(o, { id: 'm', role: 'manager' }), false);
   assert.match(fn(stages, 'projectDirectionMove'), /projectEditBlocked\(oid\)/);
 });
+
+test('the server moves a locked project only for the owner or a manager the owner let in', () => {
+  const done = { status: 'done', doneAt: '2026-10-23T22:00:00Z', doneBy: 'i1' };
+  const before = (extra: Record<string, unknown> = {}): any => ({
+    id: 'grant', status: 'completed', serviceType: 'solar_film', managerId: 'm1',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 2000, height: 2000, qty: 1 }] }] },
+    extraServices: [],
+    serviceSchedules: [{ id: 'direction:solar_film', installationAt: '2026-10-23T16:00:00Z', installerIds: ['i1'] }],
+    serviceProgress: { 'direction:solar_film': done },
+    ...extra,
+  });
+  const payload = (order: any) => ({ settings: {}, users: [{ id: 'i1', role: 'installer' }], orders: [order] });
+  const move = (order: any) => {
+    const next = structuredClone(order);
+    next.serviceType = 'privacy_film';
+    next.measurements.rooms[0].windows[0].measureScope = 'privacy_film';
+    next.serviceSchedules[0].id = 'direction:privacy_film';
+    next.serviceProgress = { 'direction:privacy_film': done };
+    return next;
+  };
+  const later = new Date(Date.now() + 3600000).toISOString();
+  const earlier = new Date(Date.now() - 3600000).toISOString();
+  const locked = before();
+  assert.equal(prepareServiceSolutions(payload(locked), payload(move(locked)), true), null, 'the owner moves it');
+  assert.notEqual(prepareServiceSolutions(payload(locked), payload(move(locked)), false, ['m1']), null, 'no grant, no move');
+  const granted = before({ editAccess: { userId: 'm1', by: 'owner', until: later } });
+  assert.equal(prepareServiceSolutions(payload(granted), payload(move(granted)), false, ['m1']), null, 'an active grant lets him in');
+  assert.notEqual(prepareServiceSolutions(payload(granted), payload(move(granted)), false, ['m2']), null, 'the grant is his, not another manager\'s');
+  const expired = before({ editAccess: { userId: 'm1', by: 'owner', until: earlier } });
+  assert.notEqual(prepareServiceSolutions(payload(expired), payload(move(expired)), false, ['m1']), null, 'an expired grant is no grant');
+  // A manager cannot write the grant into his own save.
+  const forged = move(locked);
+  forged.editAccess = { userId: 'm1', by: 'owner', until: later };
+  assert.notEqual(prepareServiceSolutions(payload(locked), payload(forged), false, ['m1']), null);
+  const kept = move(granted); kept.editAccess = { userId: 'm1', by: 'owner', until: '2099-01-01T00:00:00Z' };
+  assert.equal(prepareServiceSolutions(payload(granted), payload(kept), false, ['m1']), null);
+  assert.deepEqual(kept.editAccess, granted.editAccess, 'the saved grant is put back');
+  // The stage step follows the same rule.
+  const grantedStaged = move(granted);
+  assert.equal(prepareProductionStages(payload(granted), payload(grantedStaged), false, ['m1']), null);
+  assert.equal(grantedStaged.productionStages, undefined);
+  // Before the act a closed project stays open to its manager, as in the card.
+  const installed = before({ status: 'installation_done' });
+  assert.equal(prepareServiceSolutions(payload(installed), payload(move(installed)), false, ['m1']), null);
+});
