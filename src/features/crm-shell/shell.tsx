@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
-import { allFramesSaved } from "@/features/crm-shell/logout";
+import { allFramesSaved, signedOut } from "@/features/crm-shell/logout";
 import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
 
 type Role = "owner" | "manager";
@@ -24,17 +24,22 @@ export const useCrmRole = () => useContext(RoleContext);
  */
 function LogoutButton({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
-  const [unsaved, setUnsaved] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const leave = async () => {
     setBusy(true);
-    setUnsaved(false);
+    setProblem(null);
     // An edit the server has not confirmed would be lost with the session: stay signed in.
     if (!(await allFramesSaved(Array.from(document.querySelectorAll("iframe")), saveWorkingFrame))) {
-      setUnsaved(true);
+      setProblem("Последние изменения ещё не сохранились. Проверьте связь и нажмите «Выйти» снова.");
       setBusy(false);
       return;
     }
-    await fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => null);
+    // Until the server ends the session, going to /login would only look like leaving.
+    if (!(await signedOut(() => fetch("/api/v1/auth/logout", { method: "POST" })))) {
+      setProblem("Выйти не получилось: сервер не ответил. Нажмите «Выйти» ещё раз.");
+      setBusy(false);
+      return;
+    }
     window.location.assign("/login");
   };
   return (
@@ -42,9 +47,9 @@ function LogoutButton({ className }: { className?: string }) {
       <Button variant="ghost" size="sm" className={className} disabled={busy} onClick={leave}>
         {busy ? "Выхожу…" : "Выйти"}
       </Button>
-      {unsaved ? (
+      {problem ? (
         <p role="alert" className="text-destructive px-3 text-xs">
-          Последние изменения ещё не сохранились. Проверьте связь и нажмите «Выйти» снова.
+          {problem}
         </p>
       ) : null}
     </>

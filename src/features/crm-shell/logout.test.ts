@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { allFramesSaved } from "./logout";
+import { allFramesSaved, signedOut } from "./logout";
 
 test("«Выйти» goes on only after every working frame saved its edits", async () => {
   const seen: string[] = [];
@@ -14,4 +14,10 @@ test("«Выйти» goes on only after every working frame saved its edits", as
   // It stops at the failed save and asks nothing more of later frames.
   assert.deepEqual(seen, ["a", "b", "a", "failed"]);
   assert.equal(await allFramesSaved([], save), true);
+});
+
+test("«Выйти» leaves only when the server ended the session", async () => {
+  assert.equal(await signedOut(async () => ({ ok: true })), true);
+  assert.equal(await signedOut(async () => ({ ok: false })), false);
+  assert.equal(await signedOut(async () => { throw new Error("offline"); }), false);
 });
