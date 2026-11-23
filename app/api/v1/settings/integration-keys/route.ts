@@ -9,6 +9,7 @@ import { apiError, apiSuccess } from "@/lib/http/api-response";
 export async function GET(request: NextRequest) {
   const auth = await requireRequestSession(request, [ROLE_CODES.OWNER]);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Integration keys are the owner's.");
+  if ("viaApiKey" in auth.session && auth.session.viaApiKey) return apiError(403, "forbidden", "An API key cannot manage keys.");
   const integration = request.nextUrl.searchParams.get("integration") ?? "google_ads";
   if (!isIntegrationName(integration)) return apiError(400, "unknown_integration", "Unknown integration.");
   return apiSuccess(await integrationKeySummary(integration));
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireRequestSession(request, [ROLE_CODES.OWNER]);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Integration keys are the owner's.");
+  if ("viaApiKey" in auth.session && auth.session.viaApiKey) return apiError(403, "forbidden", "An API key cannot manage keys.");
   const body = (await request.json().catch(() => null)) as { integration?: unknown } | null;
   const integration = body?.integration ?? "google_ads";
   if (!isIntegrationName(integration)) return apiError(400, "unknown_integration", "Unknown integration.");
@@ -28,6 +30,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await requireRequestSession(request, [ROLE_CODES.OWNER]);
   if (!auth.ok) return apiError(auth.reason === "forbidden" ? 403 : 401, auth.reason, "Integration keys are the owner's.");
+  if ("viaApiKey" in auth.session && auth.session.viaApiKey) return apiError(403, "forbidden", "An API key cannot manage keys.");
   const integration = request.nextUrl.searchParams.get("integration") ?? "google_ads";
   if (!isIntegrationName(integration)) return apiError(400, "unknown_integration", "Unknown integration.");
   return apiSuccess(await revokeIntegrationKeys(integration));

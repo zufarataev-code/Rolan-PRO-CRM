@@ -2489,6 +2489,64 @@ async function googleAdsCrmRevokeKey() {
   loadGoogleAdsCrm(true);
 }
 
+// ---------- КЛЮЧ ДЛЯ БОТА-АССИСТЕНТА (Owner, 2026-11-22 21:55) ----------
+// «Дай API ключ нашей CRM для бота-ассистента», «полный доступ». The key acts as
+// the owner on every /api/v1 route; it is shown once and can be switched off here.
+async function loadAssistantKey(force = false) {
+  if (currentUser()?.role !== 'owner') return;
+  const s = state.assistantKey || {};
+  if (s.loading || (!force && s.loadedAt)) return;
+  state.assistantKey = { ...s, loading: true };
+  const response = await fetch('/api/v1/settings/integration-keys?integration=assistant', { credentials: 'same-origin', cache: 'no-store' }).catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => null) : null;
+  state.assistantKey = { key: payload?.data || null, loadedAt: Date.now(), loading: false, error: response?.ok ? '' : `Сервер ответил ${response?.status || 'нет ответа'}` };
+  render();
+}
+function assistantKeyPanelHtml() {
+  if (currentUser()?.role !== 'owner') return '';
+  const a = state.assistantKey;
+  if (!a || (!a.loadedAt && !a.loading)) setTimeout(() => loadAssistantKey(), 0);
+  const key = a?.key;
+  return `<div class="p-4 border ${key?.active ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}" data-assistant-key>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="font-semibold text-sm mb-1">🤖 API-ключ для бота-ассистента</div>
+        <p class="text-xs text-gray-600">${key?.active ? `Ключ активен (${academyEsc(key.key_prefix || '')}…)${key.last_used_at ? ` · бот обращался ${academyEsc(new Date(key.last_used_at).toLocaleString('ru-RU'))}` : ' · бот ещё не обращался'}` : 'Не создан.'} Полный доступ владельца ко всем данным CRM — храните ключ только в настройках бота.</p>
+        ${a?.error ? `<p class="text-xs text-red-700 mt-1">${academyEsc(a.error)}</p>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn-primary text-sm" onclick="assistantKeyCreate()">${key?.active ? 'Новый ключ' : 'Создать ключ'}</button>
+        ${key?.active ? `<button class="btn-ghost text-sm text-red-600" onclick="assistantKeyRevoke()">Отключить</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+async function assistantKeyCreate() {
+  if (currentUser()?.role !== 'owner') return;
+  if (state.assistantKey?.key?.active && !confirm('Создать новый ключ? Старый сразу перестанет работать — в боте нужно будет заменить ключ.')) return;
+  try {
+    const response = await fetch('/api/v1/settings/integration-keys', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ integration: 'assistant' }) });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.data?.key) throw new Error(payload?.errors?.[0]?.message || `Сервер ответил ${response.status}`);
+    const base = location.origin;
+    state.modal = `<div class="modal-backdrop" onclick="if(event.target===this) closeModal()"><div class="modal-content workspace-modal p-6" style="max-width:40rem">
+      <h3 class="font-semibold text-lg mb-1">Ключ для бота-ассистента</h3>
+      <p class="text-sm text-gray-600 mb-3">Показан один раз — скопируйте сейчас и вставьте в настройки бота. Бот отправляет его в заголовке <code>Authorization: Bearer …</code> на адреса <code>${academyEsc(base)}/api/v1/…</code>.</p>
+      <textarea id="assistant-key-value" readonly style="width:100%;height:4.5rem;font-family:monospace;font-size:13px">${academyEsc(payload.data.key)}</textarea>
+      <div class="flex gap-2 mt-3 justify-end"><button class="btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('assistant-key-value').value); this.textContent='Скопировано'">Скопировать ключ</button><button class="btn-ghost" onclick="closeModal()">Готово</button></div>
+    </div></div>`;
+    state.assistantKey = { ...(state.assistantKey || {}), loadedAt: 0 };
+    loadAssistantKey(true);
+  } catch (error) {
+    alert('Не удалось создать ключ: ' + (error?.message || error));
+  }
+}
+async function assistantKeyRevoke() {
+  if (currentUser()?.role !== 'owner' || !confirm('Отключить ключ? Бот-ассистент сразу потеряет доступ к CRM.')) return;
+  await fetch('/api/v1/settings/integration-keys?integration=assistant', { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
+  loadAssistantKey(true);
+}
+
 // ---------- GOOGLE ADS: КОНВЕРСИИ ИЗ CRM (Owner, 2026-10-25, спецификация) ----------
 // «Вот что нужно делать» (Google Ads CRM integration spec): qualified leads and
 // sales with their value go from the CRM to Google Ads through Data Manager
