@@ -76,8 +76,9 @@ test("a manager cannot edit a closed project without the owner's approval", () =
   assert.equal(sandbox("manager", open).projectEditorCanEdit(open), true);
 });
 
-test("the edit button opens the window, and the cashier returns to it", () => {
-  assert.match(cabinet, /function projectEditStart\(oid\) \{[\s\S]*?openProjectEditor\(oid\);/);
+test("the edit button opens the working card itself; the editor window's cashier still returns to it", () => {
+  assert.match(cabinet, /function projectEditStart\(oid\) \{[\s\S]*?state\.projectCabinetBypass = oid;[\s\S]*?openOrder\(oid\)/);
+  assert.doesNotMatch(cabinet, /function projectEditStart\(oid\) \{[^}]*openProjectEditor\(oid\);\s*\}/);
   assert.match(cabinet, /openServiceCashier\('\$\{oid\}','editor'\)/);
   assert.match(html, /\['estimate', 'intake', 'direction', 'editor'\]\.includes\(returnTo\)/);
   assert.match(html, /returnTo === 'editor' && typeof openProjectEditor === 'function'\) openProjectEditor\(oid\)/);
