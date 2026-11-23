@@ -185,6 +185,91 @@ export function projectServicesStarted(order: Row): boolean {
 }
 // The work of a service (projectServiceScope): its windows' sizes, its
 // line's quantity…; prices are not part of it.
+const windowDirectionKey = (order: Row, win: Row): string => typeof win.offeringId === 'string' && win.offeringId ? '' : String(win.measureScope || order.serviceType || 'solar_film');
+/** The project as it was, with only its directions renamed (#592). */
+export function renameProjectDirections(before: Row, moves: Map<string, string>, serviceType: unknown): Row {
+  const renamed = structuredClone(before);
+  for (const room of rows(object(renamed.measurements).rooms)) for (const win of rows(room.windows)) {
+    const from = windowDirectionKey(before, win);
+    if (from && moves.has(from)) win.measureScope = moves.get(from);
+  }
+  for (const line of rows(renamed.extraServices)) {
+    const from = String(line.serviceType || before.serviceType || 'solar_film');
+    if (moves.has(from)) line.serviceType = moves.get(from);
+  }
+  renamed.serviceType = serviceType;
+  return renamed;
+}
+// The owner's lock (project-cabinet.js, PROJECT_EDIT_LOCKED_STATUSES): once the act is
+// signed a manager changes the project only with the owner's active 24-hour grant.
+const PROJECT_EDIT_LOCKED_STATUSES = ['act_signed', 'payment_received', 'completed', 'review_received'];
+/**
+ * #592: whether this save may move the project's work to another direction with its
+ * crew, dates, progress and approvals. Only a closed project or a TintWiz import moves
+ * that way, only for the owner or the project's own manager, and a locked project
+ * only for the owner or that manager with the owner's grant.
+ * The grant is read from the saved project, never from the incoming one.
+ */
+export function directionMoveAllowed(before: Row, owner: boolean, managerIds: readonly string[], now = Date.now()): boolean {
+  const status = String(before.status);
+  if (!CLOSED_PROJECT_STATUSES.includes(status) && before._importSource !== 'wiz') return false;
+  if (owner) return true;
+  // A manager moves only his own project (orderUserOwns on the card).
+  if (!managerIds.includes(String(before.managerId))) return false;
+  if (!PROJECT_EDIT_LOCKED_STATUSES.includes(status)) return true;
+  const grant = before.editAccess;
+  return !!grant && managerIds.includes(String(grant.userId)) && new Date(String(grant.until)).getTime() > now;
+}
+/**
+ * #592: the directions the owner moved on this project (solar → privacy after
+ * the TintWiz import). A move counts only when it is a pure rename: the same
+ * windows with the same sizes, into a direction the project did not have, and
+ * no other direction moved into it in the same save.
+ */
+export function projectDirectionMoves(before: Row, order: Row): Map<string, string> {
+  const moves = new Map<string, string>();
+  const windowsOf = (item: Row) => rows(object(item.measurements).rooms).flatMap(room => rows(room.windows));
+  const windowsBefore = new Map(windowsOf(before).map(win => [String(win.id), win]));
+  for (const win of windowsOf(order)) {
+    const old = windowsBefore.get(String(win.id));
+    if (!old) continue;
+    const from = windowDirectionKey(before, old), to = windowDirectionKey(order, win);
+    if (from && to && from !== to) moves.set(from, to);
+  }
+  // A secondary direction may be only rows (a custom or quick line) without windows.
+  const linesBefore = new Map(rows(before.extraServices).map(line => [String(line.id), line]));
+  for (const line of rows(order.extraServices)) {
+    const old = linesBefore.get(String(line.id));
+    if (!old) continue;
+    const from = String(old.serviceType || before.serviceType || 'solar_film'), to = String(line.serviceType || order.serviceType || 'solar_film');
+    if (from !== to && !moves.has(from)) moves.set(from, to);
+  }
+  const fromType = String(before.serviceType || 'solar_film'), toType = String(order.serviceType || 'solar_film');
+  if (fromType !== toType && !moves.has(fromType)) moves.set(fromType, toType);
+  // Two directions merged into one are not a rename: their crews and progress
+  // would collide under one id.
+  const targets = [...moves.values()];
+  for (const [from, to] of [...moves]) if (targets.filter(key => key === to).length > 1) moves.delete(from);
+  if (!moves.size) return moves;
+  const renamed = renameProjectDirections(before, moves, order.serviceType);
+  const groupsBefore = new Set(serviceGroupIds(before)), groupsNow = new Set(serviceGroupIds(order));
+  for (const [from, to] of [...moves]) {
+    const target = `direction:${to}`;
+    if (groupsBefore.has(target) || groupsNow.has(`direction:${from}`) || serviceGroupScope(order, target) !== serviceGroupScope(renamed, target)) moves.delete(from);
+  }
+  return moves;
+}
+/** Crew, dates and progress of a project with its moved directions under their new ids. */
+export function rekeyDirectionRecords(order: Row, moves: Map<string, string>): Row {
+  if (!moves.size) return order;
+  const rekey = (key: string) => key.startsWith('direction:') && moves.has(key.slice(10)) ? `direction:${moves.get(key.slice(10))}` : (moves.get(key) ?? key);
+  const copy: Row = { ...order };
+  if (Array.isArray(order.serviceSchedules)) copy.serviceSchedules = order.serviceSchedules.map((plan: Row) => plan && typeof plan === 'object' ? { ...plan, id: rekey(String(plan.id)) } : plan);
+  if (order.serviceProgress && typeof order.serviceProgress === 'object' && !Array.isArray(order.serviceProgress)) {
+    copy.serviceProgress = Object.fromEntries(Object.entries(order.serviceProgress).map(([key, value]) => [rekey(key), value]));
+  }
+  return copy;
+}
 const SCOPE_WINDOW_FIELDS = ['id', 'width', 'height', 'qty', 'sqft', 'actualWidth', 'actualHeight', 'actualQty', 'panels', 'actualPanels', 'winType', 'catalogId', 'offeringId', 'measureScope', 'removalRequired', 'complexity'];
 const SCOPE_LINE_FIELDS = ['id', 'qty', 'unit', 'type', 'offeringId', 'catalogId', 'serviceType', 'measureScope', 'complexity'];
 export function serviceGroupScope(order: Row, id: string): string {
@@ -379,7 +464,19 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     }
   }
   for (const order of rows(next.orders)) {
-    const oldOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    const savedOrder = rows(current.orders).find(item=>item.id===order.id) || {};
+    // #592: a closed project or a TintWiz import moved to another direction keeps
+    // its windows, crew, dates and progress under the new direction; compared with
+    // the saved project renamed the same way, a pure move is no change at all.
+    // Only the owner opens a locked project to a manager (projectEditDecide); a
+    // manager's save cannot write that grant itself.
+    if (!owner) {
+      if (savedOrder.editAccess === undefined) delete order.editAccess; else order.editAccess = savedOrder.editAccess;
+    }
+    const moves = directionMoveAllowed(savedOrder, owner, managerIds)
+      ? projectDirectionMoves(savedOrder, order) : new Map<string, string>();
+    const oldOrder = moves.size
+      ? rekeyDirectionRecords(renameProjectDirections(savedOrder, moves, order.serviceType), moves) : savedOrder;
     const manualTotalChanged = ['manualProjectTotal', 'manualProjectTotalBase'].some(field =>
       stableJson(order[field] ?? null) !== stableJson(oldOrder[field] ?? null));
     const pricingModeChanged = order.quickEntryPricingMode !== oldOrder.quickEntryPricingMode;

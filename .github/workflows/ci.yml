@@ -179,6 +179,21 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: TintWiz import direction change (#592)
+        env:
+          E2E_PLAYWRIGHT_MODULE: /tmp/rolanpro-browser/node_modules/playwright
+          E2E_PRINT_SCREENSHOTS: '1'
+        run: node --import tsx e2e/wiz-direction.browser.ts
+
+      - name: TintWiz direction screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiz-direction-screenshots
+          path: test-results/wiz-direction/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Application log on failure
         if: failure()
         run: tail -200 next.log || true
