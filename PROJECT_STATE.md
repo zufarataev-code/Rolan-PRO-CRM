@@ -12,7 +12,8 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Окна, переехавшие на услугу другого направления (`projectAddOfferingLine`, `saveOfferingWindows`), освобождают прежнее направление.
 - В замере у пустой вкладки услуги — «✕» (`measureScopeRemovable`, `managerRemoveMeasureScope`; владелец и менеджер): так чинятся уже сохранённые проекты, включая #908. Автоматической миграции нет: пустое главное направление у нового проекта из заявки — нормальное состояние.
 - Verification: `remove-main-direction.test.ts` 6/6 (реальные функции страницы в vm); обновлены `project-card.test.ts`, `service-cashier.test.ts`, `project-shared-windows.test.ts`; legacy-crm + crm-shell 879/880 (film-variants — Prisma, падает и на main); скрипты компилируются. Логика прогнана в браузере на копии #908 без сохранения: приватная ушла, главным стала декоративная, вкладка в замере одна. Экран в браузере после деплоя не смотрел.
-- Not done: удаление штучной/быстрой строки (`extraServices`) не освобождает её направление автоматически — убирается «✕» в замере. Несохранённые правки #908 на iPad владельца остаются на устройстве до обновления страницы.
+- Ревью Codex (#605, два P2) учтено: удалённая штучная/быстрая строка уносит услугу без оставшихся строк из `offeringIds` и освобождает направление (`projectForgetRemovedLines` в `projectCardDeleteService` и `projectEditorRemove`); штучная услуга без строки сама направление не держит; `orderBuilder.offeringId/offeringIds` чистятся, чтобы удалённая услуга не вернулась через `makeManagerWindow`. Тесты 9/9, legacy-crm + crm-shell 882/883.
+- Not done: несохранённые правки #908 на iPad владельца остаются на устройстве до обновления страницы.
 
 ## 2026-11-22 — Окна общие для проекта; «Редактировать проект» = рабочая карточка; видно, что добавилось (Claude)
 

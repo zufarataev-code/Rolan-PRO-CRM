@@ -12,7 +12,7 @@ function sandbox() {
   const from = html.indexOf("function projectDirectionsInUse(o) {");
   const to = html.indexOf("function projectCardRemovePending(oid, offeringId) {");
   assert.ok(from > 0 && to > from);
-  const offerings: Record<string, string> = { privacy_one: "privacy_film", decor_one: "decorative_film" };
+  const offerings: Record<string, string> = { privacy_one: "privacy_film", decor_one: "decorative_film", privacy_piece: "privacy_film" };
   const context = vm.createContext({
     CLOSED_PROJECT_STATUSES: ["installation_done", "act_signed", "payment_received", "completed", "review_received"],
     ORDER_PRIMARY_SERVICES: [
@@ -22,6 +22,7 @@ function sandbox() {
     measureScopeInfo: (key: string) => ({ key }),
     orderMeasureScope: (o: any) => o.measureScope || o.serviceType,
     serviceOffering: (id: string) => (offerings[id] ? { id } : null),
+    serviceOfferingNeedsSizes: (offering: any) => offering?.id !== "privacy_piece",
     offeringServiceType: (offering: any) => (offering ? offerings[offering.id] : ""),
     measureAllWindows: (o: any) => (o.measurements?.rooms || []).flatMap((room: any) => (room.windows || []).map((win: any) => ({ room, win }))),
   });
@@ -93,4 +94,35 @@ test("windows moved to another service free the direction they left; an empty me
   assert.match(stages, /left\.forEach\(scope => \{ if \(scope && scope !== offeringServiceType\(offering\)\) projectReleaseDirection\(o, scope\); \}\);/);
   assert.match(html, /projectScopes\.length > 1 && measureScopeRemovable\(o, key\)/);
   assert.match(html, /function managerRemoveMeasureScope\(oid, scopeKey\)/);
+});
+
+test("a deleted quantity row takes its service and empty direction with it (Codex review, #605)", () => {
+  const { projectForgetRemovedLines, projectDirectionsInUse } = sandbox();
+  const row = { id: "r1", offeringId: "privacy_piece", serviceType: "privacy_film" };
+  const o: any = project({ offeringIds: ["decor_one", "privacy_piece"], offeringCatalogIds: { decor_one: "film_d", privacy_piece: "film_p" }, extraServices: [] });
+  // A stale selected id of a quantity service does not hold the direction by itself.
+  assert.equal(projectDirectionsInUse(o).has("privacy_film"), false);
+  projectForgetRemovedLines(o, [row]);
+  assert.deepEqual([...o.offeringIds], ["decor_one"]);
+  assert.deepEqual({ ...o.offeringCatalogIds }, { decor_one: "film_d" });
+  assert.equal(o.serviceType, "decorative_film");
+  // Another row of the same service keeps it.
+  const kept: any = project({ offeringIds: ["decor_one", "privacy_piece"], extraServices: [{ id: "r2", offeringId: "privacy_piece", serviceType: "privacy_film" }] });
+  projectForgetRemovedLines(kept, [row]);
+  assert.deepEqual([...kept.offeringIds], ["decor_one", "privacy_piece"]);
+  assert.equal(kept.serviceType, "privacy_film");
+});
+
+test("a removed service does not come back through the intake copy (Codex review, #605)", () => {
+  const { projectForgetOffering } = sandbox();
+  const o: any = project({ offeringId: "privacy_one", offeringIds: ["privacy_one", "decor_one"], orderBuilder: { offeringId: "privacy_one", offeringIds: ["privacy_one", "decor_one"], offeringCatalogIds: { privacy_one: "film_p" } } });
+  projectForgetOffering(o, "privacy_one");
+  assert.equal(o.orderBuilder.offeringId, "");
+  assert.deepEqual([...o.orderBuilder.offeringIds], ["decor_one"]);
+  assert.deepEqual({ ...o.orderBuilder.offeringCatalogIds }, {});
+});
+
+test("row deletion in the card and in the editor runs the same clean-up", () => {
+  assert.match(html, /const removed = \(o\.extraServices \|\| \[\]\)\.filter\(line => line\.id === sid\);[\s\S]{0,260}projectForgetRemovedLines\(o, removed\);/);
+  assert.match(cabinet, /const removed = \(o\.extraServices \|\| \[\]\)\.filter\(item => ids\.has\(item\.id\)\);[\s\S]{0,160}projectForgetRemovedLines\(o, removed\);/);
 });

@@ -25,6 +25,8 @@ function sandbox(role: string, order: any) {
     projectServiceProgress: (o: any, key: string) => o.serviceProgress?.[key] || { status: "planned" },
     projectApplyLineUnitPrice: (line: any, price: number) => { line.sources[0].price = price; return true; },
     projectEstimateSyncQuickServices: () => {}, syncProjectIncludedServices: () => {}, projectPrunePlans: () => {}, projectCardSyncCrew: () => {},
+    // Clean-up after a removal lives in the page (remove-main-direction.test.ts covers it).
+    projectForgetRemovedLines: () => {}, projectForgetOffering: (o: any, id: string) => { o.offeringIds = (o.offeringIds || []).filter((item: string) => item !== id); },
     projectEstimateMarkChanged: (_o: any, reason: string) => ctx.marks.push(reason),
     save: () => { ctx.saved += 1; }, render: () => {}, preservePositionForNextRender: () => {},
     confirm: () => true, alert: () => {}, prompt: () => null,

@@ -634,7 +634,9 @@ function projectEditorRemove(oid, key) {
   } else {
     const ids = new Set((line.sources || []).map(source => source.id).filter(Boolean));
     if (!ids.size) return;
+    const removed = (o.extraServices || []).filter(item => ids.has(item.id));
     o.extraServices = (o.extraServices || []).filter(item => !ids.has(item.id));
+    projectForgetRemovedLines(o, removed);
   }
   if (o.serviceProgress) delete o.serviceProgress[line.key];
   syncProjectIncludedServices(o);

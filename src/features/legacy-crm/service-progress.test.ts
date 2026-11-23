@@ -37,6 +37,9 @@ function load(user: Row) {
   const context: any = vm.createContext({
     db, console, state: { currentUserId: user.id },
     ORDER_PRIMARY_SERVICES: services,
+    CLOSED_PROJECT_STATUSES: ['installation_done', 'act_signed', 'payment_received', 'completed', 'review_received'],
+    measureScopeInfo: (key: string) => ({ key }),
+    orderMeasureScope: (o: any) => o.measureScope || o.serviceType,
     primaryServiceInfo: (id: string) => services.find(item => item.id === id),
     canonicalCatalogCategory: (value: string) => value,
     currentUser: () => user,

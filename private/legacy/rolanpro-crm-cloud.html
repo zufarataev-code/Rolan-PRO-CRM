@@ -29290,7 +29290,9 @@ function projectCardDeleteService(oid, sid) {
   const o = getOrder(oid);
   if (!o || !orderUserCanSeeMoney(o, currentUser())) return;
   if ((o.extraServices || []).some(line => line.id === sid && line.includedBy)) return;
+  const removed = (o.extraServices || []).filter(line => line.id === sid);
   if (!projectKeepsDoneServices(o, () => { o.extraServices = (o.extraServices || []).filter(line => line.id !== sid); })) return;
+  projectForgetRemovedLines(o, removed);
   // Its package leaves with it; then the plans of services that are gone, and
   // the project crew and date follow what remains.
   syncProjectIncludedServices(o);
@@ -29315,7 +29317,9 @@ function projectPrunePlans(o) {
 function projectDirectionsInUse(o) {
   const main = orderMeasureScope(o);
   return new Set([
-    ...[o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => offeringServiceType(serviceOffering(id))),
+    // A per-sq-ft service holds its direction while it waits for sizes; a quantity
+    // or work service holds it only through its row below.
+    ...[o.offeringId, ...(o.offeringIds || [])].filter(Boolean).map(id => serviceOffering(id)).filter(offering => offering && serviceOfferingNeedsSizes(offering)).map(offeringServiceType),
     // Removal of old film is a general work, it holds no direction.
     ...(o.extraServices || []).filter(line => !line.autoWindowRemoval).map(line => line.serviceType || offeringServiceType(serviceOffering(line.offeringId)) || main),
     ...measureAllWindows(o).map(({ win }) => win.measureScope || main),
@@ -29356,7 +29360,20 @@ function projectForgetOffering(o, offeringId) {
   if (o.offeringId === offeringId) { o.offeringId = ''; o.offeringName = ''; }
   if (o.offeringCatalogIds) delete o.offeringCatalogIds[offeringId];
   if (o.orderBuilder?.offeringCatalogIds) delete o.orderBuilder.offeringCatalogIds[offeringId];
+  // The intake copy is a fallback for new windows: a removed service must not come back through it.
+  if (o.orderBuilder?.offeringId === offeringId) o.orderBuilder.offeringId = '';
+  if (Array.isArray(o.orderBuilder?.offeringIds)) o.orderBuilder.offeringIds = o.orderBuilder.offeringIds.filter(id => id !== offeringId);
   projectReleaseDirection(o, offeringServiceType(serviceOffering(offeringId)));
+}
+/** After rows of quantity / work services were deleted: a service with no row left leaves the project, a direction with nothing left too. */
+function projectForgetRemovedLines(o, removed) {
+  (removed || []).forEach(line => {
+    if (!line || line.includedBy) return;
+    const offering = serviceOffering(line.offeringId);
+    const rowLeft = !!line.offeringId && (o.extraServices || []).some(item => item.offeringId === line.offeringId && !item.includedBy);
+    if (offering && !serviceOfferingNeedsSizes(offering) && !rowLeft) projectForgetOffering(o, offering.id);
+    else projectReleaseDirection(o, line.serviceType || offeringServiceType(offering));
+  });
 }
 function projectCardRemovePending(oid, offeringId) {
   const o = getOrder(oid);
