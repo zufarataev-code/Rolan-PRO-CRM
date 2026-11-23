@@ -126,3 +126,20 @@ test("row deletion in the card and in the editor runs the same clean-up", () => 
   assert.match(html, /const removed = \(o\.extraServices \|\| \[\]\)\.filter\(line => line\.id === sid\);[\s\S]{0,260}projectForgetRemovedLines\(o, removed\);/);
   assert.match(cabinet, /const removed = \(o\.extraServices \|\| \[\]\)\.filter\(item => ids\.has\(item\.id\)\);[\s\S]{0,160}projectForgetRemovedLines\(o, removed\);/);
 });
+
+test("a work line without a direction of its own does not hold the main one (Zakaz #908)", () => {
+  const { projectReleaseDirection, projectDirectionHolders } = sandbox();
+  const o: any = project({ extraServices: [{ name: "Монтаж" }] });
+  assert.deepEqual([...projectDirectionHolders(o, "privacy_film")], []);
+  assert.equal(projectReleaseDirection(o, "privacy_film"), true);
+  assert.equal(o.serviceType, "decorative_film");
+});
+
+test("the refusal names what still holds the direction", () => {
+  const { projectDirectionHolders } = sandbox();
+  const o: any = project({ measurements: { rooms: [{ name: "Living room", windows: [{ measureScope: "privacy_film" }] }] }, extraServices: [{ name: "Плёнка", serviceType: "privacy_film" }] });
+  const holders = [...projectDirectionHolders(o, "privacy_film")];
+  assert.ok(holders.some(text => text.includes("Living room")));
+  assert.ok(holders.some(text => text.includes("«Плёнка»")));
+  assert.deepEqual([...projectDirectionHolders(project({ status: "completed" }), "privacy_film")], ["это главная услуга закрытого проекта"]);
+});
