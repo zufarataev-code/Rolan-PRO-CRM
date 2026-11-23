@@ -843,9 +843,17 @@ async function cloudPersist(options = {}) {
   }
 }
 
+/**
+ * Scope approvals are about changes after the client accepted the proposal. Before
+ * that every service counts: the estimate and the proposal are being built
+ * (Owner, 2026-11-23, Zakaz #908: the card showed $2 079, the estimate «сумма равна нулю»).
+ */
+function projectScopeApprovalsGateMoney(o) {
+  return Array.isArray(o?.serviceScopeApprovals) && projectCardInProduction(o);
+}
 function orderRevenue(o) {
   o=projectIncludedDirectionOrder(o);
-  if (Array.isArray(o.serviceScopeApprovals)) {
+  if (projectScopeApprovalsGateMoney(o)) {
     const approved = new Set(projectServiceGroups(o).filter(g=>projectScopeApproved(o,g.id)).map(g=>g.id));
     const filtered = {...o,measurements:{...o.measurements,rooms:(o.measurements?.rooms||[]).map(r=>({...r,windows:(r.windows||[]).filter(w=>approved.has(w.offeringId?'offering:'+w.offeringId:'direction:'+(w.measureScope||o.serviceType||'solar_film')))}))},extraServices:(o.extraServices||[]).filter(l=>approved.has('line:'+l.id))};
     return orderFilmRevenue(filtered)+orderExtraServicesRevenue(filtered);
@@ -3392,7 +3400,7 @@ function projectTotalAdjustableLines(o) {
   // The same set orderRevenue() counts: quick-entry rows only while the project has no measured
   // windows, and — once scope approvals exist — only the approved services.
   const quickCounts = !measureAllWindows(o).length;
-  const approved = line => !Array.isArray(o.serviceScopeApprovals) || projectScopeApproved(o, line.key);
+  const approved = line => !projectScopeApprovalsGateMoney(o) || projectScopeApproved(o, line.key);
   return projectLines(o).filter(line => !line.excluded && approved(line) && (['windows', 'quantity', 'work'].includes(line.kind) || (line.kind === 'quick' && quickCounts)) && Number(line.price) > 0);
 }
 function projectTotalIsManual(o) {
@@ -3504,6 +3512,14 @@ function projectResetTotal(oid) {
   projectEstimateMarkChanged(o, `Ручной итог снят, цены возвращены: ${fmtMoney(orderRevenue(o))}`);
   save();
   return true;
+}
+function projectEstimateSetTotal(oid, value) {
+  projectSetTotal(oid, value);
+  refreshProjectEstimateWorkspace(oid);
+}
+function projectEstimateResetTotal(oid) {
+  projectResetTotal(oid);
+  refreshProjectEstimateWorkspace(oid);
 }
 function projectCardSetTotal(oid, value) {
   projectSetTotal(oid, value);
