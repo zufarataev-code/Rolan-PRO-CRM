@@ -23,7 +23,7 @@ test("stored media is exposed without Twilio URLs: inbound via the proxy index, 
   assert.deepEqual(list, [{ index: 0, contentType: "image/png" }, { index: 1, contentType: "application/pdf", key: "whatsapp/2026/a.pdf" }]);
   const service = readFileSync("src/features/twilio/service.ts", "utf8");
   assert.match(service, /\/api\/v1\/integrations\/twilio\/media\?sid=/);
-  assert.match(service, /form\.append\("MediaUrl", presignUrl\(/);
+  assert.match(service, /form\.append\("MediaUrl", spaces\s*\? presignUrl\(/);
   const route = readFileSync("app/api/v1/integrations/twilio/media/route.ts", "utf8");
   assert.match(route, /requireRequestSession/);
   assert.match(route, /fetchTwilioMessageMedia\(sid, index\)/);

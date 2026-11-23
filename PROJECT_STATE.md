@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-23 — Файлы CRM на диске сервера: WhatsApp-вложения и фото работают без платного хранилища (Claude)
+
+- Owner, 2026-11-23 07:33: «по WhatsApp также не могу отправлять файлы, я писал об этом».
+- Причина (проверено в его браузере): `/api/v1/files/upload-url` → 503 `storage_not_configured` — на сервере нет ключей DigitalOcean Spaces, файл не доходит до Twilio. В журнале нет ни одного исходящего WhatsApp с вложением. Новых платных сервисов владелец не хочет.
+- Branch `claude/local-file-storage`, based on `origin/main`.
+- `src/lib/storage/local.ts`: без Spaces файлы пишутся на диск сервера (`LOCAL_MEDIA_DIR` или `~/rolanpro-crm-media`, вне папок релизов), до 200 МБ на файл; ссылки подписаны HMAC от `AUTH_SECRET`, PUT 15 мин / GET 1 ч, ключ не выходит из папки.
+- `app/api/public/files` (PUT/GET по подписи), `upload-url` и `files/view` переключаются на диск, `sendWhatsApp` отдаёт Twilio абсолютную подписанную ссылку (`TWILIO_WEBHOOK_BASE_URL`/`APP_URL`). Пульт владельца: «Файлы хранятся на диске сервера». Если ключи Spaces появятся — всё снова идёт в Spaces.
+- Отдельно: ручные WhatsApp 22.11 «привет» — Twilio 63016 (вне 24-часового окна клиента нужен утверждённый шаблон).
+- Тесты: `src/lib/storage/local.test.ts`; `whatsapp-files.test.ts` под новую строку.
 ## 2026-11-23 — Зарплата: стрелки ◀ ▶ по периодам (Claude)
 
 - Owner, 2026-11-23 07:22: «когда выбираем период в разделе зарплаты — день, неделя, месяц — нужна стрелка вперёд и назад, чтобы перемещала неделю назад либо вперёд».

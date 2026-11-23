@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { prisma } from "@/lib/db";
 import { getSpacesConfig, isValidStorageKey, presignUrl } from "@/lib/storage/spaces";
+import { localSignedUrl } from "@/lib/storage/local";
 
 type JsonObject = Record<string, unknown>;
 
@@ -176,7 +177,8 @@ export async function sendWhatsApp(input: {
   if (!/^\+\d{8,15}$/.test(to)) throw new Error("Client WhatsApp number must be in international format.");
   if ((!body && !media.length) || body.length > 1600) throw new Error("WhatsApp text must contain 1–1600 characters.");
   const spaces = media.length ? getSpacesConfig() : null;
-  if (media.length && !spaces) throw new Error("File storage is not configured on the CRM server.");
+  // Files on the CRM server's disk: Twilio fetches them by an absolute signed link.
+  if (media.length && !spaces && !config.publicBaseUrl) throw new Error("APP_URL is not set on the CRM server, so WhatsApp cannot fetch the file.");
 
   const callbackUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/api/webhooks/twilio/status` : undefined;
   const form = new URLSearchParams({
@@ -185,7 +187,9 @@ export async function sendWhatsApp(input: {
   });
   if (body) form.set("Body", body);
   // Twilio downloads each file once from a short-lived signed link to our storage.
-  if (spaces) media.forEach((item) => form.append("MediaUrl", presignUrl({ config: spaces, method: "GET", key: item.key, expiresSeconds: 3600 })));
+  media.forEach((item) => form.append("MediaUrl", spaces
+    ? presignUrl({ config: spaces, method: "GET", key: item.key, expiresSeconds: 3600 })
+    : localSignedUrl({ method: "GET", key: item.key, expiresSeconds: 3600, baseUrl: config.publicBaseUrl })));
   if (callbackUrl) form.set("StatusCallback", callbackUrl);
   const message = await twilioRequest(
     `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`,
