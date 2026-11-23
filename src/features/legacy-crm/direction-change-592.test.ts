@@ -67,7 +67,7 @@ function sandbox(user: any = { id: 'owner', role: 'owner' }) {
     ...['orderMeasureScope', 'measureAllWindows', 'primaryServiceInfo', 'canonicalServiceDirection', 'serviceOfferingDirection',
       'projectPlural', 'projectWindowsWord', 'windowActualAreaSqft', 'windowCatalog', 'windowRetailPrice', 'windowFilmCost',
       'windowServiceInstallerRate', 'serviceOfferingInstallerRate', 'orderFilmRevenue', 'orderExtraServicesRevenue', 'orderRevenue'].map(name => fn(html, name)),
-    ...['projectServiceScope', 'projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectDirectionSkipNote', 'projectIsWizImport', 'projectMainDirectionKeys',
+    ...['projectServiceScope', 'projectDirectionCanMove', 'projectDirectionMoveWindows', 'projectDirectionMoveApply', 'projectDirectionSkipNote', 'projectDirectionKeptNote', 'projectIsWizImport', 'projectMainDirectionKeys',
       'wizImportOrders', 'wizDirectionBulkMove'].map(name => fn(stages, name)),
   ].join('\n');
   vm.runInContext(code.replace(/^const (\w+) = /gm, 'var $1 = '), ctx);
@@ -527,4 +527,34 @@ test('direct costs of the moved work follow it to the new direction', () => {
   assert.equal(o.extraExpenses[2].serviceId, 'line:le', 'a cost on a line keeps its line');
   assert.equal(o.extraExpenses[3].direction, undefined, 'a cost on the whole project stays there');
   assert.deepEqual(o.extraExpenses.map((e: any) => e.amount), [120, 80, 50, 30]);
+});
+
+test('a manual move that leaves a paid directory service behind keeps the project unchecked', () => {
+  const ctx = sandbox();
+  const o: any = wizProject('k', {
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'wk', measureScope: 'solar_film', offeringId: 'solar_install', catalogId: 'solar1', width: 1000, height: 1000, qty: 1 }] }] },
+    extraServices: [],
+  });
+  const result = ctx.projectDirectionMoveApply(o, 'solar_film', 'privacy_film', 'owner');
+  assert.equal(result.kept, 1);
+  assert.equal(o._directionCheckedAt, undefined, 'the check-direction notice stays');
+  assert.match(ctx.projectDirectionKeptNote(result), /осталась оплаченная услуга справочника \(1\)/);
+  assert.match(fn(stages, 'projectDirectionMove'), /result\?\.kept/);
+});
+
+test('the server follows a secondary direction that is only a row', () => {
+  const before = (): any => ({
+    id: 'rows', status: 'completed', serviceType: 'solar_film',
+    measurements: { rooms: [{ id: 'r', windows: [{ id: 'w', width: 2000, height: 2000, qty: 1 }] }] },
+    extraServices: [{ id: 'd', type: 'custom', serviceType: 'decorative_film', qty: 1, price: 900 }],
+  });
+  const approved = before();
+  assert.equal(prepareServiceScopeApprovals({ orders: [before()] }, { orders: [approved] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(approved, 'line:d'), true);
+  const next = structuredClone(approved);
+  next.extraServices[0].serviceType = 'privacy_film';
+  assert.deepEqual([...projectDirectionMoves(approved, next)], [['decorative_film', 'privacy_film']]);
+  assert.equal(prepareServiceScopeApprovals({ orders: [approved] }, { orders: [next] }, true, [], 'owner'), null);
+  assert.equal(serviceScopeApproved(next, 'line:d'), true, 'the paid row stays approved');
+  assert.equal(serviceScopeApproved(next, 'direction:solar_film'), true, 'the main direction is untouched');
 });

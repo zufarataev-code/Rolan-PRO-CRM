@@ -236,6 +236,14 @@ export function projectDirectionMoves(before: Row, order: Row): Map<string, stri
     const from = windowDirectionKey(before, old), to = windowDirectionKey(order, win);
     if (from && to && from !== to) moves.set(from, to);
   }
+  // A secondary direction may be only rows (a custom or quick line) without windows.
+  const linesBefore = new Map(rows(before.extraServices).map(line => [String(line.id), line]));
+  for (const line of rows(order.extraServices)) {
+    const old = linesBefore.get(String(line.id));
+    if (!old) continue;
+    const from = String(old.serviceType || before.serviceType || 'solar_film'), to = String(line.serviceType || order.serviceType || 'solar_film');
+    if (from !== to && !moves.has(from)) moves.set(from, to);
+  }
   const fromType = String(before.serviceType || 'solar_film'), toType = String(order.serviceType || 'solar_film');
   if (fromType !== toType && !moves.has(fromType)) moves.set(fromType, toType);
   // Two directions merged into one are not a rename: their crews and progress

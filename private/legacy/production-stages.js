@@ -5112,7 +5112,8 @@ function projectDirectionMoveApply(o, fromKey, toKey, by = state.currentUserId, 
     if (typeof projectCardSyncCrew === 'function') projectCardSyncCrew(o);
     projectEstimateMarkChanged(o, `Направление «${fromTitle}» перенесено в «${to.title}»`);
   }
-  o._directionCheckedAt = new Date().toISOString();
+  // A paid directory service of the old direction stays: the project is not checked yet.
+  if (kept) delete o._directionCheckedAt; else o._directionCheckedAt = new Date().toISOString();
   o.timeline = o.timeline || [];
   const parts = [
     windowsMoved ? `${windowsMoved} ${projectWindowsWord(windowsMoved)} с размерами` : '',
@@ -5128,6 +5129,10 @@ function projectDirectionSkipNote(result) {
   return result.skipped === 'has_stages'
     ? `Направление «${result.fromTitle}» не сменилось: у этой работы есть этапы с начислениями, а закрытый проект сохраняет их как есть.`
     : `Направление «${result.fromTitle}» не сменилось: в проекте уже есть «${result.toTitle}», а выполненную работу двух направлений нельзя слить без изменения выплат.`;
+}
+/** A closed project keeps a paid directory service of the old direction where it is. */
+function projectDirectionKeptNote(result) {
+  return `В «${result.fromTitle}» ${projectPlural(result.kept, 'осталась оплаченная услуга', 'остались оплаченные услуги', 'осталось оплаченных услуг')} справочника (${result.kept}): её переносят вручную, а проект остаётся в списке непроверенных.`;
 }
 function projectDirectionMove(oid, fromKey, toKey) {
   const o = getOrder(oid);
@@ -5149,6 +5154,10 @@ function projectDirectionMove(oid, fromKey, toKey) {
     if (!result?.skipped) save();
   });
   if (result?.skipped) { alert(projectDirectionSkipNote(result)); return; }
+  if (result?.kept) {
+    alert(`${projectDirectionKeptNote(result)}${result.windows || result.lines ? '' : ' Ничего не перенесено.'}`);
+    if (!result.windows && !result.lines) return;
+  }
   state._directionWindow = { oid, key: toKey, step: 'services', pick: '' };
   openProjectDirectionWindow(oid, toKey, 'services');
 }
