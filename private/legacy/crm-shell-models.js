@@ -230,6 +230,54 @@ function crmShellCalendar(user, from, to) {
   return { user: crmShellUser(user), from: key(start), to: key(end), today: key(new Date()), events };
 }
 
+/** Clients: the working «Клиенты» section's own list, read as data (renderClients). */
+function crmShellClients(user) {
+  const clients = visibleClientsForUser(user);
+  const orders = visibleOrdersForUser(user);
+  const time = value => { const at = value ? new Date(value).getTime() : NaN; return Number.isFinite(at) ? at : 0; };
+  const text = value => String(value || '').trim();
+  const rows = clients.map(c => {
+    const own = orders.filter(o => o.clientId === c.id);
+    let money = [];
+    try { money = financialOrders(own); } catch (error) { money = own; }
+    const b2b = clientAccountType(c) === 'b2b';
+    const relationship = clientRelationshipType(c);
+    const book = clientAddressBook(c);
+    const primary = clientAddressById(c, c.primaryAddressId);
+    const referrer = c.referredBy ? getClient(c.referredBy) : null;
+    const recent = [...own].sort((a, b) => time(b.createdAt) - time(a.createdAt));
+    return {
+      id: c.id,
+      name: text(clientDisplayName(c) || c.name) || 'Клиент',
+      companyType: b2b ? text(clientCompanyTypeLabel(c.companyType)) : '',
+      representative: text(clientRepresentativeLine(c)),
+      phone: text(c.phone),
+      phoneVerified: !!c.phoneVerified,
+      email: text(c.email),
+      address: text((primary && primary.address) || c.address),
+      b2b,
+      regular: relationship === 'regular',
+      relationship: relationshipLabel(relationship),
+      source: text(sourceDisplayLabel(c.source)),
+      referredBy: referrer ? text(clientDisplayName(referrer) || referrer.name) : '',
+      projects: own.length,
+      addresses: book.length,
+      revenue: money.reduce((sum, o) => sum + (Number(orderRevenue(o)) || 0), 0),
+      debt: money.reduce((sum, o) => sum + (Number(orderDebt(o)) || 0), 0),
+      portal: !!clientPortalAccess(c),
+      lastAt: recent[0] ? (recent[0].createdAt || '') : '',
+      recent: recent.slice(0, 3).map(o => ({ id: o.id, number: o.number || '', status: statusLabel(o.status) })),
+      search: [clientDisplayName(c), c.name, c.companyName, clientPersonName(c), c.contactTitle, c.phone, c.email, c.address,
+        ...book.map(a => `${a.label || ''} ${a.address || ''} ${a.unit || ''}`)].map(text).join(' ').toLowerCase(),
+    };
+  }).sort((a, b) => time(b.lastAt) - time(a.lastAt) || a.name.localeCompare(b.name, 'ru'));
+  return {
+    user: crmShellUser(user),
+    counts: { all: rows.length, b2c: rows.filter(row => !row.b2b).length, b2b: rows.filter(row => row.b2b).length, regular: rows.filter(row => row.regular).length },
+    clients: rows,
+  };
+}
+
 /** Entry point of the server calculation: one workspace in, one JSON model out. */
 function crmShellRun(input) {
   const { payload, viewer, request, consultations } = JSON.parse(input);
@@ -249,5 +297,6 @@ function crmShellRun(input) {
   if (request.model === 'project') return JSON.stringify(crmShellProject(user, String(request.projectId || '')));
   if (request.model === 'leadLinks') return JSON.stringify(crmShellLeadLinks(user));
   if (request.model === 'calendar') return JSON.stringify(crmShellCalendar(user, request.from, request.to));
+  if (request.model === 'clients') return JSON.stringify(crmShellClients(user));
   return JSON.stringify({ error: 'unknown_model' });
 }
