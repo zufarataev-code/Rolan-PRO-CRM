@@ -175,7 +175,7 @@ const CHECKS: Record<string, () => Promise<CheckResult>> = {
   },
   async files() {
     const config = getSpacesConfig();
-    if (!config) return { status: "down", detail: "Хранилище rolanpro-media создано, но ключи доступа ещё не вписаны на сервер — фото пока идут по-старому (до 2 МБ)" };
+    if (!config) return { status: "ok", detail: "Файлы хранятся на диске сервера CRM (до 200 МБ на файл)" };
     // A missing object answers 404 when the keys are valid, 403 when they are not.
     const probe = presignUrl({ config, method: "HEAD", key: "crm/health/0000-00/probe", expiresSeconds: 60 });
     const response = await fetch(probe, { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(5000) });
