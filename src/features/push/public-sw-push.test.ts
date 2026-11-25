@@ -89,3 +89,16 @@ test("the push client asks for permission before any network wait", () => {
   assert.ok(enable.indexOf("Notification.requestPermission()") < enable.indexOf("loadConfig()"));
   assert.match(pushClient, /userVisibleOnly: true/);
 });
+
+test("the push client's check reports success only when a push actually went out", async () => {
+  async function check(status: number, body: unknown) {
+    const window: Record<string, unknown> = {};
+    const fetch = async () => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+    vm.runInNewContext(pushClient, { window, navigator: {}, fetch, Promise });
+    return (window.RolanPush as { test: () => Promise<boolean> }).test();
+  }
+  assert.equal(await check(200, { data: { sent: 1, devices: 1 } }), true);
+  assert.equal(await check(200, { data: { sent: 0, devices: 2 } }), false);
+  assert.equal(await check(502, { error: { code: "push_failed" } }), false);
+  assert.equal(await check(404, { error: { code: "no_devices" } }), false);
+});

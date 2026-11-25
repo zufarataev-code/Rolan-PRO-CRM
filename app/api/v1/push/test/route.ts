@@ -21,5 +21,8 @@ export async function POST(request: NextRequest) {
 
   const results = await sendToUser(userId, { title: "RolanPRO", body: "Уведомления работают на этом устройстве.", url: "/legacy-crm", tag: `test:${now}` }, keys);
   if (!results.length) return apiError(404, "no_devices", "Push notifications are not turned on for any device yet.");
-  return apiSuccess({ sent: results.filter((result) => result.ok).length, devices: results.length });
+  const sent = results.filter((result) => result.ok).length;
+  // Nothing got through (every service refused or timed out): not a success.
+  if (!sent) return apiError(502, "push_failed", "The push service did not accept the test notification.");
+  return apiSuccess({ sent, devices: results.length });
 }

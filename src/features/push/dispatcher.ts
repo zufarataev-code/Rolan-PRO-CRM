@@ -68,24 +68,57 @@ export async function queuePushEvents(events: PushEvent[]) {
   return result.count;
 }
 
+/** Rows are read in pages so a busy quarter hour is never cut short. */
+const PAGE_SIZE = 200;
+/** A runaway (a bulk import) stops here; skipDuplicates keeps later cycles safe. */
+const MAX_PAGES = 25;
+
+type Page<T> = (cursor: string | null) => Promise<T[]>;
+
+export async function readAllPages<T>(page: Page<T>, idOf: (row: T) => string, pageSize = PAGE_SIZE, maxPages = MAX_PAGES) {
+  const out: T[] = [];
+  let cursor: string | null = null;
+  for (let index = 0; index < maxPages; index += 1) {
+    const rows = await page(cursor);
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+    cursor = idOf(rows[rows.length - 1]);
+  }
+  return out;
+}
+
 /** New leads and the new CRM's notifications of the pushed kinds since the last look. */
 async function queuePostgresSources(now: Date) {
   const since = new Date(now.getTime() - SCAN_WINDOW_MS);
   const [notifications, leads, owners] = await Promise.all([
-    prisma.notification.findMany({
-      where: { created_at: { gte: since }, type_key: { in: PG_PUSH_TYPES } },
-      select: { notification_id: true, recipient_user_id: true, actor_user_id: true, type_key: true, title: true, message: true, entity_type: true },
-      take: 200,
-    }),
-    prisma.lead.findMany({
-      where: { created_at: { gte: since } },
-      select: { lead_id: true, name: true, source: true, assigned_manager_id: true },
-      take: 100,
-    }),
+    readAllPages(
+      (cursor) =>
+        prisma.notification.findMany({
+          where: { created_at: { gte: since }, type_key: { in: PG_PUSH_TYPES } },
+          select: { notification_id: true, recipient_user_id: true, actor_user_id: true, type_key: true, title: true, message: true, entity_type: true },
+          orderBy: { notification_id: "asc" },
+          take: PAGE_SIZE,
+          ...(cursor ? { cursor: { notification_id: cursor }, skip: 1 } : {}),
+        }),
+      (row) => row.notification_id,
+    ),
+    readAllPages(
+      (cursor) =>
+        prisma.lead.findMany({
+          where: { created_at: { gte: since } },
+          select: { lead_id: true, name: true, source: true, assigned_manager_id: true },
+          orderBy: { lead_id: "asc" },
+          take: PAGE_SIZE,
+          ...(cursor ? { cursor: { lead_id: cursor }, skip: 1 } : {}),
+        }),
+      (row) => row.lead_id,
+    ),
     activeUsersWithRole("OWNER"),
   ]);
   const managers = leads.some((lead) => !lead.assigned_manager_id) ? await activeUsersWithRole("MANAGER") : [];
-  await queuePushEvents([...pgNotificationEvents(notifications, owners), ...newLeadEvents(leads, owners, managers)]);
+  const events = [...pgNotificationEvents(notifications, owners), ...newLeadEvents(leads, owners, managers)];
+  // createMany has its own limits: queue in slices.
+  for (let index = 0; index < events.length; index += PAGE_SIZE) await queuePushEvents(events.slice(index, index + PAGE_SIZE));
 }
 
 export type DeliveryOutcome = { status: "sent" | "queued" | "failed" | "no_device"; error?: string };

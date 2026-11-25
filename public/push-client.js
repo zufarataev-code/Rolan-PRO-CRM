@@ -113,7 +113,10 @@
 
   function test() {
     return fetch("/api/v1/push/test", { method: "POST", credentials: "same-origin" }).then(function (response) {
-      return response.ok;
+      if (!response.ok) return false;
+      return response.json().then(function (json) {
+        return Boolean(json && json.data && json.data.sent > 0);
+      });
     }).catch(function () { return false; });
   }
 

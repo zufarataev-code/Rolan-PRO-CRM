@@ -193,6 +193,9 @@ export function legacyPushEvents(before: unknown, after: unknown, map: LegacyPeo
 
 /* ---------- new CRM (PostgreSQL) ---------- */
 
+/** Title of the installer's own row in core/events.ts onInstallationAssigned. */
+export const INSTALLER_JOB_TITLE = "Назначена работа";
+
 export type PgNotificationRow = {
   notification_id: string;
   recipient_user_id: string;
@@ -210,8 +213,14 @@ export type PgLeadRow = {
   assigned_manager_id: string | null;
 };
 
-const PG_TYPE_KINDS: Record<string, { kind: PushKind; withOwners: boolean; title: string }> = {
-  "installation.assigned": { kind: "assigned_install", withOwners: false, title: "Вам назначен монтаж" },
+/**
+ * `onlyTitles`: the same type also goes to people it does not assign. An
+ * installation, for example, also tells the project's manager it is
+ * scheduled ("Installation assigned"); only the installers' rows
+ * ("Назначена работа") are "you have a job" pushes.
+ */
+const PG_TYPE_KINDS: Record<string, { kind: PushKind; withOwners: boolean; title: string; onlyTitles?: readonly string[] }> = {
+  "installation.assigned": { kind: "assigned_install", withOwners: false, title: "Вам назначен монтаж", onlyTitles: [INSTALLER_JOB_TITLE] },
   "installation.phase_assigned": { kind: "assigned_install", withOwners: false, title: "Вам назначен этап монтажа" },
   "project.manual_assigned": { kind: "assigned_install", withOwners: false, title: "Вам назначен проект" },
   "consultation.assigned": { kind: "assigned_measure", withOwners: false, title: "Вам назначен замер" },
@@ -227,6 +236,7 @@ export function pgNotificationEvents(rows: PgNotificationRow[], ownerUserIds: st
   for (const row of rows) {
     const rule = PG_TYPE_KINDS[row.type_key];
     if (!rule) continue;
+    if (rule.onlyTitles && !rule.onlyTitles.includes(row.title)) continue;
     const recipients = new Set([row.recipient_user_id, ...(rule.withOwners ? ownerUserIds : [])]);
     if (row.actor_user_id) recipients.delete(row.actor_user_id);
     events.push({

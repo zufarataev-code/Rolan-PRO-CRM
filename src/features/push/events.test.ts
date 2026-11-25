@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { deliveryOutcome } from "./dispatcher";
-import { legacyPushEvents, MAX_EVENTS_PER_SAVE, newLeadEvents, pgNotificationEvents, stripMoney, textForRecipient, type LegacyPeople } from "./events";
+import { deliveryOutcome, readAllPages } from "./dispatcher";
+import { INSTALLER_JOB_TITLE, legacyPushEvents, MAX_EVENTS_PER_SAVE, newLeadEvents, pgNotificationEvents, stripMoney, textForRecipient, type LegacyPeople } from "./events";
 
 const NOW = Date.UTC(2026, 10, 25, 18);
 const TOMORROW = new Date(NOW + 24 * 3600 * 1000).toISOString();
@@ -106,7 +107,8 @@ test("broken payloads never throw", () => {
 
 test("new CRM notifications of the pushed kinds become pushes", () => {
   const rows = [
-    { notification_id: "n1", recipient_user_id: "U-INST1", actor_user_id: "U-MGR", type_key: "installation.assigned", title: "Назначен монтаж", message: "Проект R-1", entity_type: "project" },
+    { notification_id: "n1", recipient_user_id: "U-INST1", actor_user_id: "U-MGR", type_key: "installation.assigned", title: INSTALLER_JOB_TITLE, message: "Проект R-1", entity_type: "project" },
+    { notification_id: "n5", recipient_user_id: "U-MGR", actor_user_id: "U-OWNER", type_key: "installation.assigned", title: "Installation assigned", message: "Schedule, crew и installers назначены.", entity_type: "project" },
     { notification_id: "n2", recipient_user_id: "U-MGR", actor_user_id: null, type_key: "agreement.signed", title: "Договор подписан", message: "R-2", entity_type: "proposal" },
     { notification_id: "n3", recipient_user_id: "U-MGR", actor_user_id: "U-MGR", type_key: "survey.completed", title: "x", message: "y", entity_type: null },
     { notification_id: "n4", recipient_user_id: "U-MGR", actor_user_id: null, type_key: "task.overdue", title: "x", message: "y", entity_type: null },
@@ -116,6 +118,28 @@ test("new CRM notifications of the pushed kinds become pushes", () => {
     ["pg:notification:n1", "assigned_install", ["U-INST1"]],
     ["pg:notification:n2", "proposal_accepted", ["U-MGR", "U-OWNER"]],
   ]);
+});
+
+test("the manager's schedule confirmation is not pushed as a job; the installer's row still is", () => {
+  // Guards against the titles drifting apart from core/events.ts.
+  const source = readFileSync("src/features/core/events.ts", "utf8");
+  const block = source.slice(source.indexOf("export async function onInstallationAssigned"), source.indexOf("export async function onJobStarted"));
+  assert.ok(block.includes(`title: "${INSTALLER_JOB_TITLE}"`));
+  assert.ok(block.includes('title: "Installation assigned"'));
+});
+
+test("the scan reads every page, not just the first", async () => {
+  const all = Array.from({ length: 450 }, (_, index) => ({ id: String(index).padStart(4, "0") }));
+  const cursors: Array<string | null> = [];
+  const rows = await readAllPages(async (cursor) => {
+    cursors.push(cursor);
+    const start = cursor ? all.findIndex((row) => row.id === cursor) + 1 : 0;
+    return all.slice(start, start + 200);
+  }, (row) => row.id, 200);
+  assert.equal(rows.length, 450);
+  assert.deepEqual(cursors, [null, "0199", "0399"]);
+  const capped = await readAllPages(async () => all.slice(0, 200), (row) => row.id, 200, 3);
+  assert.equal(capped.length, 600);
 });
 
 test("a new lead goes to the owners and its manager, or every manager when unassigned", () => {
