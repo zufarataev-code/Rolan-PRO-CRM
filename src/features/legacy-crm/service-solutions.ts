@@ -354,7 +354,11 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   return copy;
 }
 
-export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = []): string | null {
+/**
+ * fieldIds: the legacy ids of a measurer or installer whose save was already merged
+ * field by field (mergeFieldWorkspace); empty for the owner and managers.
+ */
+export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = [], fieldIds: readonly string[] = []): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
@@ -907,6 +911,16 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     }
     if (!owner && historicalImportExisting
       && stableJson(historicalProjectFacts(order)) !== stableJson(historicalProjectFacts(oldOrder))) {
+      // The project's own measurer or installer keeps working on it (Owner, 2026-11-25:
+      // the measurer could not save R-261122-166). Their save only carries the field
+      // changes mergeFieldWorkspace allows on their own project; a completed import
+      // stays the owner's to correct.
+      const ownCrew = fieldIds.includes(String(oldOrder.measurerId))
+        || rows(oldOrder.installerIds).some(id => fieldIds.includes(String(id)));
+      if (ownCrew) {
+        if (oldOrder.quickProjectImportedCompleted === true) return 'Завершённый исторический проект может исправлять только владелец.';
+        continue;
+      }
       if (!managerIds.includes(String(oldOrder.managerId))) {
         return 'Исторический проект может менять только назначенный менеджер.';
       }

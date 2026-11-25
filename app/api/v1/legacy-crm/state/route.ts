@@ -197,6 +197,7 @@ export async function PUT(request: NextRequest) {
     nextPayload as Record<string, unknown>,
     auth.session.roles.includes(ROLE_CODES.OWNER),
     auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],
+    isPrivileged ? [] : auth.session.user.legacy_user_ids,
   );
   if (solutionError) return apiError(400, "invalid_service_solution", solutionError);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
