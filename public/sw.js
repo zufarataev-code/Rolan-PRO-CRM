@@ -1,11 +1,24 @@
-const STATIC_CACHE = "rolanpro-static-v1";
+// The one service worker of the Rolan PRO CRM, scope "/". It is registered
+// from public/pwa-install.js on every staff screen. Push notification handlers
+// belong in this file too: a second worker at the same scope would replace
+// this one.
+const STATIC_CACHE = "rolanpro-static-v2";
 const STATIC_ASSETS = [
   "/landing/rolan-logo.webp",
   "/rolanpro-app-icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)));
+  // A missing picture must never stop the worker from installing: without an
+  // active worker a phone cannot get push notifications.
+  event.waitUntil(
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => Promise.all(STATIC_ASSETS.map((asset) => cache.add(asset).catch(() => null)))),
+  );
   self.skipWaiting();
 });
 

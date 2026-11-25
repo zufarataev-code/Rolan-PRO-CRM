@@ -5,7 +5,7 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 ## 2026-11-25 — Пуш-уведомления на телефон, бесплатно (Claude)
 
 - Owner, 2026-11-23: «Как в СРМ сделать пуш уведомления?», «Да, заводи» (#602). 2026-11-25, Codex так и не сделал: «Сразу, сразу … выкладывай».
-- Branch `claude/project-thread-mw1zkw`, based on `origin/main` `742d3db`. Closes #602.
+- Branch `claude/project-thread-mw1zkw`, based on `origin/main` `742d3db`, then merged main after #615 (`bdd910d`). Closes #602.
 - `src/features/push/`: `web-push.ts` (шифрование RFC 8291 + подпись VAPID на `node:crypto`, без пакетов; только адреса FCM/Apple/Mozilla/Windows), `events.ts` (кто и что получает, без сумм у монтажников/замерщиков), `dispatcher.ts` (очередь `push_deliveries`, цикл раз в 30 с из `instrumentation.ts`), `config.ts`.
 - Старая CRM: PUT `legacy-crm/state` после сохранения сравнивает заказы до/после (`pushAfterLegacySave`, не ждёт и не роняет сохранение). Новая CRM: цикл смотрит `notifications` и `leads` за 15 минут.
 - Миграция `20261125190000_web_push`: `push_subscriptions`, `push_deliveries`.
@@ -13,6 +13,21 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - На сервере ключей пока нет — пуши выключены, CRM работает как раньше. Включение: `docs/WEB_PUSH.md`, нужен отдельный «да» владельца.
 - Права замерщика/менеджера на заказы не трогал (блокировка в другом потоке).
 - Тесты: `src/features/push/*.test.ts`, `src/features/push/public-sw-push.test.ts`.
+
+## 2026-11-25 — CRM ставится на телефон как приложение: iPhone и Android (Claude)
+
+- Owner, 2026-11-25 19:08 (голосом): «Мы не можем установить приложение, как приложение на телефон»; 19:09 «Сразу выкладывай» — код пишет Claude.
+- Причины (по коду): на телефоне в рабочей CRM `/legacy-crm` кнопка «⬇ Установить» скрыта (`.topbar-actions > .btn-ghost` и вся панель у замерщика/монтажника); у страницы первым стоял встроенный `data:`-манифест, Chrome брал его, и установка не предлагалась; иконка iPhone была SVG (iOS кладёт вместо неё скриншот); разовое окно установки новой оболочки на `/legacy-crm` не работало вовсе (это отдельный HTML), а после «Не сейчас» больше не появлялось нигде.
+- Branch `claude/project-thread-mf7lnn`, based on `origin/main` `742d3db`.
+- `public/pwa-install.js` — один помощник на обе части CRM: регистрирует единственный `/sw.js`, держит запрос установки Chrome, на телефоне без установленной CRM показывает карточку «Rolan PRO на экран телефона» с шагами под телефон и браузер (Safari; Chrome на iPhone и ссылки из Telegram/WhatsApp — «Скопировать ссылку» и открыть в Safari/Chrome; Android — родной запрос Chrome или меню ⋮). «Не сейчас» скрывает на 3 дня. Не показывается клиентам (`/proposal`), внутри фреймов CRM, в установленном приложении и на компьютере.
+- `/legacy-crm`: один манифест `/manifest.webmanifest`, PNG `apple-touch-icon`, `installRolanProApp` открывает те же шаги. Новая оболочка: «Установить на телефон» в меню, на экране входа — «Установить CRM на телефон».
+- Манифест: `id`, иконка 512 для `any` и отдельно `maskable`. Корневой layout: статус-бар iPhone `default` (верхняя панель не уходит под часы), `apple-mobile-web-app-capable`.
+- Иконки `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` были обрезаны ещё с 7 сентября (PNG не открывались — Chrome не видел нужных иконок, iPhone не брал свою); заменены целыми PNG со знаком Rolan PRO из `landing/rolan-logo.webp` на белом фоне (знак внутри безопасной зоны maskable). Тест проверяет, что файлы целые.
+- `public/sw.js`: картинка, которой нет, больше не мешает воркеру установиться. Пуш-обработчики класть сюда же — второй воркер не заводить (согласовано с задачей пуш-уведомлений).
+- Тесты: `src/features/legacy-crm/pwa-install.test.ts` (поведение скрипта в vm под UA iPhone/Android/Telegram/компьютер). Проверено: `npm run typecheck`, `npm test` 1378/1378, `next build`, локальный `next start` — манифест, мета-теги и скрипт отдаются.
+- Next: после слияния проверить на сервере манифест/`/pwa-install.js`, затем установку на телефоне Зуфара.
+
+- Карточка установки не мешает работе: касание в любом другом месте страницы закрывает её до следующего визита; в автоматическом браузере тестов (navigator.webdriver) она не показывается — e2e-проверка #592 на 390px упиралась в карточку.
 
 ## 2026-11-23 — Файлы CRM на диске сервера: WhatsApp-вложения и фото работают без платного хранилища (Claude)
 

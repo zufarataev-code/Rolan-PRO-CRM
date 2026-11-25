@@ -57,6 +57,33 @@ function LogoutButton({ className }: { className?: string }) {
   );
 }
 
+/**
+ * «Установить на телефон» in the phone menu: the steps for this phone come from
+ * public/pwa-install.js. Hidden once the CRM already runs as an installed app.
+ */
+function InstallAppButton({ onOpen }: { onOpen: () => void }) {
+  const [installed, setInstalled] = useState(true);
+  useEffect(() => {
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setInstalled(Boolean(standalone));
+  }, []);
+  if (installed) return null;
+  return (
+    <Button
+      variant="outline"
+      className="w-full"
+      onClick={() => {
+        onOpen();
+        (window as Window & { RolanProInstall?: { open: () => void } }).RolanProInstall?.open();
+      }}
+    >
+      Установить на телефон
+    </Button>
+  );
+}
+
 function NavLink({ item, pathname, onNavigate }: { item: CrmNavItem; pathname: string; onNavigate?: () => void }) {
   const active = crmNavActive(pathname, item.href);
   const Icon = item.icon;
@@ -164,6 +191,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <NavGroups role={role} pathname={pathname} onNavigate={() => setMenuOpen(false)} />
           </div>
           <div className="flex flex-col gap-2 border-t p-3">
+            <InstallAppButton onOpen={() => setMenuOpen(false)} />
             <Button asChild variant="outline" className="w-full">
               <a href="/legacy-crm">Прежний интерфейс</a>
             </Button>
