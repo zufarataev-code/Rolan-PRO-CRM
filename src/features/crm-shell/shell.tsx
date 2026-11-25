@@ -134,10 +134,10 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <div className="truncate text-sm font-semibold">{userName || "Сотрудник"}</div>
             <div className="text-muted-foreground text-xs">{role === "owner" ? "Владелец" : "Менеджер"}</div>
           </div>
-          <PushToggle />
           <Button asChild variant="outline" size="sm">
             <a href="/legacy-crm">Прежний интерфейс</a>
           </Button>
+          <PushToggle />
           <LogoutButton />
         </div>
       </aside>
@@ -164,10 +164,10 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <NavGroups role={role} pathname={pathname} onNavigate={() => setMenuOpen(false)} />
           </div>
           <div className="flex flex-col gap-2 border-t p-3">
-            <PushToggle />
             <Button asChild variant="outline" className="w-full">
               <a href="/legacy-crm">Прежний интерфейс</a>
             </Button>
+            <PushToggle />
             <LogoutButton className="w-full" />
           </div>
         </SheetContent>

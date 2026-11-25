@@ -70,8 +70,8 @@ test("tapping a push opens the CRM page, or reuses an open CRM window", async ()
   assert.equal(worker.opened.length, 1);
 });
 
-test("the service worker still only caches the two brand images", () => {
-  assert.match(swSource, /STATIC_ASSETS = \[\s*"\/landing\/rolan-logo\.webp",\s*"\/rolanpro-app-icon\.svg",\s*\]/);
+test("the service worker still caches only its fixed brand images, never CRM pages", () => {
+  assert.match(swSource, /url\.origin !== self\.location\.origin \|\| !STATIC_ASSETS\.includes\(url\.pathname\)/);
 });
 
 test("the old CRM loads the push client and shows the card in 🔔", () => {
