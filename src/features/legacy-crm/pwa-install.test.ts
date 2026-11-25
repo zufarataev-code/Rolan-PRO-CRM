@@ -77,6 +77,7 @@ function boot({
   inFrame = false,
   storage = new Map<string, string>(),
   now = Date.UTC(2026, 10, 25),
+  webdriver = false,
 }: {
   userAgent: string;
   pathname?: string;
@@ -84,6 +85,7 @@ function boot({
   inFrame?: boolean;
   storage?: Map<string, string>;
   now?: number;
+  webdriver?: boolean;
 }) {
   const body = node("body");
   const listeners: Record<string, (event: unknown) => void> = {};
@@ -109,6 +111,7 @@ function boot({
     platform: /Macintosh/.test(userAgent) ? "MacIntel" : "iPhone",
     maxTouchPoints: /Macintosh/.test(userAgent) ? 0 : 5,
     standalone,
+    webdriver,
     serviceWorker: {
       register: (url: string) => {
         registered.push(url);
@@ -116,11 +119,17 @@ function boot({
       },
     },
   };
+  const documentListeners: Record<string, (event: unknown) => void> = {};
   const document = {
     readyState: "complete",
     body,
     createElement: (tag: string) => node(tag),
-    addEventListener: () => null,
+    addEventListener: (name: string, handler: (event: unknown) => void) => {
+      documentListeners[name] = handler;
+    },
+    removeEventListener: (name: string) => {
+      delete documentListeners[name];
+    },
   };
   const context = vm.createContext({
     window,
@@ -138,6 +147,7 @@ function boot({
     card: () => body.children[0] ?? null,
     api: window.RolanProInstall as { open: () => void; isInstalled: () => boolean },
     fire: (name: string, event: unknown) => listeners[name]?.(event),
+    tap: (target: unknown) => documentListeners.pointerdown?.({ target }),
     registered,
     storage,
   };
@@ -193,6 +203,15 @@ test("no card for clients, inside the CRM's own frames, once installed, on the s
   assert.equal(boot({ userAgent: IPHONE_SAFARI, standalone: true }).card(), null);
   assert.equal(boot({ userAgent: IPHONE_SAFARI, pathname: "/login" }).card(), null);
   assert.equal(boot({ userAgent: DESKTOP_CHROME, pathname: "/crm" }).card(), null);
+});
+
+test("the card never stands in the way: a tap elsewhere closes it, and test browsers never get it", () => {
+  const page = boot({ userAgent: IPHONE_SAFARI });
+  assert.ok(page.card());
+  page.tap(node("button"));
+  assert.equal(page.card(), null, "a tap on the page under the card closes it");
+  assert.equal(page.storage.size, 0, "closing by a tap elsewhere is not «Не сейчас»");
+  assert.equal(boot({ userAgent: IPHONE_SAFARI, webdriver: true }).card(), null);
 });
 
 test("«Не сейчас» hides the card for three days, then it comes back", () => {

@@ -110,6 +110,16 @@
   function close() {
     if (root && root.parentNode) root.parentNode.removeChild(root);
     root = null;
+    if (document.removeEventListener) document.removeEventListener("pointerdown", onOutsideTap, true);
+  }
+
+  // The card must never stand in the way of work: a tap anywhere else on the
+  // page closes it for this visit (it comes back on the next visit).
+  function onOutsideTap(event) {
+    if (!root) return;
+    var target = event && event.target;
+    if (target && root.contains && root.contains(target)) return;
+    close();
   }
 
   function dismiss() {
@@ -269,9 +279,13 @@
       actions.appendChild(later);
       box.appendChild(actions);
     });
+    document.addEventListener("pointerdown", onOutsideTap, true);
   }
 
   function shouldOffer() {
+    // An automated test browser cannot install anything, and the card would only
+    // cover the buttons it clicks.
+    if (navigator.webdriver) return false;
     // The sign-in screen has its own «Установить на телефон» link, so the card
     // never covers the «Войти» button.
     if (/^\/login(\/|$)/.test(location.pathname)) return false;
