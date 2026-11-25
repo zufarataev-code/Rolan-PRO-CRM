@@ -2,6 +2,18 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-25 — Пуш-уведомления на телефон, бесплатно (Claude)
+
+- Owner, 2026-11-23: «Как в СРМ сделать пуш уведомления?», «Да, заводи» (#602). 2026-11-25, Codex так и не сделал: «Сразу, сразу … выкладывай».
+- Branch `claude/project-thread-mw1zkw`, based on `origin/main` `742d3db`. Closes #602.
+- `src/features/push/`: `web-push.ts` (шифрование RFC 8291 + подпись VAPID на `node:crypto`, без пакетов; только адреса FCM/Apple/Mozilla/Windows), `events.ts` (кто и что получает, без сумм у монтажников/замерщиков), `dispatcher.ts` (очередь `push_deliveries`, цикл раз в 30 с из `instrumentation.ts`), `config.ts`.
+- Старая CRM: PUT `legacy-crm/state` после сохранения сравнивает заказы до/после (`pushAfterLegacySave`, не ждёт и не роняет сохранение). Новая CRM: цикл смотрит `notifications` и `leads` за 15 минут.
+- Миграция `20261125190000_web_push`: `push_subscriptions`, `push_deliveries`.
+- UI: карточка в 🔔 старой CRM, `PushToggle` в меню `/crm`; `public/push-client.js`, `public/sw.js` (push + notificationclick).
+- На сервере ключей пока нет — пуши выключены, CRM работает как раньше. Включение: `docs/WEB_PUSH.md`, нужен отдельный «да» владельца.
+- Права замерщика/менеджера на заказы не трогал (блокировка в другом потоке).
+- Тесты: `src/features/push/*.test.ts`, `src/features/push/public-sw-push.test.ts`.
+
 ## 2026-11-23 — Файлы CRM на диске сервера: WhatsApp-вложения и фото работают без платного хранилища (Claude)
 
 - Owner, 2026-11-23 07:33: «по WhatsApp также не могу отправлять файлы, я писал об этом».

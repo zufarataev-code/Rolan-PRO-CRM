@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
 import { allFramesSaved, signedOut } from "@/features/crm-shell/logout";
 import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
+import { PushToggle } from "@/features/crm-shell/push-toggle";
 
 type Role = "owner" | "manager";
 
@@ -133,6 +134,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <div className="truncate text-sm font-semibold">{userName || "Сотрудник"}</div>
             <div className="text-muted-foreground text-xs">{role === "owner" ? "Владелец" : "Менеджер"}</div>
           </div>
+          <PushToggle />
           <Button asChild variant="outline" size="sm">
             <a href="/legacy-crm">Прежний интерфейс</a>
           </Button>
@@ -162,6 +164,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <NavGroups role={role} pathname={pathname} onNavigate={() => setMenuOpen(false)} />
           </div>
           <div className="flex flex-col gap-2 border-t p-3">
+            <PushToggle />
             <Button asChild variant="outline" className="w-full">
               <a href="/legacy-crm">Прежний интерфейс</a>
             </Button>
