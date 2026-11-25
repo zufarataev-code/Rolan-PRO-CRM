@@ -235,3 +235,26 @@ test("the new interface keeps its top bar below the iPhone status bar and offers
   assert.match(shell, /Установить на телефон/);
   assert.match(login, /Установить CRM на телефон/);
 });
+
+/** Walks the PNG chunks: a file cut short (as the old icons were) ends inside a chunk. */
+function pngSize(file: string) {
+  const bytes = readFileSync(file);
+  assert.equal(bytes.subarray(1, 4).toString("latin1"), "PNG", `${file} is a PNG`);
+  let offset = 8;
+  let sawEnd = false;
+  while (offset < bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.subarray(offset + 4, offset + 8).toString("latin1");
+    assert.ok(offset + 12 + length <= bytes.length, `${file}: chunk ${type} runs past the end of the file`);
+    if (type === "IEND") sawEnd = true;
+    offset += 12 + length;
+  }
+  assert.ok(sawEnd, `${file} ends with IEND`);
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+test("the app icons are whole PNGs of the sizes the manifest and iPhone ask for", () => {
+  assert.deepEqual(pngSize("public/icon-192.png"), { width: 192, height: 192 });
+  assert.deepEqual(pngSize("public/icon-512.png"), { width: 512, height: 512 });
+  assert.deepEqual(pngSize("public/apple-touch-icon.png"), { width: 180, height: 180 });
+});
