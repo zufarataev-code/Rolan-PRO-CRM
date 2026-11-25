@@ -161,3 +161,24 @@
   outline: 2px solid #2563eb;
   outline-offset: -2px;
 }
+
+/* «Установить CRM на телефон»: opens the steps for this phone (public/pwa-install.js). */
+.installLink {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #166534;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (display-mode: standalone) {
+  .installLink {
+    display: none;
+  }
+}

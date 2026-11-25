@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 import "./globals.css";
@@ -10,7 +10,12 @@ export const metadata: Metadata = {
   description: "Рабочая CRM сотрудников Rolan PRO",
   manifest: "/manifest.webmanifest",
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
-  appleWebApp: { capable: true, title: "Rolan PRO", statusBarStyle: "black-translucent" },
+  // "default" keeps the page below the iPhone clock and battery once the CRM is
+  // installed: "black-translucent" drew the top bar of the new interface under them.
+  appleWebApp: { capable: true, title: "Rolan PRO", statusBarStyle: "default" },
+  // Next.js writes only the new "mobile-web-app-capable"; iPhones before iOS 16.4
+  // open a home-screen icon as an app only with the Apple name.
+  other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -18,6 +23,12 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f172a",
 };
 
 type RootLayoutProps = {
