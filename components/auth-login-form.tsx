@@ -6,9 +6,6 @@ import styles from "./auth-card.module.css";
 import { AuthPasswordField } from "./auth-password-field";
 import { destinationForRoles } from "@/lib/auth/destination";
 
-const INSTALL_ONBOARDING_PENDING = "rolanpro:pwa-install-onboarding-pending";
-const INSTALL_ONBOARDING_SEEN = "rolanpro:pwa-install-onboarding-seen";
-
 type LoginResponse = {
   data?: {
     user?: {
@@ -19,14 +16,9 @@ type LoginResponse = {
   errors?: Array<{ message?: string }>;
 };
 
-function queueInstallOnboarding() {
-  try {
-    if (window.localStorage.getItem(INSTALL_ONBOARDING_SEEN) !== "1") {
-      window.localStorage.setItem(INSTALL_ONBOARDING_PENDING, "1");
-    }
-  } catch {
-    // Login must never fail because browser storage is unavailable.
-  }
+/** Opens the phone install steps from public/pwa-install.js (loaded by the root layout). */
+function openInstallSteps() {
+  (window as Window & { RolanProInstall?: { open: () => void } }).RolanProInstall?.open();
 }
 
 function loginErrorMessage(status: number, serverMessage?: string) {
@@ -63,7 +55,6 @@ export function AuthLoginForm() {
         return;
       }
 
-      queueInstallOnboarding();
       window.location.assign(
         payload.data?.user?.must_change_password
           ? "/change-password"
@@ -111,6 +102,9 @@ export function AuthLoginForm() {
           </button>
         </form>
         <p className={styles.hint}>CRM работает с сервера. Скачивать HTML-файл на телефон для входа не нужно.</p>
+        <button type="button" className={styles.installLink} onClick={openInstallSteps}>
+          Установить CRM на телефон
+        </button>
       </section>
     </main>
   );

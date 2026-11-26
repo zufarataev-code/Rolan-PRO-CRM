@@ -27,6 +27,7 @@ import { validateProjectDirectExpenses } from "@/features/legacy-crm/project-dir
 import { prepareProductionStages, settleProductionProject } from "@/features/legacy-crm/production-stages";
 import { prepareServiceScopeApprovals } from "@/features/legacy-crm/service-scope-approvals";
 import { buildLeadScopeWhere } from "@/features/sales/access";
+import { pushAfterLegacySave } from "@/features/push/dispatcher";
 
 const WORKSPACE_ID = "primary";
 
@@ -251,6 +252,9 @@ export async function PUT(request: NextRequest) {
       updated_at: current?.updated_at ?? null,
     });
   }
+
+  // Phone pushes for new assignments, measurements and accepted proposals.
+  pushAfterLegacySave(currentWorkspace.payload, nextPayload, auth.session.user.user_id);
 
   const workspace = await prisma.legacyWorkspace.findUniqueOrThrow({
     where: { workspace_id: WORKSPACE_ID },
