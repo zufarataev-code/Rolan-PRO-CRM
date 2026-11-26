@@ -60,10 +60,12 @@ function PurchaseCard({ row }: { row: CrmPurchaseRow }) {
         {row.vendor ? <span className="truncate">{row.vendor}</span> : null}
       </div>
       <div className="mt-2">
-        {row.project ? (
+        {row.project?.open ? (
           <Link href={`/crm/projects/${encodeURIComponent(row.project.id)}`} className="hover:text-primary text-xs font-medium">
             {row.project.label}
           </Link>
+        ) : row.project ? (
+          <span className="text-xs font-medium">{row.project.label}</span>
         ) : (
           <span className="text-muted-foreground text-xs">Общий запас склада</span>
         )}
@@ -264,10 +266,10 @@ export default function CrmInventoryPage() {
             data.tools.length ? (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {data.tools.map((tool) => (
-                  <article key={tool.id} className={cn("bg-card min-w-0 rounded-lg border p-3 shadow-xs", tool.problem && "border-warning/50")}>
+                  <article key={tool.id} className={cn("bg-card min-w-0 rounded-lg border p-3 shadow-xs", tool.tone === "danger" ? "border-destructive/50" : tool.tone === "warn" && "border-warning/50")}>
                     <div className="flex items-start justify-between gap-2">
                       <b className="min-w-0 text-sm break-words">{tool.name}</b>
-                      <Pill tone={tool.problem ? "warn" : "ok"}>{tool.condition}</Pill>
+                      <Pill tone={tool.tone}>{tool.condition}</Pill>
                     </div>
                     <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       {tool.number ? <span className="tabular-nums">№ {tool.number}</span> : null}
@@ -305,10 +307,12 @@ export default function CrmInventoryPage() {
                         <span>{dateTime(move.at)}</span>
                         {move.who ? <span>{move.who}</span> : null}
                       </div>
-                      {move.project ? (
+                      {move.project?.open ? (
                         <Link href={`/crm/projects/${encodeURIComponent(move.project.id)}`} className="hover:text-primary mt-1 block truncate text-xs font-medium">
                           {move.project.label}
                         </Link>
+                      ) : move.project ? (
+                        <span className="mt-1 block truncate text-xs font-medium">{move.project.label}</span>
                       ) : null}
                     </div>
                   </article>

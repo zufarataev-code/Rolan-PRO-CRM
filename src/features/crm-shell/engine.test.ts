@@ -130,7 +130,7 @@ test("the warehouse is the working «Склад» overview: stock value, what to
       { id: "p1", number: "PUR-2026-0001", kind: "film", itemId: low.id, itemNameSnapshot: "Madico Sunscape Select 5", qty: 5, unit: "м", orderId: "o1", responsibleId: "u_m1", status: "requested", createdAt: "2026-11-20T10:00:00.000Z" },
       { id: "p2", number: "PUR-2026-0002", kind: "supply", itemId: "s2", qty: 4, unit: "шт", status: "received", createdAt: "2026-11-21T10:00:00.000Z" },
     ],
-    tools: [{ id: "t1", name: "Термофен", invNumber: "7", condition: "repair", holderId: "u_m1" }],
+    tools: [{ id: "t1", name: "Термофен", invNumber: "7", condition: "repair", holderId: "u_m1" }, { id: "t2", name: "Ракель", invNumber: "8", condition: "worn", holderId: "u_m1" }, { id: "t3", name: "Нож", invNumber: "9", condition: "good", holderId: "u_m1" }],
     inventoryMovements: [{ id: "m1", at: "2026-11-22T18:00:00.000Z", kind: "film", itemName: "Madico Sunscape Select 5", direction: "issue", qty: 2.5, unit: "м", orderId: "o1", createdBy: "u_m1" }],
   };
   const stock = runCrmEngine<CrmInventory>(stocked, { legacyUserIds: ["u_m1"], role: "manager" }, { model: "inventory" }, script);
@@ -143,7 +143,8 @@ test("the warehouse is the working «Склад» overview: stock value, what to
   assert.equal(stock.purchasesTotal, 3);
   assert.deepEqual(stock.film.map((film) => [film.id, film.rolls, film.lengthM, film.sqft, film.status]), [[low.id, 1, 3, 49, "reorder"], [full.id, 1, 30, 492, "ok"]]);
   assert.deepEqual(stock.supplies.map((supply) => [supply.id, supply.status]), [["s1", "critical"], ["s2", "ok"]], "short supplies first");
-  assert.deepEqual([stock.tools[0]?.condition, stock.tools[0]?.problem], ["В ремонте", true]);
+  assert.deepEqual(stock.tools.map((tool) => [tool.id, tool.condition, tool.problem, tool.tone]), [["t1", "В ремонте", true, "danger"], ["t2", "Изношен", true, "warn"], ["t3", "Рабочий", false, "ok"]], "a worn tool is not shown as healthy");
+  assert.equal(stock.movements[0]?.project?.open, true, "the manager sees their own project, so its card is linked");
   assert.deepEqual([stock.movements[0]?.receipt, stock.movements[0]?.qty, stock.movements[0]?.project?.id], [false, 2.5, "o1"]);
 });
 

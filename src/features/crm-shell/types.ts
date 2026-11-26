@@ -144,7 +144,8 @@ export type CrmTaskRow = {
 
 export type CrmTasks = { user: CrmShellUser; open: CrmTaskRow[]; done: CrmTaskRow[]; doneTotal: number };
 
-export type CrmProjectRef = { id: string; label: string } | null;
+/** `open`: the viewer can see this project, so its card can be linked. */
+export type CrmProjectRef = { id: string; label: string; open: boolean } | null;
 
 export type CrmInventoryNeed = { id: string; kind: "film" | "supply"; name: string; qty: number; min: number; target: number; unit: string; vendor: string; critical: boolean; draft: string };
 
@@ -167,7 +168,7 @@ export type CrmFilmStock = { id: string; name: string; category: string; categor
 
 export type CrmSupplyStock = { id: string; name: string; qty: number; min: number | null; unit: string; location: string; status: "ok" | "low" | "critical" };
 
-export type CrmToolRow = { id: string; name: string; number: string; condition: string; problem: boolean; holder: string };
+export type CrmToolRow = { id: string; name: string; number: string; condition: string; problem: boolean; tone: "ok" | "warn" | "danger"; holder: string };
 
 export type CrmMovementRow = { id: string; at: string; receipt: boolean; item: string; qty: number; unit: string; project: CrmProjectRef; who: string };
 

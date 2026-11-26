@@ -285,7 +285,9 @@ function crmShellInventory(user) {
   const r2 = value => Math.round(num(value) * 100) / 100;
   const vendorName = id => { const v = id ? (db.vendors || []).find(x => x.id === id) : null; return v ? text(v.name) : ''; };
   const name = id => { const u = id ? getUser(id) : null; return u ? text(u.name) : ''; };
-  const project = id => { const o = id ? getOrder(id) : null; return o ? { id: String(o.id), label: text(warehouseOrderLabel(o)) } : null; };
+  // A project card opens only for someone who can see that project; others get its name without a link.
+  const visible = new Set(visibleOrdersForUser(user).map(order => order.id));
+  const project = id => { const o = id ? getOrder(id) : null; return o ? { id: String(o.id), label: text(warehouseOrderLabel(o)), open: visible.has(o.id) } : null; };
   const supplies = ensureSupplies();
   const summary = inventorySummary();
   // The same sum as the working overview: film left at its lot price plus supplies at their unit cost.
@@ -312,7 +314,7 @@ function crmShellInventory(user) {
   });
   const supplyRows = supplies.map(s => ({ id: String(s.id), name: text(s.name) || 'Расходник', qty: r2(s.qty), min: s.minQty == null ? null : r2(s.minQty), unit: text(supplyUnitLabel(s.unit)), location: text(s.location), status: s.minQty != null && num(s.qty) <= num(s.minQty) ? (num(s.qty) <= 0 ? 'critical' : 'low') : 'ok' }))
     .sort((a, b) => (a.status === 'ok') - (b.status === 'ok') || a.name.localeCompare(b.name, 'ru'));
-  const tools = ensureTools().map(t => ({ id: String(t.id), name: text(t.name) || 'Инструмент', number: text(t.invNumber), condition: text(toolConditionInfo(t.condition).label), problem: ['repair', 'lost'].includes(t.condition), holder: name(t.holderId) }));
+  const tools = ensureTools().map(t => ({ id: String(t.id), name: text(t.name) || 'Инструмент', number: text(t.invNumber), condition: text(toolConditionInfo(t.condition).label), problem: t.condition !== 'good', tone: t.condition === 'good' ? 'ok' : t.condition === 'worn' ? 'warn' : 'danger', holder: name(t.holderId) }));
   const movements = (db.inventoryMovements || []).slice(0, 30).map(m => ({ id: String(m.id), at: text(m.at), receipt: m.direction === 'receipt', item: text(m.itemName) || 'Материал', qty: r2(m.qty), unit: text(m.unit), project: project(m.orderId), who: name(m.createdBy) || name(m.responsibleId) }));
   return {
     user: crmShellUser(user),
