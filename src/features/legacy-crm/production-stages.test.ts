@@ -2,7 +2,7 @@ import { composeProductionHtml } from './production-ui';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { prepareProductionStages, mergeFieldProductionStages, stagePayroll, serviceLaborBudget, settleProductionProject } from './production-stages';
-import { prepareServiceSolutions, projectServicesFinished } from './service-solutions';
+import { prepareServiceSolutions, projectServicesFinished, serviceSolutionsForViewer } from './service-solutions';
 import { createFieldWorkspace } from './field-workspace';
 import { ROLE_CODES } from '@/lib/auth/constants';
 import { prepareServiceScopeApprovals, serviceScopeApproved } from './service-scope-approvals';
@@ -291,4 +291,24 @@ test('legacy actual-size defaults preserve approval while a real size change req
   assert.equal(serviceScopeApproved(next.orders[0],'offering:film'),true);
   assert.equal(prepareServiceSolutions(before,next,true),null);
   w.actualWidth+=100;assert.equal(serviceScopeApproved(next.orders[0],'offering:film'),false);
+});
+test('a manager saves a closed project although completed-stage payroll is hidden from them',()=>{
+  // The installer completes the only service; the server stamps a payroll snapshot.
+  const scheduled=fixture('installation_scheduled');
+  scheduled.orders[0].serviceSchedules=[{id:'offering:film',installationAt:'2026-10-12T16:00:00Z',installerIds:['i1','i2']}];
+  const done=structuredClone(scheduled);
+  done.orders[0].serviceProgress={'offering:film':{status:'done',doneBy:'i1',doneAt:'2026-10-12T20:00:00Z'}};
+  assert.equal(prepareProductionStages(scheduled,done,false,[],true),null);
+  done.orders[0].status='installation_done';
+  const saved=done.orders[0].productionStages[0].payroll;
+  assert.ok(saved.length>0);
+  // The manager's browser received the workspace without payroll and saves an unrelated change.
+  const managerView=serviceSolutionsForViewer(done,false);
+  assert.equal(managerView.orders[0].productionStages[0].payroll,undefined);
+  const managerSave=structuredClone(managerView);managerSave.orders[0].notes='клиент просит счёт';
+  assert.equal(prepareProductionStages(done,managerSave,false,['m']),null);
+  assert.deepEqual(managerSave.orders[0].productionStages[0].payroll,saved,'payroll stays server-owned');
+  // A real edit of the completed stage on a closed project is still refused.
+  const moved=structuredClone(managerView);moved.orders[0].productionStages[0].startsAt='2026-10-13T16:00:00Z';
+  assert.match(prepareProductionStages(done,moved,false,['m'])!,/после принятия КП/);
 });

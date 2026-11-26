@@ -10,5 +10,7 @@ export async function register() {
     startGoogleAdsSyncScheduler();
     const { startMetaCapiSyncScheduler } = await import("./src/features/meta-capi/processor");
     startMetaCapiSyncScheduler();
+    const { startPushScheduler } = await import("./src/features/push/dispatcher");
+    startPushScheduler();
   }
 }
