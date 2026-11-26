@@ -279,6 +279,51 @@ function crmShellClients(user) {
 }
 
 /** Entry point of the server calculation: one workspace in, one JSON model out. */
+/** Tasks: the working «Задачи» section's own list (renderTasksView), with each due day in the viewer's time zone. */
+function crmShellTasks(user) {
+  const text = value => String(value || '').trim();
+  const all = Array.isArray(db.tasks) ? db.tasks : [];
+  const name = id => { const u = id ? getUser(id) : null; return u ? text(u.name) : ''; };
+  const row = t => {
+    const due = text(t.dueAt);
+    const dueKey = due ? taskDueDateKey(due, t) : '';
+    const timeMatch = /T(\d{2}):(\d{2})/.exec(due);
+    const hasTime = timeMatch && !(timeMatch[1] === '00' && timeMatch[2] === '00');
+    let time = '';
+    if (hasTime) {
+      // Same rule as taskDueDateKey: older call/follow-up tasks are UTC with the "Z" dropped.
+      const legacyUtc = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(due)
+        && (/^📞 Перезвонить:/.test(t.title || '') || /^AI follow-up:/.test(t.title || ''));
+      const stamp = legacyUtc ? `${due}Z` : due;
+      const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/.test(stamp);
+      const at = zoned ? new Date(stamp) : null;
+      time = at && Number.isFinite(at.getTime()) ? `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}` : `${timeMatch[1]}:${timeMatch[2]}`;
+    }
+    const team = (t.teamIds || []).map(name).filter(Boolean);
+    const client = t.clientId ? getClient(t.clientId) : null;
+    return {
+      id: String(t.id),
+      title: text(t.title) || 'Задача',
+      dueKey,
+      time,
+      team,
+      responsible: name(t.responsibleId),
+      mine: t.responsibleId === user.id || (t.teamIds || []).includes(user.id),
+      client: client ? text(clientDisplayName(client) || client.name) : '',
+      clientId: client ? client.id : '',
+      notes: text(t.notes),
+      agent: t.source === 'rolan_agent',
+      done: t.status === 'done',
+      doneAt: text(t.doneAt),
+    };
+  };
+  const open = all.filter(t => t && t.status !== 'done').map(row)
+    .sort((a, b) => (a.dueKey || '9999').localeCompare(b.dueKey || '9999') || (a.time || '99').localeCompare(b.time || '99'));
+  const done = all.filter(t => t && t.status === 'done').map(row)
+    .sort((a, b) => b.doneAt.localeCompare(a.doneAt)).slice(0, 20);
+  return { user: crmShellUser(user), open, done, doneTotal: all.filter(t => t && t.status === 'done').length };
+}
+
 function crmShellRun(input) {
   const { payload, viewer, request, consultations } = JSON.parse(input);
   // Reading only: nothing computed here is ever written back.
@@ -298,5 +343,6 @@ function crmShellRun(input) {
   if (request.model === 'leadLinks') return JSON.stringify(crmShellLeadLinks(user));
   if (request.model === 'calendar') return JSON.stringify(crmShellCalendar(user, request.from, request.to));
   if (request.model === 'clients') return JSON.stringify(crmShellClients(user));
+  if (request.model === 'tasks') return JSON.stringify(crmShellTasks(user));
   return JSON.stringify({ error: 'unknown_model' });
 }

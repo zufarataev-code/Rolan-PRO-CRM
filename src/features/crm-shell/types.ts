@@ -123,3 +123,23 @@ export type CrmClientRow = {
 };
 
 export type CrmClients = { user: CrmShellUser; counts: { all: number; b2c: number; b2b: number; regular: number }; clients: CrmClientRow[] };
+
+export type CrmTaskRow = {
+  id: string;
+  title: string;
+  /** The due day in the viewer's time zone, YYYY-MM-DD; empty when the task has no date. */
+  dueKey: string;
+  time: string;
+  team: string[];
+  responsible: string;
+  /** The viewer is the one responsible or is on the task's team. */
+  mine: boolean;
+  client: string;
+  clientId: string;
+  notes: string;
+  agent: boolean;
+  done: boolean;
+  doneAt: string;
+};
+
+export type CrmTasks = { user: CrmShellUser; open: CrmTaskRow[]; done: CrmTaskRow[]; doneTotal: number };

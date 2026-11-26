@@ -16,6 +16,15 @@ This file is the canonical live handoff for every device, chat, agent, and contr
 - Verification: full unit suite **1208/1208** (new: `watch-production-supervision.test.ts` drives the real script functions — restart with backoff, restart of an unresponsive process, 503 without restart, supervision during a build; `health.test.ts`; public-path test), `tsc --noEmit` clean, `bash -n` clean, production build clean (`/api/health` is a dynamic route), `git diff --check` clean.
 - Safety: на сервере ничего не менялось; изменения вступают в силу после слияния обычным деплоем (сторож перезапускает сам себя при изменении скрипта).
 
+## 2026-11-23 — Замерщик вносит размеры в проект из «Выполненных проектов» (Claude)
+
+- Owner, 2026-11-23 10:16, скриншот с объекта: замерщик ввёл Single hung 43×93 ×2, сохранение отклонено — «Не сохранено: Исторический проект может менять только назначенный менеджер».
+- Причина: проект заведён через «Выполненные проекты» (`quickEntry`). `prepareServiceSolutions` пускал к фактам такого проекта только владельца и назначенного менеджера; `measurements` входит в `historicalProjectFacts`, а замерщик менеджером не является — его сохранение отклонялось целиком.
+- Branch `claude/measurer-historical-save`, based on `origin/main` `742d3db`.
+- `prepareServiceSolutions(..., fieldSave)`: полевое сохранение (`!isPrivileged` в `app/api/v1/legacy-crm/state/route.ts`) уже урезано `mergeFieldWorkspace` до своих проектов и рабочих полей (размеры, фото, заметки, отметки этапов), поэтому правило «только назначенный менеджер» к нему не применяется. Не изменено: менеджер-коллега по-прежнему получает отказ; завершённый перенос исправляет только владелец; складская себестоимость — только система.
+- Тест: `project-card.test.ts` (+2 проверки). Локально: связанные тесты 30/30; полный `npm test` 1167/1204 — те же 37 падений, что и на `main` без правки (в этой среде не генерируется Prisma client); CI проверит полностью.
+- Не проверено на живой CRM. Если учётная запись замерщика одновременно менеджер, сохранение идёт привилегированным путём и эта правка его не покрывает.
+
 ## 2026-11-25 — Пуш-уведомления на телефон, бесплатно (Claude)
 
 - Owner, 2026-11-23: «Как в СРМ сделать пуш уведомления?», «Да, заводи» (#602). 2026-11-25, Codex так и не сделал: «Сразу, сразу … выкладывай».
