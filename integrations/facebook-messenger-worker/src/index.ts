@@ -3,7 +3,16 @@ import {
   buildBusinessWindows,
   crmLeadPayload,
   formatSlot,
+  asksForCall,
+  extractPhone,
+  HUMAN_TAKEOVER_MS,
+  humanTakeoverActive,
+  inLocalServiceArea,
+  isAutomatedPageMessage,
   isBusinessHours,
+  isOptOut,
+  optOutConfirmation,
+  detectServiceType,
   knownLeadFacts,
   leadReadyForBooking,
   looksLikeCallbackTime,
@@ -26,6 +35,9 @@ const GRAPH_API = "https://graph.facebook.com/v21.0";
 const HISTORY_LIMIT = 12;
 const BURST_WINDOW_MS = 2500;
 const CONVERSATION_TTL_SECONDS = 30 * 24 * 60 * 60;
+// Echoed back by Meta on every message this Worker sends, so a manager's own
+// reply from the Page inbox can be told apart from the bot's.
+const BOT_METADATA = "rolanpro-bot";
 
 type KvNamespace = {
   get(key: string, options: { type: "json" }): Promise<ConversationState | null>;
@@ -39,7 +51,6 @@ type Env = CrmEnv & {
   PAGE_ID: string;
   IG_ID?: string;
   VERIFY_TOKEN: string;
-  SYS_PROMPT?: string;
   CHAT: KvNamespace;
 };
 
@@ -65,6 +76,18 @@ type ConversationState = {
   leadCapturedEventId?: string;
   offeredSlots?: CrmSlot[];
   updated?: string;
+  /** The customer asked us to stop writing; stay silent until they ask something new. */
+  optedOut?: boolean;
+  /** A manager wrote in this chat; the bot stays quiet until this ISO time. */
+  humanUntil?: string;
+  profileChecked?: boolean;
+};
+
+type PageEcho = {
+  platform: MessengerEvent["platform"];
+  customerId: string;
+  text: string;
+  appId?: string;
 };
 
 type AssistantOutput = {
@@ -175,6 +198,36 @@ function messengerEvents(body: unknown): MessengerEvent[] {
   return events;
 }
 
+/** Messages written from the Page itself by a person (not by this Worker). */
+function pageEchoes(body: unknown): PageEcho[] {
+  if (!body || typeof body !== "object") return [];
+  const source = body as { object?: string; entry?: Array<{ messaging?: Array<Record<string, unknown>> }> };
+  const platform = source.object === "instagram" ? "instagram" : "messenger";
+  const echoes: PageEcho[] = [];
+  for (const entry of source.entry || []) {
+    for (const raw of entry.messaging || []) {
+      const message = raw.message as {
+        text?: string;
+        is_echo?: boolean;
+        metadata?: string;
+        app_id?: number | string;
+      } | undefined;
+      const recipient = raw.recipient as { id?: string } | undefined;
+      if (!message?.is_echo || !recipient?.id) continue;
+      if (message.metadata === BOT_METADATA) continue;
+      const text = message.text?.trim() || "";
+      if (!text || isAutomatedPageMessage(text)) continue;
+      echoes.push({
+        platform,
+        customerId: recipient.id,
+        text,
+        appId: message.app_id === undefined ? undefined : String(message.app_id),
+      });
+    }
+  }
+  return echoes;
+}
+
 async function graphPost(env: Env, path: string, payload: unknown) {
   const response = await fetch(`${GRAPH_API}/${path}?access_token=${env.PAGE_TOKEN}`, {
     method: "POST",
@@ -198,7 +251,7 @@ async function sendMessage(
   slots: CrmSlot[] = [],
   language?: string,
 ) {
-  const message: Record<string, unknown> = { text };
+  const message: Record<string, unknown> = { text, metadata: BOT_METADATA };
   if (slots.length) {
     message.quick_replies = slots.slice(0, 5).map((slot) => ({
       content_type: "text",
@@ -218,10 +271,11 @@ async function askAssistant(
   applicationStage: string,
   lead: LeadData,
 ) {
-  const storedPrompt = await env.CHAT.get("sys_prompt");
   const stateInstruction = applicationStage === "booked"
     ? "Application state: this customer already has a confirmed booking. Answer follow-up questions normally. Do not start another booking or say you are checking CRM unless the customer explicitly asks for another appointment or address."
-    : `Application state: ${applicationStage || "new"}.`;
+    : applicationStage === "slot_offered"
+      ? "Application state: slot_offered. The customer already sees buttons with real free times. Answer their message in 1-2 sentences without a new qualification question, and invite them to tap a time that suits them."
+      : `Application state: ${applicationStage || "new"}.`;
   const startedAt = Date.now();
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -233,7 +287,7 @@ async function askAssistant(
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 500,
-      system: `${storedPrompt || env.SYS_PROMPT || FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${CONVERSATION_RULES}\n\n${knownLeadFacts(lead)}\n\n${stateInstruction}`,
+      system: `${FALLBACK_PROMPT}\n\n${ROLANPRO_KNOWLEDGE}\n\n${CRM_BOOKING_PROMPT}\n\n${CONVERSATION_RULES}\n\n${knownLeadFacts(lead)}\n\n${stateInstruction}`,
       messages: history,
     }),
   });
@@ -272,6 +326,12 @@ function slotPrompt(language?: string) {
   return "Here are the next available consultation times. Choose one:";
 }
 
+function slotIntro(lead: LeadData) {
+  const name = firstName(lead);
+  const service = lead.serviceType?.trim();
+  return `${name ? `Hi ${name}, thanks` : "Thanks"} for your request${service ? ` about ${service}` : ""}. The next step is a free on-site measurement: about 30 minutes, no obligation, and you get an exact quote.`;
+}
+
 function bookedPrompt(slot: CrmSlot, language?: string, smsSent = false) {
   const time = formatSlot(slot, language);
   const normalized = normalizeLanguage(language);
@@ -304,6 +364,14 @@ function callbackQuestion(lead: LeadData) {
     return `${greeting} ${hours} What is the best phone number and time to call you?`;
   }
   return `${greeting} ${hours} What time works best for a quick call to ${lead.phone.trim()}?`;
+}
+
+function callRequestConfirmed(lead: LeadData) {
+  const name = firstName(lead);
+  const when = isBusinessHours()
+    ? "shortly"
+    : "during business hours (Mon-Sat, 8am-6pm)";
+  return `${name ? `Got it, ${name}` : "Got it"} — our manager will call you at ${lead.phone?.trim()} ${when}. If a particular time suits you best, just tell me here.`;
 }
 
 function callbackConfirmed(lead: LeadData) {
@@ -424,13 +492,86 @@ async function confirmCallback(
   await sendMessage(env, event, text);
 }
 
+async function fetchProfileName(env: Env, senderId: string) {
+  try {
+    const response = await fetch(
+      `${GRAPH_API}/${senderId}?fields=first_name,last_name&access_token=${env.PAGE_TOKEN}`,
+    );
+    if (!response.ok) return "";
+    const profile = await response.json() as { first_name?: string; last_name?: string };
+    return [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim().slice(0, 120);
+  } catch (error) {
+    console.error("profile_name", error);
+    return "";
+  }
+}
+
+async function confirmCallRequest(
+  env: Env,
+  event: MessengerEvent,
+  key: string,
+  state: ConversationState,
+) {
+  state.lead.callbackTime = event.text.slice(0, 200);
+  state.stage = "callback_requested";
+  state.escalated = false;
+  state.history.push({ role: "user", content: event.text });
+  if (leadReadyForCrm(state.lead)) {
+    try {
+      await postToCrm(
+        env,
+        "/api/integrations/facebook-messenger/leads",
+        {
+          ...crmLeadPayload(state.lead, `${event.eventId}:call`, event.senderId, env.PAGE_ID),
+          callback_time: state.lead.callbackTime,
+        },
+      );
+      state.leadCapturedEventId = state.leadCapturedEventId || `${event.eventId}:call`;
+    } catch (error) {
+      console.error("crm_call_request", error);
+    }
+  }
+  const text = await localizeOperationalMessage(env, callRequestConfirmed(state.lead), state.lead.language, true);
+  state.history.push({ role: "assistant", content: JSON.stringify({ reply: text, stage: state.stage }) });
+  await persistState(env, key, state);
+  console.log(JSON.stringify({ event: "call_requested", key, leadCaptured: Boolean(state.leadCapturedEventId) }));
+  await sendMessage(env, event, text);
+}
+
+/** A manager replied from the Page inbox: the bot steps back for 12 hours. */
+async function handleEcho(env: Env, echo: PageEcho) {
+  const key = `${echo.platform}:${echo.customerId}`;
+  let state: ConversationState = { history: [], lead: {}, stage: "new", escalated: false };
+  try {
+    state = (await env.CHAT.get(key, { type: "json" })) || state;
+  } catch (error) {
+    console.error("kv_read", error);
+  }
+  if (!Array.isArray(state.history)) state.history = [];
+  state.humanUntil = new Date(Date.now() + HUMAN_TAKEOVER_MS).toISOString();
+  state.history.push({
+    role: "assistant",
+    content: JSON.stringify({ reply: echo.text, stage: state.stage, by: "manager" }),
+  });
+  if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
+  await persistState(env, key, state);
+  console.log(JSON.stringify({ event: "manager_took_over", key, appId: echo.appId || "unknown" }));
+}
+
 async function offerSlots(
   env: Env,
   event: MessengerEvent,
   key: string,
   state: ConversationState,
   leadIn?: string,
+  firstReply = false,
+  alreadyOffered = false,
 ) {
+  // Outside the local area a manager arranges the visit; no local slots.
+  if (!inLocalServiceArea(state.lead)) {
+    await askForCallback(env, event, key, state, "outside_local_area");
+    return;
+  }
   let slots: CrmSlot[] = [];
   try {
     slots = await availableSlots(env);
@@ -446,14 +587,21 @@ async function offerSlots(
   await persistState(env, key, state);
   // Keep the assistant's acknowledgment of what the customer said, but drop it
   // if it is another question — the slot buttons are the next step.
-  if (leadIn?.trim() && !leadIn.trim().endsWith("?")) await sendMessage(env, event, leadIn.trim());
-  await sendMessage(
-    env,
-    event,
-    await localizeOperationalMessage(env, slotPrompt(state.lead.language), state.lead.language),
-    slots,
-    state.lead.language,
-  );
+  // The times are already on screen: answer the customer's message and keep
+  // the same buttons under it instead of repeating the slot prompt.
+  if (alreadyOffered && leadIn?.trim()) {
+    await sendMessage(env, event, leadIn.trim(), slots, state.lead.language);
+    return;
+  }
+  const keepLeadIn = Boolean(leadIn?.trim()) && !leadIn!.trim().endsWith("?");
+  if (keepLeadIn) await sendMessage(env, event, leadIn!.trim());
+  let prompt = await localizeOperationalMessage(env, slotPrompt(state.lead.language), state.lead.language);
+  // A form lead's very first reply must not be a bare list of times.
+  if (!keepLeadIn && firstReply) {
+    const intro = await localizeOperationalMessage(env, slotIntro(state.lead), state.lead.language, true);
+    prompt = `${intro}\n\n${prompt}`;
+  }
+  await sendMessage(env, event, prompt, slots, state.lead.language);
 }
 
 async function bookSelectedSlot(
@@ -538,6 +686,59 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     console.error("kv_read", error);
   }
   state.lead = normalizeLeadData(state.lead || {});
+  if (!Array.isArray(state.history)) state.history = [];
+
+  // A manager is handling this chat: record the message, do not interfere.
+  if (humanTakeoverActive(state.humanUntil)) {
+    state.history.push({ role: "user", content: event.text });
+    if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
+    await persistState(env, key, state);
+    console.log(JSON.stringify({ event: "bot_silent_manager_active", key }));
+    return;
+  }
+
+  // "stop" is handled in code: one confirmation, then silence.
+  if (!event.quickReplyPayload && isOptOut(event.text)) {
+    const alreadyOptedOut = Boolean(state.optedOut);
+    state.optedOut = true;
+    state.stage = "opted_out";
+    state.offeredSlots = [];
+    state.history.push({ role: "user", content: event.text });
+    const language = state.lead.language || (/[а-яё]/i.test(event.text) ? "ru" : undefined);
+    const text = optOutConfirmation(language);
+    if (!alreadyOptedOut) {
+      state.history.push({ role: "assistant", content: JSON.stringify({ reply: text, stage: state.stage }) });
+    }
+    await persistState(env, key, state);
+    console.log(JSON.stringify({ event: "customer_opted_out", key, repeated: alreadyOptedOut }));
+    if (!alreadyOptedOut) await sendMessage(env, event, text);
+    return;
+  }
+  if (state.optedOut) {
+    // They wrote again with something else: treat it as a fresh request.
+    state.optedOut = false;
+    state.stage = "qualifying";
+  }
+  // Suppliers, agencies and other non-customers get one reply, not a dialogue.
+  if (state.stage === "closed" && !detectServiceType(event.text) && !startsNewBooking(event.text)) {
+    state.history.push({ role: "user", content: event.text });
+    if (state.history.length > HISTORY_LIMIT) state.history = state.history.slice(-HISTORY_LIMIT);
+    await persistState(env, key, state);
+    console.log(JSON.stringify({ event: "bot_silent_closed", key }));
+    return;
+  }
+
+  if (!state.lead.name?.trim() && !state.profileChecked && event.platform === "messenger") {
+    state.profileChecked = true;
+    const profileName = await fetchProfileName(env, event.senderId);
+    if (profileName) state.lead.name = profileName;
+  }
+  if (!state.lead.phone?.trim()) {
+    const typedPhone = extractPhone(event.text);
+    if (typedPhone) state.lead.phone = typedPhone;
+  }
+  const firstReply = !state.history.some((item) => item.role === "assistant");
+  const slotsAlreadyOffered = state.stage === "slot_offered";
   const formLead = parseLeadFormMessage(event.text);
   if (Object.keys(formLead).length) {
     state.lead = normalizeLeadData(mergeLead(state.lead, formLead));
@@ -576,6 +777,17 @@ async function handleEvent(env: Env, event: MessengerEvent) {
 
   if (state.stage === "callback_requested" && looksLikeCallbackTime(event.text)) {
     await confirmCallback(env, event, key, state);
+    return;
+  }
+
+  // "Call me" ends the questionnaire: save the request and confirm the call.
+  if (asksForCall(event.text) && state.stage !== "booked") {
+    if (state.lead.phone?.trim()) {
+      await confirmCallRequest(env, event, key, state);
+    } else {
+      state.history.push({ role: "user", content: event.text });
+      await askForCallback(env, event, key, state, "customer_asked_for_call");
+    }
     return;
   }
 
@@ -622,7 +834,7 @@ async function handleEvent(env: Env, event: MessengerEvent) {
     }
 
     if (!alreadyBooked && !callbackMode && !state.escalated && leadReadyForBooking(state.lead)) {
-      await offerSlots(env, event, key, state, attemptedBookingClaim ? undefined : output.reply);
+      await offerSlots(env, event, key, state, attemptedBookingClaim ? undefined : output.reply, firstReply, slotsAlreadyOffered);
       return;
     }
   } catch (error) {
@@ -730,6 +942,9 @@ export default {
       body = await request.json();
     } catch {
       return new Response("bad", { status: 400 });
+    }
+    for (const echo of pageEchoes(body)) {
+      context.waitUntil(handleEcho(env, echo));
     }
     for (const event of groupEventsBySender(messengerEvents(body))) {
       context.waitUntil(handleIncoming(env, event));

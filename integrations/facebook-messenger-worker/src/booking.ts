@@ -305,7 +305,6 @@ export function leadReadyForBooking(lead: LeadData) {
   return Boolean(
     leadReadyForCrm(lead) &&
     lead.serviceType?.trim() &&
-    (lead.propertyType?.trim() || lead.objectType?.trim()) &&
     (lead.address?.trim() || lead.city?.trim() || lead.zip?.trim()),
   );
 }
@@ -335,4 +334,75 @@ export function crmLeadPayload(
       .filter(Boolean)
       .join("\n") || undefined,
   };
+}
+
+/**
+ * The customer asked us to stop writing ("stop", "unsubscribe", "not
+ * interested"). Checked in code so it never depends on the language model:
+ * the reply is one short confirmation and then silence.
+ */
+export function isOptOut(text: string) {
+  const value = text.trim().toLowerCase().replaceAll("ё", "е").replace(/[.!,…\s]+$/g, "");
+  if (!value || value.length > 80 || value.includes("?")) return false;
+  if (/^(?:stop|stop it|stopp|stop all|unsubscribe|opt ?out|remove me|no more|стоп|хватит|отписаться|отпишите|отпишите меня|alto|parar|basta)$/.test(value)) {
+    return true;
+  }
+  return /\bstop (?:soliciting|messaging|texting|contacting|writing|sending|spamming|bothering|this)\b/.test(value) ||
+    /\b(?:do not|don'?t|dont|never) (?:message|text|contact|write|bother|spam) (?:me|us)\b/.test(value) ||
+    /\b(?:remove|take) me (?:from|off)\b|\bleave me alone\b|\bwrong (?:number|person)\b|\bunsubscribe\b/.test(value) ||
+    /^(?:no,? )?(?:sorry,? )?(?:i'?m |i am |we'?re |we are )?not interested(?: anymore| any more)?(?:,? (?:thanks|thank you))?$/.test(value) ||
+    /(?:^|\s)(?:не пишите|не писать|не звоните|не беспокой|больше не пиш|отстаньте|мне не интересно|мне это не интересно|неинтересно|не интересует|удалите меня|уберите меня)/.test(value) ||
+    /\b(?:no me interesa|no molest|no me escriban|no me contacten|dejen de)\b/.test(value);
+}
+
+export function optOutConfirmation(language?: string) {
+  const normalized = normalizeLanguage(language);
+  if (normalized === "ru") return "Понял, больше не пишем. Если когда-нибудь понадобится плёнка на окна — просто напишите сюда.";
+  if (normalized === "es") return "Entendido, no le escribiremos más. Si algún día necesita película para ventanas, escríbanos aquí.";
+  return "Understood — we won't message you again. If you ever need window film, just write to us here.";
+}
+
+/** The customer asks a person to phone them instead of chatting. */
+export function asksForCall(text: string) {
+  const value = text.toLowerCase().replaceAll("ё", "е");
+  return /\b(?:call me|give me a call|please call|reach me at|you can reach me|call back|callback|phone me|can (?:you|someone|somebody) call|have (?:someone|somebody) call|i(?:'d| would) (?:like|prefer) a call)\b/.test(value) ||
+    /(?:позвоните|перезвоните|наберите|наберите меня|можно звонок|жду звонка|свяжитесь со мной по телефону)/.test(value) ||
+    /\b(?:ll[aá]m[ae]me|ll[aá]menme|me pueden llamar|pueden llamarme)\b/.test(value);
+}
+
+/** A US phone number typed in a normal chat message. */
+export function extractPhone(text: string) {
+  const match = text.match(/(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+  if (!match) return undefined;
+  const digits = match[0].replace(/\D/g, "");
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith("1")) ? match[0].trim() : undefined;
+}
+
+/**
+ * Meta's own instant replies (lead-form confirmation, greeting, away message)
+ * arrive as Page echoes too. They are not a manager taking over the chat.
+ */
+export function isAutomatedPageMessage(text: string) {
+  return /will (?:contact you|follow up) by phone or email|thanks for your quote request|your request has been received|please let us know how we can help|we'll contact you within the hour|to speak with us now, call/i.test(text);
+}
+
+/** How long the bot stays quiet after a manager writes in the same chat. */
+export const HUMAN_TAKEOVER_MS = 12 * 60 * 60 * 1000;
+
+export function humanTakeoverActive(humanUntil?: string, now = Date.now()) {
+  if (!humanUntil) return false;
+  const until = Date.parse(humanUntil);
+  return Number.isFinite(until) && until > now;
+}
+
+/**
+ * ZIP prefixes within roughly 30-40 miles of Los Angeles (LA County, Orange
+ * County, eastern Ventura County). Outside it a manager arranges the visit,
+ * so the bot must not hand out local measurement slots.
+ */
+export function inLocalServiceArea(lead: LeadData) {
+  const zip = lead.zip?.trim().match(/^\d{5}/)?.[0];
+  if (!zip) return true;
+  const prefix = Number(zip.slice(0, 3));
+  return (prefix >= 900 && prefix <= 918) || (prefix >= 926 && prefix <= 928) || prefix === 930;
 }
