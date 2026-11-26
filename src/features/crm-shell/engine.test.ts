@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
 import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
-import type { CrmCalendar, CrmClients, CrmTasks, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
+import type { CrmCalendar, CrmClients, CrmInventory, CrmTasks, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
 const script = new vm.Script(source);
@@ -112,6 +112,39 @@ test("tasks are the working «Задачи» list: open by due day in the viewer
   assert.deepEqual([tasks.open[2]?.dueKey, tasks.open[2]?.time, tasks.open[2]?.mine, tasks.open[2]?.responsible.length > 0], ["2026-11-24", "09:00", false, true]);
   assert.equal(tasks.open[3]?.dueKey, "");
   assert.deepEqual([tasks.done.map((task) => task.id), tasks.doneTotal], [["t4"], 1]);
+});
+
+test("the warehouse is the working «Склад» overview: stock value, what to buy, purchases in work, film by model", () => {
+  const [low, full] = (payload.settings as { catalog: Array<{ id: string }> }).catalog;
+  const stocked = {
+    ...payload,
+    inventory: [
+      { id: "r1", catalogId: low.id, widthMm: 1524, originalLengthM: 30, remainingLengthM: 3, costTotal: 600 },
+      { id: "r2", catalogId: full.id, widthMm: 1524, originalLengthM: 30, remainingLengthM: 30, costTotal: 900 },
+    ],
+    supplies: [
+      { id: "s1", name: "Ракель", unit: "pcs", qty: 0, minQty: 2, maxQty: 6, costPerUnit: 8, vendorId: "v_3m", location: "Warehouse" },
+      { id: "s2", name: "Нож", unit: "pcs", qty: 10, minQty: 2, costPerUnit: 3 },
+    ],
+    purchaseRequests: [
+      { id: "p1", number: "PUR-2026-0001", kind: "film", itemId: low.id, itemNameSnapshot: "Madico Sunscape Select 5", qty: 5, unit: "м", orderId: "o1", responsibleId: "u_m1", status: "requested", createdAt: "2026-11-20T10:00:00.000Z" },
+      { id: "p2", number: "PUR-2026-0002", kind: "supply", itemId: "s2", qty: 4, unit: "шт", status: "received", createdAt: "2026-11-21T10:00:00.000Z" },
+    ],
+    tools: [{ id: "t1", name: "Термофен", invNumber: "7", condition: "repair", holderId: "u_m1" }],
+    inventoryMovements: [{ id: "m1", at: "2026-11-22T18:00:00.000Z", kind: "film", itemName: "Madico Sunscape Select 5", direction: "issue", qty: 2.5, unit: "м", orderId: "o1", createdBy: "u_m1" }],
+  };
+  const stock = runCrmEngine<CrmInventory>(stocked, { legacyUserIds: ["u_m1"], role: "manager" }, { model: "inventory" }, script);
+  // The working CRM drafts a reorder for the short supply with a vendor on its own, so two purchases are in work.
+  assert.deepEqual(stock.kpi, { stockValue: 990, needs: 2, out: 1, active: 2 }, "film left at its lot price plus supplies at unit cost");
+  assert.deepEqual(stock.needs.map((need) => [need.id, need.qty, need.critical]), [[`film:${low.id}`, 3, false], ["supply:s1", 0, true]]);
+  assert.deepEqual([stock.needs[1]?.vendor, stock.needs[1]?.draft], ["3M", stock.active[0]?.number], "the supply names its vendor and its auto draft");
+  assert.deepEqual(stock.active.map((row) => [row.status, row.project?.id ?? null]), [["draft", null], ["requested", "o1"]], "newest first");
+  assert.ok(stock.active[1]?.responsible);
+  assert.equal(stock.purchasesTotal, 3);
+  assert.deepEqual(stock.film.map((film) => [film.id, film.rolls, film.lengthM, film.sqft, film.status]), [[low.id, 1, 3, 49, "reorder"], [full.id, 1, 30, 492, "ok"]]);
+  assert.deepEqual(stock.supplies.map((supply) => [supply.id, supply.status]), [["s1", "critical"], ["s2", "ok"]], "short supplies first");
+  assert.deepEqual([stock.tools[0]?.condition, stock.tools[0]?.problem], ["В ремонте", true]);
+  assert.deepEqual([stock.movements[0]?.receipt, stock.movements[0]?.qty, stock.movements[0]?.project?.id], [false, 2.5, "o1"]);
 });
 
 test("no CRM card of an office role — no data", () => {

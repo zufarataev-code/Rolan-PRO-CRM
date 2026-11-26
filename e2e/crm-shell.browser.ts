@@ -92,7 +92,7 @@ async function main() {
 
       const projects = await (await context.request.get(base + '/api/v1/crm-ui/projects')).json().catch(() => null);
       const firstProject = projects?.data?.columns?.flatMap?.((column: any) => column.cards || [])?.[0]?.id;
-      const screens: Array<[string, string]> = [['home', '/crm'], ['projects', '/crm/projects'], ['leads', '/crm/leads'], ['calendar', '/crm/calendar'], ['clients', '/crm/clients'], ['tasks', '/crm/tasks']];
+      const screens: Array<[string, string]> = [['home', '/crm'], ['projects', '/crm/projects'], ['leads', '/crm/leads'], ['calendar', '/crm/calendar'], ['clients', '/crm/clients'], ['tasks', '/crm/tasks'], ['inventory', '/crm/inventory']];
       if (firstProject) screens.push(['project', `/crm/projects/${encodeURIComponent(firstProject)}`]);
       for (const [name, path] of screens) {
         await page.goto(base + path, {waitUntil: 'networkidle'});

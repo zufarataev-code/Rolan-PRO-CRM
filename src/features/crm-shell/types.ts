@@ -143,3 +143,42 @@ export type CrmTaskRow = {
 };
 
 export type CrmTasks = { user: CrmShellUser; open: CrmTaskRow[]; done: CrmTaskRow[]; doneTotal: number };
+
+export type CrmProjectRef = { id: string; label: string } | null;
+
+export type CrmInventoryNeed = { id: string; kind: "film" | "supply"; name: string; qty: number; min: number; target: number; unit: string; vendor: string; critical: boolean; draft: string };
+
+export type CrmPurchaseRow = {
+  id: string;
+  number: string;
+  createdAt: string;
+  item: string;
+  qty: number;
+  unit: string;
+  project: CrmProjectRef;
+  responsible: string;
+  vendor: string;
+  status: "draft" | "requested" | "approved" | "ordered" | "received" | "cancelled";
+  statusLabel: string;
+  neededBy: string;
+};
+
+export type CrmFilmStock = { id: string; name: string; category: string; categoryLabel: string; rolls: number; lengthM: number; sqft: number; status: "ok" | "reorder" | "critical"; vendor: string };
+
+export type CrmSupplyStock = { id: string; name: string; qty: number; min: number | null; unit: string; location: string; status: "ok" | "low" | "critical" };
+
+export type CrmToolRow = { id: string; name: string; number: string; condition: string; problem: boolean; holder: string };
+
+export type CrmMovementRow = { id: string; at: string; receipt: boolean; item: string; qty: number; unit: string; project: CrmProjectRef; who: string };
+
+export type CrmInventory = {
+  user: CrmShellUser;
+  kpi: { stockValue: number; needs: number; out: number; active: number };
+  needs: CrmInventoryNeed[];
+  active: CrmPurchaseRow[];
+  purchasesTotal: number;
+  film: CrmFilmStock[];
+  supplies: CrmSupplyStock[];
+  tools: CrmToolRow[];
+  movements: CrmMovementRow[];
+};

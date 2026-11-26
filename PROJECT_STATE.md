@@ -2,6 +2,15 @@
 
 This file is the canonical live handoff for every device, chat, agent, and contributor.
 
+## 2026-11-26 — #578 шаг 4: экран «Склад» на новом шаблоне (Claude)
+
+- Owner: «Да всю СРМ» (#578), по экрану за PR: Клиенты (#606) → Задачи (#609) → Склад → Сотрудники → Услуги и цены.
+- Branch `claude/project-thread-6klayb`, restarted from `origin/main` `b4ea2fb` after #609 merged.
+- `/crm/inventory`: модель `crmShellInventory` в `private/legacy/crm-shell-models.js` читает склад функциями рабочей CRM (`inventorySummary`, `warehouseNeedItems`, `lowStockItems`, `warehouseCatalogStockStats`, `PURCHASE_STATUS`): стоимость остатков, что закупить, закупки в работе, плёнка по направлениям, расходники, инструмент, 30 последних движений. Только чтение; приход, списание, заявки, QR и поставщики остаются на `/crm/section/inventory`.
+- Видят владелец и менеджер, как и рабочий «Склад» (те же цифры, что менеджер уже видит там).
+- Проверки: `engine.test.ts` +1, `npx tsc --noEmit` чисто, `npm test` 1413/1413; e2e открывает `/crm/inventory`. На живой CRM не проверено.
+- Next: «Сотрудники».
+
 ## 2026-11-25 — Пуш-уведомления на телефон, бесплатно (Claude)
 
 - Owner, 2026-11-23: «Как в СРМ сделать пуш уведомления?», «Да, заводи» (#602). 2026-11-25, Codex так и не сделал: «Сразу, сразу … выкладывай».
