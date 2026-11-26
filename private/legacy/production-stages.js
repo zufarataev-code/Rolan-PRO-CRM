@@ -1999,6 +1999,12 @@ function projectPaidWithoutProposal(o) {
   if (!(revenue > 0) || !(paid > 0)) return false;
   return !!o.depositReceived || paid + 0.01 >= Math.min(companyDepositFor(revenue), revenue);
 }
+// The card offers the paid shortcut only when it can go through: a paid project with
+// pending services or missing sizes keeps its measurement step (Codex review on #617).
+function projectPaidShortcutReady(o) {
+  if (!projectPaidWithoutProposal(o)) return false;
+  return !(typeof projectEstimateReadiness === 'function' && projectEstimateReadiness(o).length);
+}
 function projectPaidWithoutProposalAction(o) {
   return { icon: '💵', title: 'Оплачено → к монтажу', sub: `Клиент уже оплатил ${fmtMoney(orderPaidTotal(o))}. КП не нужно: расчёт подтвердится, дальше — точные размеры, производство и монтаж.`, variant: 'primary', onclick: `projectAcceptPaidWithoutProposal('${o.id}')` };
 }

@@ -9,14 +9,14 @@ const html = readFileSync('private/legacy/rolanpro-crm-cloud.html', 'utf8');
 const stages = readFileSync('private/legacy/production-stages.js', 'utf8');
 const fn = (src: string, name: string) => { const a = src.indexOf(`function ${name}(`); assert.ok(a >= 0, name); return src.slice(a, src.indexOf('\n}\n', a) + 3); };
 
-function world(order: any) {
+function world(order: any, readiness: string[] = []) {
   const calls: string[] = [];
   const ctx: any = {
     calls, state: { currentUserId: 'u_o1' }, getOrder: () => order, currentUser: () => ({ role: 'owner' }),
     orderUserCanSeeMoney: () => true, orderUserCanSeeInternalEconomics: () => true,
     orderRevenue: () => 3416.67, orderPaidTotal: (o: any) => (o.payments || []).reduce((s: number, p: any) => s + p.amount, 0),
     companyDepositFor: (t: number) => Math.min(t * 0.1, 1000), fmtMoney: (v: number) => '$' + v,
-    projectEstimateReadiness: () => [], projectEstimateIsApproved: (o: any) => !!o.projectEstimateApprovedAt,
+    projectEstimateReadiness: () => readiness, projectEstimateIsApproved: (o: any) => !!o.projectEstimateApprovedAt,
     projectEstimateApprovalSnapshot: () => ({}), projectEstimatePriceFingerprint: () => 'fp',
     save: () => calls.push('save'), render: () => {}, alert: (m: string) => calls.push('alert:' + m),
     changeStatus: (_: string, s: string, __: unknown, opts: any) => { calls.push('status:' + s + ':' + !!opts.skipWorkflowGuard); order.status = s; return true; },
@@ -25,7 +25,7 @@ function world(order: any) {
     scheduleInstallationPrompt: () => calls.push('install-window'),
   };
   vm.createContext(ctx);
-  vm.runInContext(fn(html, 'markOrderDepositReceived') + ['projectPaidShortcutStatuses', 'projectInstallShortcutStatuses', 'projectPaidWithoutProposal', 'projectPaidWithoutProposalAction', 'projectAcceptPaidWithoutProposal', 'projectInstallShortcutVisible', 'projectInstallShortcutHtml', 'projectStartInstallation'].map(n => fn(stages, n)).join(''), ctx);
+  vm.runInContext(fn(html, 'markOrderDepositReceived') + ['projectPaidShortcutStatuses', 'projectInstallShortcutStatuses', 'projectPaidWithoutProposal', 'projectPaidShortcutReady', 'projectPaidWithoutProposalAction', 'projectAcceptPaidWithoutProposal', 'projectInstallShortcutVisible', 'projectInstallShortcutHtml', 'projectStartInstallation'].map(n => fn(stages, n)).join(''), ctx);
   return ctx;
 }
 
@@ -51,9 +51,9 @@ test('no payment or a token payment keeps the KP path', () => {
 
 test('the paid shortcut comes before «Расчёт готов → КП» and «Отправить КП»', () => {
   const services = fn(html, 'projectServicesNextAction');
-  assert.ok(services.indexOf('projectPaidWithoutProposal(o)') < services.indexOf("title: 'Расчёт готов → КП'"));
+  assert.ok(services.indexOf('projectPaidShortcutReady(o)') < services.indexOf("title: 'Расчёт готов → КП'"));
   const next = fn(html, 'orderPrimaryNextAction');
-  assert.ok(next.indexOf('projectPaidWithoutProposal(o)') < next.indexOf("if (o.status === 'measurement_done') return projectProposalNextAction(o);"));
+  assert.ok(next.indexOf('projectPaidShortcutReady(o)') < next.indexOf("if (o.status === 'measurement_done') return projectProposalNextAction(o);"));
 });
 
 // Audit, 2026-11-17: a quick project (one total area) kept status «Новый» with the
@@ -63,7 +63,7 @@ test('a paid quick project still at «Новый» goes on to installation', () 
   const ctx = world(order);
   assert.equal(vm.runInContext('projectPaidWithoutProposal(getOrder())', ctx), true);
   const services = fn(html, 'projectServicesNextAction');
-  assert.ok(services.indexOf('projectPaidWithoutProposal(o)') < services.indexOf('if (!projectMeasurementSettled(o))'), 'payment is checked before the measurement step');
+  assert.ok(services.indexOf('projectPaidShortcutReady(o)') < services.indexOf('if (!projectMeasurementSettled(o))'), 'payment is checked before the measurement step');
   vm.runInContext("projectStartInstallation('o')", ctx);
   assert.equal(order.status, 'proposal_accepted');
   assert.deepEqual(ctx.calls.filter((c: string) => c === 'install-window'), ['install-window']);
@@ -105,4 +105,14 @@ test('the shortcut records the client\'s yes the way the project allows', () => 
   const d = world(accepted);
   vm.runInContext("projectStartInstallation('o')", d);
   assert.deepEqual(d.calls, ['install-window']);
+});
+
+// Codex review on #617: a paid project with a pending service or missing sizes cannot be
+// accepted by payment yet, so its card keeps the measurement step instead of a dead end.
+test('a paid project with an unfinished estimate keeps its measurement step', () => {
+  const order: any = { id: 'o', status: 'new', depositReceived: true, payments: [{ amount: 330 }], timeline: [] };
+  const ctx = world(order, ['размеры окон']);
+  assert.equal(vm.runInContext('projectPaidWithoutProposal(getOrder())', ctx), true);
+  assert.equal(vm.runInContext('projectPaidShortcutReady(getOrder())', ctx), false);
+  assert.equal(vm.runInContext('projectPaidShortcutReady(getOrder())', world(order)), true);
 });
