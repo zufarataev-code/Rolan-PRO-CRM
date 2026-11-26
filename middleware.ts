@@ -74,6 +74,7 @@ async function verifyEdgeSession(token: string) {
 export function isPublicPath(pathname: string) {
   return (
     pathname === "/" ||
+    pathname === "/api/health" ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/api/v1/auth/demo-login") ||

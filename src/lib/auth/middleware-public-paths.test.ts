@@ -18,3 +18,9 @@ test("allows only the HMAC-protected operations agent endpoint through session m
   assert.equal(isPublicPath("/api/v1/agent/status"), false);
   assert.equal(isPublicPath("/api/v1/agents"), false);
 });
+
+test("lets the watcher reach only the exact health endpoint without a session", () => {
+  assert.equal(isPublicPath("/api/health"), true);
+  assert.equal(isPublicPath("/api/health/details"), false);
+  assert.equal(isPublicPath("/api/v1/health"), false);
+});
