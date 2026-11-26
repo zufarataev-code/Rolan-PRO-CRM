@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 import { composeEngineSource, resolveTimeZone, runCrmEngine } from "./engine";
 import { CRM_LEGACY_SECTIONS, crmNavFor, crmSectionSrc } from "./nav";
-import type { CrmCalendar, CrmClients, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
+import type { CrmCalendar, CrmClients, CrmTasks, CrmLeadLinks, CrmOverview, CrmProjectPage, CrmProjectsBoard } from "./types";
 
 const source = composeEngineSource();
 const script = new vm.Script(source);
@@ -90,6 +90,28 @@ test("clients are the working «Клиенты» list: own projects, money and a
   assert.ok(all.clients.find((client) => client.id === "c2")?.search.includes("santa monica"), "the search box finds a client by address");
   const mine = runCrmEngine<CrmClients>(payload, { legacyUserIds: ["u_m1"], role: "manager" }, { model: "clients" }, script);
   assert.deepEqual(mine.clients.map((client) => client.id).sort(), ["c1", "c3"]);
+});
+
+test("tasks are the working «Задачи» list: open by due day in the viewer's zone, mine marked, the latest done kept", () => {
+  const withTasks = {
+    ...payload,
+    tasks: [
+      { id: "t1", title: "Купить плёнку", dueAt: "2026-11-24T09:00", teamIds: [], responsibleId: "u_m1", clientId: null, notes: "", status: "open" },
+      { id: "t2", title: "Перезвонить: Acme", dueAt: "2026-11-23T02:30:00.000Z", teamIds: ["u_o1"], responsibleId: "u_o1", clientId: "c1", notes: "КП", status: "open", source: "rolan_agent" },
+      { id: "t3", title: "Без срока", dueAt: "", teamIds: [], responsibleId: "", status: "open" },
+      { id: "t4", title: "Сделано", dueAt: "2026-11-20T10:00", status: "done", doneAt: "2026-11-20T18:00:00.000Z" },
+      { id: "t5", title: "📞 Перезвонить: старый звонок", dueAt: "2026-11-23T03:15:00.000", teamIds: [], responsibleId: "", status: "open" },
+    ],
+  };
+  const tasks = runCrmEngine<CrmTasks>(withTasks, owner, { model: "tasks" }, script);
+  assert.deepEqual(tasks.open.map((task) => task.id), ["t2", "t5", "t1", "t3"], "a UTC time falls on the viewer's day; no date last");
+  const legacy = tasks.open.find((task) => task.id === "t5");
+  assert.deepEqual([legacy?.dueKey, legacy?.time], ["2026-11-22", "19:15"], "an old callback without its Z is UTC for both day and time");
+  const call = tasks.open[0];
+  assert.deepEqual([call?.dueKey, call?.time, call?.mine, call?.client, call?.agent], ["2026-11-22", "18:30", true, "Acme Business Tower", true]);
+  assert.deepEqual([tasks.open[2]?.dueKey, tasks.open[2]?.time, tasks.open[2]?.mine, tasks.open[2]?.responsible.length > 0], ["2026-11-24", "09:00", false, true]);
+  assert.equal(tasks.open[3]?.dueKey, "");
+  assert.deepEqual([tasks.done.map((task) => task.id), tasks.doneTotal], [["t4"], 1]);
 });
 
 test("no CRM card of an office role — no data", () => {

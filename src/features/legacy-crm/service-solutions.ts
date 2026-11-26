@@ -354,7 +354,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   return copy;
 }
 
-export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = []): string | null {
+export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = [], fieldSave = false): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
@@ -907,7 +907,11 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
     }
     if (!owner && historicalImportExisting
       && stableJson(historicalProjectFacts(order)) !== stableJson(historicalProjectFacts(oldOrder))) {
-      if (!managerIds.includes(String(oldOrder.managerId))) {
+      // A field save was already cut down by mergeFieldWorkspace to the
+      // assigned surveyor's or installer's own operational fields (sizes,
+      // photos, notes, their stage marks), so the surveyor sent to the object
+      // enters measurements without being the project's manager (Owner, 2026-11-23).
+      if (!fieldSave && !managerIds.includes(String(oldOrder.managerId))) {
         return 'Исторический проект может менять только назначенный менеджер.';
       }
       if (order.managerId !== oldOrder.managerId) {

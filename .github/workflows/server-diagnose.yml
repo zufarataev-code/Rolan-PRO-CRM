@@ -38,7 +38,14 @@ jobs:
           echo "== nginx :443 local"; curl -sk -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 --resolve rolanpro-crm.143-110-136-211.sslip.io:443:127.0.0.1 https://rolanpro-crm.143-110-136-211.sslip.io/ || echo fail
           echo "== nginx :80 local"; curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 -H 'Host: rolanpro-crm.143-110-136-211.sslip.io' http://127.0.0.1/ || echo fail
           echo "== nginx processes"; pgrep -a nginx | head -5 || echo none
-          echo "== watcher log tail"; ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -3; tail -n 30 "$(ls -t /home/runcloud/logs/*rolanpro* 2>/dev/null | head -1)" 2>/dev/null || true
+          echo "== swap"; swapon --show 2>/dev/null || true
+          echo "== app /api/health"; curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 10 http://127.0.0.1:3000/api/health || echo fail
+          echo "== next-server memory"; ps -eo pid,rss,etime,args --sort=-rss | grep -E '[n]ext(-server| start)' | head -5 | awk '{printf "pid %s rss %d MB up %s\n", $1, $2/1024, $3}'
+          # The CRM watcher log by name: "newest *rolanpro* file" picked the PostgreSQL log.
+          CRM_LOG=/home/runcloud/logs/rolanpro-crm-supervisor.log
+          echo "== CRM watcher: crashes, restarts, deploys"; grep -nE "exited|killed by signal|unresponsive|Restarting|restart failed|health check|Starting Next|healthy|failed|Rolling back|Memory:" "$CRM_LOG" 2>/dev/null | tail -n 50 || echo "no $CRM_LOG"
+          echo "== CRM watcher log tail"; tail -n 20 "$CRM_LOG" 2>/dev/null || true
+          echo "== kernel out-of-memory kills"; sudo -n dmesg -T 2>/dev/null | grep -iE "out of memory|killed process|oom-kill" | tail -n 20 || echo "dmesg not readable"
           REMOTE
       - name: CallRail ingress status (no caller data)
         run: |

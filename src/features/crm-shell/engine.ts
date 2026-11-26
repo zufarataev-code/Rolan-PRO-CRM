@@ -156,6 +156,7 @@ export type EngineRequest =
   | { model: "projects" }
   | { model: "leadLinks" }
   | { model: "clients" }
+  | { model: "tasks" }
   | { model: "calendar"; from: string; to: string }
   | { model: "project"; projectId: string };
 
