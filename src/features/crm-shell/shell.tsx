@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
 import { allFramesSaved, signedOut } from "@/features/crm-shell/logout";
 import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
+import { PushToggle } from "@/features/crm-shell/push-toggle";
 
 type Role = "owner" | "manager";
 
@@ -163,6 +164,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
           <Button asChild variant="outline" size="sm">
             <a href="/legacy-crm">Прежний интерфейс</a>
           </Button>
+          <PushToggle />
           <LogoutButton />
         </div>
       </aside>
@@ -193,6 +195,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
             <Button asChild variant="outline" className="w-full">
               <a href="/legacy-crm">Прежний интерфейс</a>
             </Button>
+            <PushToggle />
             <LogoutButton className="w-full" />
           </div>
         </SheetContent>

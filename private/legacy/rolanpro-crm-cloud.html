@@ -23,6 +23,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/push-client.js" defer></script>
 <style>
   :root {
     --brand-dark: #0f172a;
@@ -35097,10 +35098,61 @@ function submitReview(oid) {
 }
 
 // ---------- NOTIFICATIONS VIEW ----------
+// ---------- PHONE PUSHES (public/push-client.js) ----------
+let rpPushStatus = 'loading';
+let rpPushBusy = false;
+let rpPushNote = '';
+let rpPushChecking = false;
+function rpRefreshPushStatus() {
+  if (rpPushChecking) return;
+  rpPushChecking = true;
+  const check = () => {
+    if (!window.RolanPush) { rpPushChecking = false; return; }
+    window.RolanPush.status().then(next => { rpPushChecking = false; if (next !== rpPushStatus) { rpPushStatus = next; render(); } });
+  };
+  if (window.RolanPush) check(); else setTimeout(check, 800);
+}
+function rpPushAction(action) {
+  if (!window.RolanPush || rpPushBusy) return;
+  rpPushBusy = true;
+  rpPushNote = '';
+  // enable() asks the browser for permission, so it runs straight from the tap.
+  const run = action === 'enable' ? window.RolanPush.enable() : action === 'disable' ? window.RolanPush.disable()
+    : window.RolanPush.test().then(ok => { rpPushNote = ok ? 'Проверочное уведомление отправлено.' : 'Не получилось отправить проверку. Попробуйте ещё раз через минуту.'; return rpPushStatus; });
+  run.then(next => { rpPushStatus = next || rpPushStatus; })
+    .catch(() => { rpPushNote = 'Не получилось включить уведомления. Попробуйте ещё раз.'; })
+    .finally(() => { rpPushBusy = false; render(); });
+}
+function renderPushCard() {
+  if (rpPushStatus === 'loading') { rpRefreshPushStatus(); return ''; }
+  if (rpPushStatus === 'unavailable') return '';
+  const texts = {
+    off: 'Новые лиды, назначенные замеры и монтажи, внесённые замеры и принятые КП придут на этот телефон, даже когда CRM закрыта.',
+    on: 'Уведомления включены на этом устройстве.',
+    ios_install: 'На iPhone уведомления приходят только в приложение: в Safari нажмите «Поделиться», затем «На экран Домой», откройте RolanPRO с экрана и включите здесь.',
+    denied: 'Уведомления для CRM запрещены. Разрешите их в настройках телефона или браузера и откройте эту страницу снова.',
+    unsupported: 'Этот браузер не принимает уведомления. Откройте CRM в Chrome или Safari на телефоне.',
+  };
+  const busy = rpPushBusy ? 'disabled' : '';
+  const buttons = rpPushStatus === 'off'
+    ? `<button class="btn-primary text-sm" ${busy} onclick="rpPushAction('enable')">Включить уведомления на этом устройстве</button>`
+    : rpPushStatus === 'on'
+      ? `<button class="btn-ghost text-sm" ${busy} onclick="rpPushAction('test')">Проверить</button><button class="btn-ghost text-sm" ${busy} onclick="rpPushAction('disable')">Выключить</button>`
+      : '';
+  return `
+    <div class="card" data-push-card="${rpPushStatus}">
+      <div class="font-medium">📲 Уведомления на телефон</div>
+      <div class="text-sm text-gray-600 mt-1">${texts[rpPushStatus] || texts.unsupported}</div>
+      ${buttons ? `<div class="flex gap-2 mt-3 flex-wrap">${buttons}</div>` : ''}
+      ${rpPushNote ? `<div class="text-xs text-gray-500 mt-2">${rpPushNote}</div>` : ''}
+    </div>`;
+}
+
 function renderNotifications() {
   const notes = myNotifications();
   return `
   <div class="max-w-2xl space-y-2">
+    ${renderPushCard()}
     ${notes.length === 0 ? `<div class="card text-center text-gray-500">${T('empty')}</div>` :
       notes.map(n => `
         <div class="card ${n.readAt?'opacity-70':''}" onclick="${n.link ? `location.hash='${n.link}';` : ''}">
