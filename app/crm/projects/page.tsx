@@ -120,11 +120,12 @@ export default function CrmProjectsPage() {
             ) : null}
           </div>
 
-          {/* Computer: the whole funnel side by side. Columns share the width so every stage stays on screen;
-              below ~1450px they keep a 200px minimum and the row scrolls with a visible scrollbar. */}
-          <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin] max-lg:hidden">
+          {/* Computer: the whole funnel side by side. Columns share the width so every stage stays on screen.
+              With the sidebar a 1440–1600px laptop leaves ~1265px for the board: seven columns fit from 164px,
+              so the minimum is 164px; narrower than that the row scrolls with a visible scrollbar. */}
+          <div className="flex gap-2 overflow-x-auto pb-3 [scrollbar-width:thin] max-lg:hidden">
             {columns.map((column) => (
-              <section key={column.id} id={column.id} className="bg-muted/60 min-w-[200px] flex-1 basis-0 rounded-xl p-2" style={{ borderTop: `3px solid ${column.color}` }}>
+              <section key={column.id} id={column.id} className="bg-muted/60 min-w-[164px] flex-1 basis-0 rounded-xl p-1.5" style={{ borderTop: `3px solid ${column.color}` }}>
                 <ColumnHead column={column} />
                 <ColumnCards column={column} />
               </section>
