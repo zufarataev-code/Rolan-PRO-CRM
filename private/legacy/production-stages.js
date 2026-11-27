@@ -795,6 +795,15 @@ async function cloudPersist(options = {}) {
         localStorage.setItem('rolanpro_crm', JSON.stringify(db));
         continue;
       }
+      // Owner, 2026-11-27: one refused project must not block every other save. The
+      // server names the project it refuses; only that project's change is set aside
+      // (kept on the device and shown once), the rest is saved at once.
+      if (!response.ok && result?.meta?.refused_project_id && typeof projectSetAsideRefused === 'function'
+        && projectSetAsideRefused(String(result.meta.refused_project_id), String(result?.errors?.[0]?.message || ''))) {
+        snapshot = JSON.parse(JSON.stringify(db));
+        if (typeof renderBackground === 'function') renderBackground(); else render();
+        continue;
+      }
       if (!response.ok) {
         const error = new Error(result?.errors?.[0]?.message || 'save failed');
         error.retryable = response.status === 429 || response.status >= 500;
@@ -841,6 +850,101 @@ async function cloudPersist(options = {}) {
       cloudScheduleSave();
     }
   }
+}
+
+// ---------- Отклонённая правка проекта (Owner, 2026-11-27) ----------
+// «Это реально невозможно работать так»: правка по закрытому R-261122-165, которую
+// сервер отклонил вечером, осталась в телефоне и уходила с каждым сохранением, так что
+// утром не сохранялся замер нового проекта R-261127-179. Теперь отклонённая правка
+// одного проекта откладывается: проект возвращается к версии с сервера, правка хранится
+// на устройстве и один раз показывается текстом (скопировать или сбросить).
+function projectSetAsideStorageKey() { return 'rolanpro_crm_set_aside'; }
+function projectFindInWorkspace(payload, id) {
+  for (const list of ['orders', 'archivedOrders']) {
+    const rows = Array.isArray(payload?.[list]) ? payload[list] : [];
+    const index = rows.findIndex(row => String(row?.id ?? '') === id);
+    if (index >= 0) return { list, index, row: rows[index] };
+  }
+  return null;
+}
+function projectSetAsideEntries() {
+  try { const kept = JSON.parse(localStorage.getItem(projectSetAsideStorageKey()) || '[]'); return Array.isArray(kept) ? kept : []; } catch (_) { return []; }
+}
+function projectSetAsideStore(entries) {
+  try { localStorage.setItem(projectSetAsideStorageKey(), JSON.stringify(entries.slice(-20))); } catch (_) {}
+}
+/** Set the refused change of one project aside; false when there is nothing of ours to set aside. */
+function projectSetAsideRefused(id, reason) {
+  const local = projectFindInWorkspace(db, id);
+  if (!local) return false;
+  const saved = projectFindInWorkspace(cloudBaseSnapshot, id);
+  if (saved && saved.list === local.list && JSON.stringify(saved.row) === JSON.stringify(local.row)) return false;
+  const entry = { key: `${id}:${Date.now()}`, id, number: String(local.row?.number || ''), reason, at: new Date().toISOString(),
+    project: JSON.parse(JSON.stringify(local.row)) };
+  projectSetAsideStore([...projectSetAsideEntries(), entry]);
+  db[local.list].splice(local.index, 1);
+  if (saved) {
+    if (!Array.isArray(db[saved.list])) db[saved.list] = [];
+    db[saved.list].splice(Math.min(saved.index, db[saved.list].length), 0, JSON.parse(JSON.stringify(saved.row)));
+  }
+  try { localStorage.setItem('rolanpro_crm', JSON.stringify(db)); } catch (_) {}
+  if (typeof cloudStatus === 'function') cloudStatus(`${entry.number || 'Проект'}: правка не принята и отложена. Остальное сохраняем`, 'red');
+  projectShowSetAside(entry.key);
+  return true;
+}
+/** What was entered, as text a person can keep: rooms, windows and sizes, notes. */
+function projectSetAsideText(entry) {
+  const o = entry?.project || {};
+  const client = typeof getClient === 'function' ? getClient(o.clientId) : null;
+  const lines = [`${entry?.number || 'Проект'} — не сохранено`, String(entry?.reason || '')];
+  if (client?.name) lines.push(`Клиент: ${client.name}`);
+  (o.measurements?.rooms || []).forEach(room => {
+    const windows = Array.isArray(room?.windows) ? room.windows : [];
+    if (!windows.length) return;
+    lines.push('', `${room.name || 'Помещение'}:`);
+    windows.forEach(win => {
+      const qty = Number(win?.qty) > 1 ? ` × ${win.qty} шт.` : '';
+      const note = String(win?.notes || win?.note || '').trim();
+      lines.push(`• ${win?.name || win?.type || 'Окно'} — ${win?.width ?? '?'} × ${win?.height ?? '?'}${qty}${note ? ` (${note})` : ''}`);
+    });
+  });
+  const notes = String(o.notes || o.measurementNotes || '').trim();
+  if (notes) lines.push('', `Заметки: ${notes}`);
+  return lines.filter((line, index) => index < 2 ? line : true).join('\n');
+}
+function projectShowSetAside(key) {
+  if (typeof document === 'undefined') return;
+  const entry = projectSetAsideEntries().find(item => item.key === key);
+  let layer = document.getElementById('rp-set-aside-layer');
+  if (!entry) { if (layer) layer.remove(); return; }
+  if (!layer) { layer = document.createElement('div'); layer.id = 'rp-set-aside-layer'; document.body.appendChild(layer); }
+  const text = projectSetAsideText(entry);
+  layer.innerHTML = `<div class="modal-backdrop" style="z-index:1300" role="dialog" aria-modal="true" aria-label="Правка не сохранена">
+    <div class="modal-content workspace-modal p-6" style="max-width:34rem" onclick="event.stopPropagation()">
+      <div class="text-xs font-black text-red-700">НЕ СОХРАНЕНО</div>
+      <h3 class="font-black text-xl">${academyEsc(entry.number || 'Проект')}</h3>
+      <p class="text-sm text-gray-600 mt-2">${academyEsc(entry.reason || 'Сервер не принял правку.')}</p>
+      <p class="text-sm text-gray-600 mt-2">Остальные проекты сохраняются как обычно. Правки по этому проекту отменены на телефоне, вот они:</p>
+      <textarea class="w-full mt-3 text-sm" rows="8" readonly>${academyEsc(text)}</textarea>
+      <div class="flex gap-2 mt-4">
+        <button type="button" class="btn-primary flex-1" onclick="projectCopySetAside('${academyEsc(key)}')">Скопировать</button>
+        <button type="button" class="btn-ghost flex-1" onclick="projectDropSetAside('${academyEsc(key)}')">Сбросить</button>
+      </div>
+    </div>
+  </div>`;
+}
+function projectCopySetAside(key) {
+  const entry = projectSetAsideEntries().find(item => item.key === key);
+  if (!entry) return projectShowSetAside(key);
+  const text = projectSetAsideText(entry);
+  const done = () => { if (typeof cloudStatus === 'function') cloudStatus('Скопировано', 'green'); projectDropSetAside(key); };
+  if (navigator?.clipboard?.writeText) navigator.clipboard.writeText(text).then(done).catch(() => alert(text));
+  else alert(text);
+}
+function projectDropSetAside(key) {
+  projectSetAsideStore(projectSetAsideEntries().filter(item => item.key !== key));
+  const layer = typeof document !== 'undefined' ? document.getElementById('rp-set-aside-layer') : null;
+  if (layer) layer.remove();
 }
 
 /**
