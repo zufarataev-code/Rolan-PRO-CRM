@@ -112,12 +112,16 @@ test("new CRM notifications of the pushed kinds become pushes", () => {
     { notification_id: "n2", recipient_user_id: "U-MGR", actor_user_id: null, type_key: "agreement.signed", title: "Договор подписан", message: "R-2", entity_type: "proposal" },
     { notification_id: "n3", recipient_user_id: "U-MGR", actor_user_id: "U-MGR", type_key: "survey.completed", title: "x", message: "y", entity_type: null },
     { notification_id: "n4", recipient_user_id: "U-MGR", actor_user_id: null, type_key: "task.overdue", title: "x", message: "y", entity_type: null },
+    { notification_id: "n6", recipient_user_id: "U-MGR", actor_user_id: null, type_key: "deposit.paid", title: "Аванс получен", message: "Аванс по проекту получен. Назначьте день монтажа.", entity_type: "deposit" },
   ];
   const events = pgNotificationEvents(rows, ["U-OWNER"]);
   assert.deepEqual(events.map((event) => [event.key, event.kind, event.recipients]), [
     ["pg:notification:n1", "assigned_install", ["U-INST1"]],
     ["pg:notification:n2", "proposal_accepted", ["U-MGR", "U-OWNER"]],
+    ["pg:notification:n6", "deposit_paid", ["U-MGR", "U-OWNER"]],
   ]);
+  assert.equal(events[2].url, "/crm/projects");
+  assert.equal(events[2].title, "Аванс получен — назначьте день монтажа");
 });
 
 test("the manager's schedule confirmation is not pushed as a job; the installer's row still is", () => {
