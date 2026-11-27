@@ -662,8 +662,8 @@ export async function onDepositPaid(
     entityType: "deposit",
     entityId: input.depositId,
     typeKey: "deposit.paid",
-    title: "Deposit paid",
-    message: "Deposit оплачен. Можно создавать project.",
+    title: "Аванс получен",
+    message: "Аванс по проекту получен. Назначьте день монтажа.",
   });
 }
 
