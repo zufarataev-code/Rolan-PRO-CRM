@@ -1499,13 +1499,16 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
   }
   if (phone) {
     const twilio = getTwilioConfig();
-    const phoneChannel = twilio.whatsappReady ? "whatsapp" : twilio.ready ? "sms" : null;
-    if (phoneChannel) {
+    // WhatsApp first; outside the 24-hour window Twilio rejects free text
+    // (needs a template), so SMS is the fallback and the link still arrives.
+    const attempts: Array<"whatsapp" | "sms"> = [...(twilio.whatsappReady ? ["whatsapp" as const] : []), ...(twilio.ready ? ["sms" as const] : [])];
+    for (const phoneChannel of attempts) {
       try {
         const sent = phoneChannel === "whatsapp"
           ? await sendWhatsApp({ to: phone, body: sms, clientId: proposal.client.client_id, actorUserId: session.user.user_id })
           : await sendSms({ to: phone, body: sms, clientId: proposal.client.client_id, actorUserId: session.user.user_id });
         channels.push({ channel: phoneChannel, to: phone, ok: true, id: sent.sid ?? null });
+        break;
       } catch (error) {
         channels.push({ channel: phoneChannel, to: phone, ok: false, error: error instanceof Error ? error.message : String(error) });
       }
