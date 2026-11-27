@@ -9,8 +9,10 @@ import { AGREEMENT_STATUSES, DEPOSIT_STATUSES, PROPOSAL_STATUSES } from "@/featu
 import { onDepositPaid, onProposalApproved, onProposalSent } from "@/features/core/events";
 import { getServiceCalculatorBootstrap } from "@/features/calculator/bootstrap";
 import { calculateLineEconomics, calculateLineTotal, getServiceAddonById, getServiceTypeById } from "@/features/calculator/logic";
-import { buildProposalEmail } from "@/features/proposals/email";
+import { buildProposalEmail, buildProposalSms } from "@/features/proposals/email";
 import { sendPrimaryGmail } from "@/features/gmail/service";
+import { getTwilioConfig, sendSms, sendWhatsApp } from "@/features/twilio/service";
+import { normalizePhoneE164 } from "@/features/google-ads/normalization";
 import { getEnv } from "@/lib/env";
 import type { CalculatorCard } from "@/features/calculator/types";
 
@@ -1445,8 +1447,10 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
       },
       client: {
         select: {
+          client_id: true,
           name: true,
           email: true,
+          phone: true,
         },
       },
     },
@@ -1460,9 +1464,14 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
     return "locked" as const;
   }
 
+  // Owner, 2026-11-26 (#627): the proposal goes out from the server on every
+  // channel the client has — email through Gmail, the link by WhatsApp or SMS
+  // through Twilio. No sms:/wa.me links that depend on the manager's device.
   const recipient = proposal.client.email?.trim().toLowerCase() || "";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-    return "missing_email" as const;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
+  const phone = normalizePhoneE164(proposal.client.phone) ?? "";
+  if (!emailOk && !phone) {
+    return "missing_contact" as const;
   }
 
   const publicUrl = `${getEnv().appUrl.replace(/\/$/, "")}/proposal/${proposal.access_token}`;
@@ -1472,11 +1481,40 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
     proposalTitle: proposal.title,
     publicUrl,
   });
-  const delivered = await sendPrimaryGmail({
-    to: recipient,
-    subject: message.subject,
-    body: message.body,
+  const sms = buildProposalSms({
+    clientName: proposal.client.name,
+    proposalCode: proposal.proposal_code,
+    proposalTitle: proposal.title,
+    publicUrl,
   });
+  const channels: Array<{ channel: "email" | "whatsapp" | "sms"; to: string; ok: boolean; id?: string | null; error?: string }> = [];
+  let delivered: { id?: string | null } = {};
+  if (emailOk) {
+    try {
+      delivered = await sendPrimaryGmail({ to: recipient, subject: message.subject, body: message.body });
+      channels.push({ channel: "email", to: recipient, ok: true, id: delivered.id ?? null });
+    } catch (error) {
+      channels.push({ channel: "email", to: recipient, ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  if (phone) {
+    const twilio = getTwilioConfig();
+    const phoneChannel = twilio.whatsappReady ? "whatsapp" : twilio.ready ? "sms" : null;
+    if (phoneChannel) {
+      try {
+        const sent = phoneChannel === "whatsapp"
+          ? await sendWhatsApp({ to: phone, body: sms, clientId: proposal.client.client_id, actorUserId: session.user.user_id })
+          : await sendSms({ to: phone, body: sms, clientId: proposal.client.client_id, actorUserId: session.user.user_id });
+        channels.push({ channel: phoneChannel, to: phone, ok: true, id: sent.sid ?? null });
+      } catch (error) {
+        channels.push({ channel: phoneChannel, to: phone, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+  if (!channels.some((item) => item.ok)) {
+    const reasons = channels.map((item) => `${item.channel}: ${item.error}`).join("; ");
+    throw new Error(reasons ? `Не удалось отправить КП — ${reasons}` : "Не удалось отправить КП: ни email, ни Twilio не настроены.");
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.proposal.update({
@@ -1501,9 +1539,11 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
       actorUserId: session.user.user_id,
       actorType: "manager",
       eventKey: "proposal.sent",
-      message: "Proposal отправлен клиенту через корпоративную Gmail для выбора услуг и подписания agreement.",
+      message: `КП отправлено клиенту: ${channels.filter((item) => item.ok).map((item) => item.channel).join(" + ")}${channels.some((item) => !item.ok) ? ` (не ушло: ${channels.filter((item) => !item.ok).map((item) => item.channel).join(", ")})` : ""}.`,
       metadata: {
         recipient,
+        phone,
+        channels,
         public_url: publicUrl,
         gmail_message_id: delivered.id ?? null,
       },
@@ -1515,10 +1555,12 @@ export async function sendProposal(session: SessionLike, proposalId: string) {
     entityType: "proposal",
     entityId: proposalId,
     actionKey: "proposal.sent",
-    message: `Proposal отправлен клиенту по сделке ${proposal.deal.title}.`,
+    message: `КП отправлено клиенту по сделке ${proposal.deal.title} (${channels.filter((item) => item.ok).map((item) => item.channel).join(" + ")}).`,
     metadata: {
       deal_id: proposal.deal_id,
       recipient,
+      phone,
+      channels,
       public_url: publicUrl,
       gmail_message_id: delivered.id ?? null,
     },
