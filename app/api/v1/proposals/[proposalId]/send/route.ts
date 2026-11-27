@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     proposal = await sendProposal(auth.session, proposalId);
   } catch (error) {
-    return apiError(502, "proposal_email_failed", error instanceof Error ? error.message : "Proposal email could not be sent.");
+    return apiError(502, "proposal_email_failed", error instanceof Error ? error.message : "Не удалось отправить КП.");
   }
 
   if (!proposal) {
@@ -34,8 +34,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(409, "proposal_locked", "Proposal is already approved and cannot be re-opened for edits.");
   }
 
-  if (proposal === "missing_email") {
-    return apiError(409, "client_email_missing", "Add a valid client email before sending the proposal.");
+  if (proposal === "missing_contact") {
+    return apiError(409, "client_contact_missing", "Укажите телефон или email клиента, чтобы отправить КП.");
   }
 
   return apiSuccess({

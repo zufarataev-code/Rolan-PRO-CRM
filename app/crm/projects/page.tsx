@@ -120,10 +120,11 @@ export default function CrmProjectsPage() {
             ) : null}
           </div>
 
-          {/* Computer: the whole funnel side by side. */}
-          <div className="hidden gap-3 overflow-x-auto pb-3 lg:flex">
+          {/* Computer: the whole funnel side by side. Columns share the width so every stage stays on screen;
+              below ~1450px they keep a 200px minimum and the row scrolls with a visible scrollbar. */}
+          <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin] max-lg:hidden">
             {columns.map((column) => (
-              <section key={column.id} id={column.id} className="bg-muted/60 w-72 shrink-0 rounded-xl p-2" style={{ borderTop: `3px solid ${column.color}` }}>
+              <section key={column.id} id={column.id} className="bg-muted/60 min-w-[200px] flex-1 basis-0 rounded-xl p-2" style={{ borderTop: `3px solid ${column.color}` }}>
                 <ColumnHead column={column} />
                 <ColumnCards column={column} />
               </section>

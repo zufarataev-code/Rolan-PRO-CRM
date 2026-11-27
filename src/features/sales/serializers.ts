@@ -43,6 +43,7 @@ export function serializeLead(lead: Lead & {
     email: lead.email,
     source: lead.source,
     notes: lead.notes,
+    contact_tag: lead.contact_tag,
     city: lead.city,
     assigned_manager: lead.assigned_manager,
     pipeline_status: {

@@ -4,7 +4,7 @@
  * CRM's bell. Pure functions, so every rule here is covered by tests.
  */
 
-export type PushKind = "new_lead" | "assigned_measure" | "assigned_install" | "measurement_done" | "proposal_accepted" | "test";
+export type PushKind = "new_lead" | "assigned_measure" | "assigned_install" | "measurement_done" | "proposal_accepted" | "deposit_paid" | "test";
 
 export type PushEvent = {
   /** Same key → one push per person, however many times the event is seen. */
@@ -227,6 +227,8 @@ const PG_TYPE_KINDS: Record<string, { kind: PushKind; withOwners: boolean; title
   "survey.completed": { kind: "measurement_done", withOwners: false, title: "Замер внесён" },
   "agreement.signed": { kind: "proposal_accepted", withOwners: true, title: "Клиент принял КП" },
   "proposal.approved": { kind: "proposal_accepted", withOwners: true, title: "Клиент принял КП" },
+  // Owner, 2026-11-26: the deposit is the signal to put the work on the calendar.
+  "deposit.paid": { kind: "deposit_paid", withOwners: true, title: "Аванс получен — назначьте день монтажа" },
 };
 
 export const PG_PUSH_TYPES = Object.keys(PG_TYPE_KINDS);
@@ -244,7 +246,7 @@ export function pgNotificationEvents(rows: PgNotificationRow[], ownerUserIds: st
       kind: rule.kind,
       title: rule.title,
       body: row.message || row.title,
-      url: rule.kind === "proposal_accepted" || rule.kind === "measurement_done" ? "/crm/projects" : "/legacy-crm",
+      url: rule.kind === "proposal_accepted" || rule.kind === "deposit_paid" || rule.kind === "measurement_done" ? "/crm/projects" : "/legacy-crm",
       recipients: [...recipients],
     });
   }

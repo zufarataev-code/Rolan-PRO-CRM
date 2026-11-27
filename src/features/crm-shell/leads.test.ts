@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { filterLeads, leadFilters, leadRows, stageChoices, type ApiLead, type LeadStage } from "./leads";
+import { filterLeads, leadFilters, leadRows, leadSourceSummary, stageChoices, type ApiLead, type LeadStage } from "./leads";
 import { LEAD_STAGES } from "../sales/lead-stages";
 
 const stages = LEAD_STAGES as unknown as LeadStage[];
@@ -35,7 +35,7 @@ test("filters: active, closed, one stage, and search", () => {
   assert.deepEqual(filterLeads(rows, "closed", "").map((row) => row.id), ["b", "c"]);
   assert.deepEqual(filterLeads(rows, "QUALIFIED", "").map((row) => row.id), ["d"]);
   assert.deepEqual(filterLeads(rows, "active", "smart FILM").map((row) => row.id), ["a"]);
-  assert.deepEqual(leadFilters(rows, stages).map((chip) => `${chip.id}:${chip.count}`), ["active:2", "NEW_LEAD:1", "QUALIFIED:1", "closed:2"]);
+  assert.deepEqual(leadFilters(rows, stages).map((chip) => `${chip.id}:${chip.count}`), ["active:2", "tag:none:2", "NEW_LEAD:1", "QUALIFIED:1", "closed:2"]);
 });
 
 test("only manual stages can be chosen, plus the stage the lead is in", () => {
@@ -43,4 +43,23 @@ test("only manual stages can be chosen, plus the stage the lead is in", () => {
   assert.ok(codes.includes("CLOSED_WON"));
   assert.ok(!codes.includes("PROPOSAL_SENT"));
   assert.deepEqual(stageChoices(rows[0], stages).map((choice) => choice.code), stages.filter((stage) => stage.manual).map((stage) => stage.code));
+});
+
+test("call outcome tags: row field, filter chips and the per-source summary", () => {
+  const tagged = leadRows([
+    lead("a", "NEW_LEAD", { source: "meta_lead_ads", contact_tag: "REACHED" }),
+    lead("b", "CONTACTING", { source: "meta_lead_ads", contact_tag: "NOT_REACHED" }),
+    lead("c", "NEW_LEAD", { source: "meta_lead_ads" }),
+    lead("d", "NEW_LEAD", { source: "website", contact_tag: "WRONG_PHONE" }),
+    lead("e", "SPAM", { source: "website", contact_tag: "BOGUS" as never }),
+  ], stages, now);
+  assert.deepEqual(tagged.map((row) => row.contactTag), ["REACHED", "NOT_REACHED", null, "WRONG_PHONE", null]);
+  assert.deepEqual(leadFilters(tagged, stages).map((chip) => `${chip.id}:${chip.count}`), ["active:4", "tag:none:1", "tag:REACHED:1", "tag:NOT_REACHED:1", "tag:WRONG_PHONE:1", "NEW_LEAD:3", "CONTACTING:1", "closed:1"]);
+  assert.deepEqual(filterLeads(tagged, "tag:REACHED", "").map((row) => row.id), ["a"]);
+  assert.deepEqual(filterLeads(tagged, "tag:none", "").map((row) => row.id), ["c"]);
+  const summary = leadSourceSummary(tagged);
+  assert.deepEqual(summary.map((item) => [item.label, item.total, item.byTag.REACHED, item.byTag.NOT_REACHED, item.byTag.WRONG_PHONE, item.untagged]), [
+    ["Meta · Lead Ads", 3, 1, 1, 0, 1],
+    ["Сайт", 2, 0, 0, 1, 1],
+  ]);
 });
