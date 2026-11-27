@@ -586,7 +586,7 @@ export function ClientProposalView({
 
   async function signAgreement() {
     setSaving(true);
-    setMessage(ru ? "Подписываем договор..." : "Signing agreement...");
+    setMessage(ru ? "Согласовываем..." : "Approving...");
 
     try {
       await saveSelection();
@@ -605,7 +605,7 @@ export function ClientProposalView({
       setMessage(ru ? "Договор успешно подписан. Теперь можно перейти к оплате." : "Agreement signed successfully. You can now continue to payment.");
       onAgreementSigned?.();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : (ru ? "Не удалось подписать договор." : "Could not sign agreement."));
+      setMessage(error instanceof Error ? error.message : (ru ? "Не удалось согласовать КП." : "Could not approve the proposal."));
     } finally {
       setSaving(false);
     }
@@ -1020,7 +1020,7 @@ export function ClientProposalView({
             <div className="proposal-section-label">05 / {ru ? "Согласование" : "Approval"}</div>
             <h2 className="surface-title">{ru ? "Согласовать коммерческое предложение" : "Approve your proposal"}</h2>
             <p className="surface-subtitle">
-              {ru ? "Подпись подтверждает выбранные услуги и разрешает перейти к следующему этапу проекта." : "Signing confirms the selected services and authorizes the project to move forward."}
+              {ru ? "Согласование подтверждает выбранные услуги. Следующий шаг — аванс по проекту, после него мы назначим дату работ." : "Approval confirms the selected services. Next comes the project deposit; once it is in, we schedule the work."}
             </p>
 
             <div className="proposal-item-grid">
@@ -1088,7 +1088,7 @@ export function ClientProposalView({
 
             <div className="proposal-builder-footer">
               <button type="button" className="accent-button" onClick={signAgreement} disabled={isLocked || saving}>
-                {isLocked ? (ru ? "Договор подписан" : "Agreement Signed") : (ru ? "Подписать КП" : "Sign Agreement")}
+                {isLocked ? (ru ? "КП согласовано ✓" : "Proposal approved ✓") : (ru ? "Согласовать КП" : "Approve proposal")}
               </button>
             </div>
 
