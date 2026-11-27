@@ -5,7 +5,11 @@
  * screen, the way the working screen does (canonicalMessengerLeadRows).
  */
 
+import { LEAD_CONTACT_TAGS, type LeadContactTagCode } from "@/features/sales/lead-stages";
+
 export type LeadStage = { code: string; name: string; closed: boolean; manual: boolean };
+export { LEAD_CONTACT_TAGS };
+export type { LeadContactTagCode };
 
 export type ApiLead = {
   lead_id: string;
@@ -19,6 +23,7 @@ export type ApiLead = {
   email: string | null;
   source: string | null;
   notes: string | null;
+  contact_tag?: LeadContactTagCode | null;
   city?: { name_ru: string } | null;
   assigned_manager?: { full_name: string } | null;
   pipeline_status: { status_code: string; name_ru: string; is_closed: boolean } | null;
@@ -43,6 +48,8 @@ export type LeadRow = {
   message: string;
   receivedAt: string;
   isNew: boolean;
+  /** Call outcome marked by a manager, or null until someone called. */
+  contactTag: LeadContactTagCode | null;
   /** The stored status: what a stage change must still find on the server. */
   statusCode: string;
   /** The stage shown: a recorded sale or loss outranks the stored status. */
@@ -93,6 +100,7 @@ export function leadRows(leads: ApiLead[], stages: LeadStage[], now = Date.now()
         message: lead.notes || "",
         receivedAt: lead.created_at,
         isNew: Boolean(lead.status_flags?.is_new),
+        contactTag: LEAD_CONTACT_TAGS.some((tag) => tag.code === lead.contact_tag) ? (lead.contact_tag as LeadContactTagCode) : null,
         statusCode: status.status_code,
         stageCode,
         stageName: stageName(stageCode) || status.name_ru || stageCode,
@@ -105,11 +113,19 @@ export function leadRows(leads: ApiLead[], stages: LeadStage[], now = Date.now()
     });
 }
 
-/** "active" — everything not closed; "closed" — everything closed; otherwise one stage. */
+const TAG_FILTER_PREFIX = "tag:";
+
+/** "active" — everything not closed; "closed" — everything closed; "tag:<code>" — one call outcome ("tag:none" — not called yet); otherwise one stage. */
 export function filterLeads(rows: LeadRow[], filter: string, query: string) {
   const needle = query.trim().toLowerCase();
   return rows.filter((row) => {
-    const inStage = filter === "active" ? !row.stageClosed : filter === "closed" ? row.stageClosed : row.stageCode === filter;
+    const inStage = filter === "active"
+      ? !row.stageClosed
+      : filter === "closed"
+        ? row.stageClosed
+        : filter.startsWith(TAG_FILTER_PREFIX)
+          ? (filter === `${TAG_FILTER_PREFIX}none` ? !row.contactTag && !row.stageClosed : row.contactTag === filter.slice(TAG_FILTER_PREFIX.length))
+          : row.stageCode === filter;
     if (!inStage) return false;
     return !needle || `${row.name} ${row.person} ${row.company} ${row.phone} ${row.email} ${row.message}`.toLowerCase().includes(needle);
   });
@@ -121,11 +137,38 @@ export function leadFilters(rows: LeadRow[], stages: LeadStage[]) {
     .filter((stage) => !stage.closed)
     .map((stage) => ({ id: stage.code, title: stage.name, count: rows.filter((row) => !row.stageClosed && row.stageCode === stage.code).length }))
     .filter((chip) => chip.count > 0);
+  const tags = LEAD_CONTACT_TAGS
+    .map((tag) => ({ id: `${TAG_FILTER_PREFIX}${tag.code}`, title: tag.name, count: rows.filter((row) => row.contactTag === tag.code).length }))
+    .filter((chip) => chip.count > 0);
   return [
     { id: "active", title: "Активные", count: rows.filter((row) => !row.stageClosed).length },
+    { id: `${TAG_FILTER_PREFIX}none`, title: "Не звонили", count: rows.filter((row) => !row.stageClosed && !row.contactTag).length },
+    ...tags,
     ...open,
     { id: "closed", title: "Закрытые", count: rows.filter((row) => row.stageClosed).length },
   ];
+}
+
+export type LeadSourceSummary = { source: string; label: string; total: number; byTag: Record<LeadContactTagCode, number>; untagged: number };
+
+/**
+ * The advertising view: per source, how many leads came in and how the calls went.
+ * Sorted by volume so Meta, the site and calls are compared at a glance.
+ */
+export function leadSourceSummary(rows: LeadRow[]): LeadSourceSummary[] {
+  const bySource = new Map<string, LeadSourceSummary>();
+  for (const row of rows) {
+    const key = row.source || "unknown";
+    let item = bySource.get(key);
+    if (!item) {
+      item = { source: key, label: row.source ? row.sourceLabel : "Без источника", total: 0, byTag: { REACHED: 0, NOT_REACHED: 0, WRONG_PHONE: 0 }, untagged: 0 };
+      bySource.set(key, item);
+    }
+    item.total += 1;
+    if (row.contactTag) item.byTag[row.contactTag] += 1;
+    else item.untagged += 1;
+  }
+  return [...bySource.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "ru"));
 }
 
 /** Stages a person may choose for this lead: the manual ones plus the one it is in. */
