@@ -340,7 +340,8 @@ export default function CrmLeadsPage() {
           {sources.length ? (
             <details className="bg-card mb-4 rounded-lg border px-3 py-2 text-sm">
               <summary className="cursor-pointer font-semibold">Дозвон по источникам · {rows.filter((row) => row.contactTag).length} из {rows.length} отмечено</summary>
-              <table className="mt-2 w-full text-xs">
+              <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-xs">
                 <thead className="text-muted-foreground">
                   <tr className="text-left">
                     <th className="py-1 font-medium">Источник</th>
@@ -360,6 +361,7 @@ export default function CrmLeadsPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </details>
           ) : null}
           {shown.length ? (
