@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Spinner } from "@/components/ui/spinner";
 import { deliveryEventLabel } from "@/features/sales/lead-delivery";
 import { dateTime } from "@/features/crm-shell/format";
-import { filterLeads, leadFilters, leadRows, OPEN_LEAD_STATUSES, REASON_STAGES, stageChoices, type ApiLead, type LeadRow, type LeadStage } from "@/features/crm-shell/leads";
+import { filterLeads, LEAD_CONTACT_TAGS, leadFilters, leadRows, leadSourceSummary, OPEN_LEAD_STATUSES, REASON_STAGES, stageChoices, type ApiLead, type LeadContactTagCode, type LeadRow, type LeadStage } from "@/features/crm-shell/leads";
 import type { CrmLeadLinks } from "@/features/crm-shell/types";
 import { LoadError, LoadingBlock, PageHeader, Pill } from "@/features/crm-shell/ui";
 import { useCrmData } from "@/features/crm-shell/use-crm-data";
@@ -99,6 +99,64 @@ function StageControl({ row, stages, onChanged }: { row: LeadRow; stages: LeadSt
   );
 }
 
+const TAG_ACTIVE_CLASS: Record<LeadContactTagCode, string> = {
+  REACHED: "bg-success text-white border-success",
+  NOT_REACHED: "bg-warning text-white border-warning",
+  WRONG_PHONE: "bg-destructive text-white border-destructive",
+};
+
+/** Call outcome: one tap sets it, a second tap on the same chip clears it. The stage follows on the server. */
+function ContactTagControl({ row, onChanged }: { row: LeadRow; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async (tag: LeadContactTagCode | null) => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/v1/leads/${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ contact_tag: tag }),
+      });
+      const body = (await response.json().catch(() => null)) as { errors?: { message?: string }[] } | null;
+      if (!response.ok) setError(body?.errors?.[0]?.message || "Не удалось сохранить отметку. Обновите список и попробуйте ещё раз.");
+    } catch {
+      setError("Сервер не ответил. Проверьте связь и попробуйте ещё раз.");
+    }
+    setBusy(false);
+    onChanged();
+  };
+
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-muted-foreground text-xs font-medium">Дозвон</span>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Дозвон ${row.name}`}>
+        {LEAD_CONTACT_TAGS.map((tag) => {
+          const active = row.contactTag === tag.code;
+          return (
+            <button
+              key={tag.code}
+              type="button"
+              aria-pressed={active}
+              disabled={busy || row.stageLocked}
+              onClick={() => void save(active ? null : tag.code)}
+              className={cn(
+                "min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors disabled:opacity-60",
+                active ? TAG_ACTIVE_CLASS[tag.code] : "bg-card text-foreground hover:bg-muted",
+              )}
+            >
+              {tag.name}
+            </button>
+          );
+        })}
+      </div>
+      {error ? <p className="text-destructive text-xs">{error}</p> : null}
+    </div>
+  );
+}
+
 function LeadCard({ row, stages, link, onChanged, onConvert }: { row: LeadRow; stages: LeadStage[]; link: Link_; onChanged: () => void; onConvert: (row: LeadRow) => void }) {
   const canConvert = !row.stageClosed && OPEN_LEAD_STATUSES.includes(row.statusCode);
   return (
@@ -109,6 +167,7 @@ function LeadCard({ row, stages, link, onChanged, onConvert }: { row: LeadRow; s
             <b className="truncate text-base">{row.name}</b>
             {row.isNew && !row.stageClosed ? <Pill tone="ok">новый</Pill> : null}
             <Pill tone={row.stageClosed ? "muted" : "info"}>{row.stageName}</Pill>
+            {row.contactTag ? <Pill tone={LEAD_CONTACT_TAGS.find((tag) => tag.code === row.contactTag)?.tone}>{LEAD_CONTACT_TAGS.find((tag) => tag.code === row.contactTag)?.name}</Pill> : null}
           </div>
           <div className="text-muted-foreground mt-0.5 text-xs">
             {row.sourceLabel} · {dateTime(row.receivedAt)}
@@ -157,6 +216,7 @@ function LeadCard({ row, stages, link, onChanged, onConvert }: { row: LeadRow; s
           ) : null}
         </div>
         <div className="grid content-start gap-2">
+          <ContactTagControl row={row} onChanged={onChanged} />
           <StageControl row={row} stages={stages} onChanged={onChanged} />
           {link?.archived ? (
             <span className="text-muted-foreground text-sm">Проект в архиве{link.number ? ` · ${link.number}` : ""}</span>
@@ -198,6 +258,7 @@ export default function CrmLeadsPage() {
   const rows = useMemo(() => leadRows(leads.data?.items ?? [], leads.data?.stages ?? []), [leads.data]);
   const chips = useMemo(() => leadFilters(rows, stages), [rows, stages]);
   const shown = useMemo(() => filterLeads(rows, filter, query), [rows, filter, query]);
+  const sources = useMemo(() => leadSourceSummary(rows), [rows]);
   const reload = () => {
     void leads.reload();
     void links.reload();
@@ -276,6 +337,31 @@ export default function CrmLeadsPage() {
               );
             })}
           </div>
+          {sources.length ? (
+            <details className="bg-card mb-4 rounded-lg border px-3 py-2 text-sm">
+              <summary className="cursor-pointer font-semibold">Дозвон по источникам · {rows.filter((row) => row.contactTag).length} из {rows.length} отмечено</summary>
+              <table className="mt-2 w-full text-xs">
+                <thead className="text-muted-foreground">
+                  <tr className="text-left">
+                    <th className="py-1 font-medium">Источник</th>
+                    <th className="py-1 text-right font-medium">Лидов</th>
+                    {LEAD_CONTACT_TAGS.map((tag) => <th key={tag.code} className="py-1 text-right font-medium">{tag.name}</th>)}
+                    <th className="py-1 text-right font-medium">Не звонили</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((item) => (
+                    <tr key={item.source} className="border-t">
+                      <td className="py-1 font-medium">{item.label}</td>
+                      <td className="py-1 text-right tabular-nums">{item.total}</td>
+                      {LEAD_CONTACT_TAGS.map((tag) => <td key={tag.code} className="py-1 text-right tabular-nums">{item.byTag[tag.code] || ""}</td>)}
+                      <td className="text-muted-foreground py-1 text-right tabular-nums">{item.untagged || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ) : null}
           {shown.length ? (
             <div className="grid gap-3">
               {shown.map((row) => (
