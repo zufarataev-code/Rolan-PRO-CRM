@@ -186,7 +186,19 @@ export async function PUT(request: NextRequest) {
     await loadDirectoryMembers((mergedPayload as { users?: unknown }).users ?? []),
   ) as typeof mergedPayload;
 
+  // Owner, 2026-11-27: «пока тестируем — сними все ограничения». Only the owner turns
+  // the testing mode on or off; while it is on (as saved before this request), a save is
+  // not rejected by the business-rule checks below. Sign-in, roles and money visibility stay.
   const isOwner = auth.session.roles.includes(ROLE_CODES.OWNER);
+  const currentSettings = ((currentWorkspace.payload as Record<string, any>).settings ?? {}) as Record<string, unknown>;
+  const nextSettings = (nextPayload as Record<string, any>).settings as Record<string, unknown> | undefined;
+  if (!isOwner && nextSettings && JSON.stringify(nextSettings.testingMode ?? null) !== JSON.stringify(currentSettings.testingMode ?? null)) {
+    if (currentSettings.testingMode === undefined) delete nextSettings.testingMode;
+    else nextSettings.testingMode = currentSettings.testingMode;
+  }
+  const testingMode = (currentSettings.testingMode as { on?: unknown } | undefined)?.on === true;
+  const rule = (error: string | null) => (testingMode ? null : error);
+
   const managerLegacyIds = auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [];
   const sessionUserId = auth.session.user.user_id;
   // The same checks, in the same order, as below; used only after a refusal to find
@@ -207,10 +219,10 @@ export async function PUT(request: NextRequest) {
 
   const scopeError = prepareServiceScopeApprovals(currentWorkspace.payload as Record<string, unknown>,nextPayload as Record<string, unknown>,
     isOwner, managerLegacyIds, sessionUserId);
-  if (scopeError) return refuseSave("invalid_service_approval", scopeError);
+  if (rule(scopeError)) return refuseSave("invalid_service_approval", scopeError as string);
   const stageError = prepareProductionStages(currentWorkspace.payload as Record<string, unknown>,
     nextPayload as Record<string, unknown>, isOwner, managerLegacyIds, !isPrivileged, sessionUserId);
-  if (stageError) return refuseSave("invalid_production_stage", stageError);
+  if (rule(stageError)) return refuseSave("invalid_production_stage", stageError as string);
 
   const solutionError = prepareServiceSolutions(
     currentWorkspace.payload as Record<string, unknown>,
@@ -219,14 +231,14 @@ export async function PUT(request: NextRequest) {
     managerLegacyIds,
     !isPrivileged,
   );
-  if (solutionError) return refuseSave("invalid_service_solution", solutionError);
+  if (rule(solutionError)) return refuseSave("invalid_service_solution", solutionError as string);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
     const previous = ((currentWorkspace.payload as Record<string, any>).orders || []).find((item: Record<string, any>) => item.id === order.id) || {};
-    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview) || JSON.stringify(order.googleAdsPayrollReview) !== JSON.stringify(previous.googleAdsPayrollReview))) {
+    if (!testingMode && !auth.session.roles.includes(ROLE_CODES.OWNER) && (JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview) || JSON.stringify(order.googleAdsPayrollReview) !== JSON.stringify(previous.googleAdsPayrollReview))) {
       return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.",
         { refused_project_id: String(order.id ?? ''), refused_project_number: String(order.number ?? '') });
     }
-    if (!auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {
+    if (!testingMode && !auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {
       if (previous.id || !auth.session.roles.includes(ROLE_CODES.MANAGER) || typeof order.canonicalLeadId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.canonicalLeadId)
         || [...legacyProjectsIncludingArchive(currentWorkspace.payload as Record<string, unknown>), ...legacyProjectsIncludingArchive(nextPayload as Record<string, unknown>)].some(other => other.id !== order.id && other.canonicalLeadId === order.canonicalLeadId)
         || !await prisma.lead.findFirst({ where: { lead_id: order.canonicalLeadId, ...buildLeadScopeWhere(auth.session.user.user_id) }, select: { lead_id: true } })) {
@@ -242,7 +254,7 @@ export async function PUT(request: NextRequest) {
     auth.session.roles.includes(ROLE_CODES.OWNER),
     auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],
   );
-  if (expenseError) return refuseSave("invalid_project_expense", expenseError);
+  if (rule(expenseError)) return refuseSave("invalid_project_expense", expenseError as string);
 
   const introducedDuplicate = findIntroducedClientIdentityDuplicate(
     workspaceClients(currentWorkspace.payload),
