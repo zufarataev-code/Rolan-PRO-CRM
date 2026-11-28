@@ -16,6 +16,43 @@ export const LEAD_STAGES = [
 
 export const LEAD_REASON_STAGES = ["DISQUALIFIED", "CLOSED_LOST", "SPAM"];
 
+/**
+ * Call outcome a manager marks with one tap in «Новые лиды». It answers the
+ * advertising question «what kind of lead is this?» separately from the stage:
+ * a lead can be reached and still not qualified.
+ */
+export const LEAD_CONTACT_TAGS = [
+  { code: "REACHED", name: "Дозвонились", tone: "ok", nextStage: "CONTACTED" },
+  { code: "NOT_REACHED", name: "Не дозвонились", tone: "warn", nextStage: "CONTACTING" },
+  { code: "WRONG_PHONE", name: "Неверный телефон", tone: "danger", nextStage: null },
+] as const;
+
+export type LeadContactTagCode = (typeof LEAD_CONTACT_TAGS)[number]["code"];
+
+/** `null` clears the tag; anything outside the list is rejected. */
+export function validateLeadContactTag(tag: unknown) {
+  if (tag === null) return null;
+  if (typeof tag !== "string" || !LEAD_CONTACT_TAGS.some(item => item.code === tag)) {
+    return "Выберите отметку дозвона: Дозвонились, Не дозвонились или Неверный телефон.";
+  }
+  return null;
+}
+
+/** Stages the tag may move a lead out of: only the first-contact ones, never a workflow or closed stage. */
+const CONTACT_TAG_FROM_STAGES = ["NEW_LEAD", "LEAD", "CONTACTING", "CONTACTED"];
+
+/**
+ * «Дозвонились» means the contact is established, «Не дозвонились» means we are
+ * still trying. Returns the stage to move to, or null when the stage stays.
+ */
+export function contactTagStage(tag: LeadContactTagCode | null, currentStage: string) {
+  const item = LEAD_CONTACT_TAGS.find(entry => entry.code === tag);
+  if (!item?.nextStage || item.nextStage === currentStage || !CONTACT_TAG_FROM_STAGES.includes(currentStage)) return null;
+  // «Не дозвонились» never demotes an established contact.
+  if (item.nextStage === "CONTACTING" && currentStage === "CONTACTED") return null;
+  return item.nextStage;
+}
+
 export function validateManualLeadStage(code: unknown, reason: unknown) {
   if (typeof code !== "string" || !LEAD_STAGES.some(stage => stage.code === code && stage.manual)) {
     return "Выберите ручной этап лида. Запись, КП и продажа подтверждаются рабочим процессом.";

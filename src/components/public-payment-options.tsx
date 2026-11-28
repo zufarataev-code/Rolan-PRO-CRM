@@ -91,12 +91,12 @@ export function PublicPaymentOptions({
 
   return (
     <section id="proposal-payment" className="proposal-section proposal-payment-section">
-      <div className="proposal-section-kicker">{ru ? "Оплата" : "Payment"}</div>
-      <h2>{paid ? (ru ? "Оплата получена" : "Deposit received") : (ru ? "Оплатить проект" : "Pay for your project")}</h2>
+      <div className="proposal-section-kicker">{ru ? "Шаг 2 · Аванс" : "Step 2 · Deposit"}</div>
+      <h2>{paid ? (ru ? "Аванс получен" : "Deposit received") : (ru ? "Внести аванс по проекту" : "Pay the project deposit")}</h2>
       {paid ? (
         <p>
           {ru ? "Аванс получен: " : "Deposit received: "}<strong>{formatMoney(baseAmount, data.currency)}</strong>.{" "}
-          {ru ? "Спасибо! Менеджер свяжется с вами, чтобы согласовать дату монтажа." : "Thank you! Your project manager will contact you to schedule the installation."}
+          {ru ? "Спасибо! Следующий шаг — дата работ: менеджер свяжется с вами и назначит день монтажа." : "Thank you! Next comes the work date: your project manager will contact you to schedule the installation."}
         </p>
       ) : (
         <p>
@@ -109,11 +109,11 @@ export function PublicPaymentOptions({
 
       {!data.agreement_signed && !paid ? (
         <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "rgba(37,99,235,.08)" }}>
-          <strong>{ru ? "Сначала подпишите КП" : "Sign the proposal first"}</strong>
+          <strong>{ru ? "Сначала согласуйте КП (шаг 1)" : "Approve the proposal first (step 1)"}</strong>
           <div style={{ marginTop: 4, opacity: 0.78 }}>
             {ru
-              ? "После подписи кнопки оплаты станут активными автоматически."
-              : "Payment buttons become active automatically after signature."}
+              ? "После согласования кнопки оплаты станут активными автоматически."
+              : "Payment buttons become active automatically after approval."}
           </div>
         </div>
       ) : null}
@@ -202,7 +202,7 @@ export function PublicPaymentOptions({
                     : !option.available
                       ? (ru ? "Недоступно" : "Unavailable")
                       : !data.agreement_signed
-                        ? (ru ? "Сначала подпишите КП" : "Sign proposal first")
+                        ? (ru ? "Сначала согласуйте КП" : "Approve proposal first")
                       : selected
                         ? (ru ? "Выбрано" : "Selected")
                         : ru

@@ -3706,7 +3706,22 @@ function measureFieldsBarHtml(oid) {
 // planned services, booking time), no messages go to clients, and closing an
 // old project does not take film from today's stock.
 function crmImportMode() {
-  try { return db?.settings?.importMode?.on === true && ['owner', 'manager'].includes(currentUser()?.role); } catch (_) { return false; }
+  try { return crmTestingMode() || (db?.settings?.importMode?.on === true && ['owner', 'manager'].includes(currentUser()?.role)); } catch (_) { return false; }
+}
+// ---------- РЕЖИМ НАЛАДКИ (Owner, 2026-11-27) ----------
+// «Пока мы тестируем — сними все ограничения, все. Потом добавим понятный
+// блокер с запросом на редактирование». While the owner keeps it on, every
+// employee edits any project (closed, paid, imported) and the server accepts
+// the save without the business-rule checks; who may sign in and see money is unchanged.
+function crmTestingMode() {
+  try { return db?.settings?.testingMode?.on === true; } catch (_) { return false; }
+}
+function setCrmTestingMode(on) {
+  if (currentUser()?.role !== 'owner') return;
+  if (on && !confirm('Включить режим наладки?\n\nПока он включён, все сотрудники могут менять любые проекты — закрытые, оплаченные, перенесённые — и CRM не отклоняет сохранения проверками. Выключите, когда закончите тестировать.')) return;
+  db.settings.testingMode = { on: !!on, at: new Date().toISOString(), by: state.currentUserId };
+  save();
+  render();
 }
 function setCrmImportMode(on) {
   if (currentUser()?.role !== 'owner') return;
@@ -3716,13 +3731,16 @@ function setCrmImportMode(on) {
   render();
 }
 function crmImportBannerHtml() {
+  if (crmTestingMode()) return `<div class="crm-import-banner" role="status"><span>🧪 <b>Режим наладки:</b> ограничения сняты — любой сотрудник меняет любой проект.</span>${currentUser()?.role === 'owner' ? '<button type="button" onclick="setCrmTestingMode(false)">Выключить</button>' : ''}</div>`;
   if (!crmImportMode()) return '';
   const owner = currentUser()?.role === 'owner';
   return `<div class="crm-import-banner" role="status"><span>🗂 <b>Режим внедрения:</b> этапы без проверок, клиентам ничего не отправляется, склад не списывается.</span>${owner ? '<button type="button" onclick="setCrmImportMode(false)">Выключить</button>' : ''}</div>`;
 }
 function crmImportModePanelHtml() {
   const on = db?.settings?.importMode?.on === true;
-  return `<div class="crm-import-panel"><div><b>🗂 Режим внедрения — перенос старых заказов</b><p>Для ввода заказов задним числом: любой этап без проверок КП, аванса, размеров и производства; клиентам не уходят SMS и письма; склад при закрытии не списывается. Включите на время переноса и выключите после.</p></div><button type="button" class="${on ? 'btn-ghost' : 'btn-primary'}" onclick="setCrmImportMode(${!on})">${on ? 'Выключить' : 'Включить'}</button></div>`;
+  const testing = crmTestingMode();
+  return `<div class="crm-import-panel" data-testing-mode><div><b>🧪 Режим наладки — все ограничения сняты</b><p>На время тестирования CRM: все сотрудники меняют любые проекты (закрытые, оплаченные, перенесённые), этапы без проверок, сервер не отклоняет сохранения. Выключите, когда закончите.</p></div><button type="button" class="${testing ? 'btn-ghost' : 'btn-primary'}" onclick="setCrmTestingMode(${!testing})">${testing ? 'Выключить' : 'Включить'}</button></div>
+  <div class="crm-import-panel"><div><b>🗂 Режим внедрения — перенос старых заказов</b><p>Для ввода заказов задним числом: любой этап без проверок КП, аванса, размеров и производства; клиентам не уходят SMS и письма; склад при закрытии не списывается. Включите на время переноса и выключите после.</p></div><button type="button" class="${on ? 'btn-ghost' : 'btn-primary'}" onclick="setCrmImportMode(${!on})">${on ? 'Выключить' : 'Включить'}</button></div>`;
 }
 
 /* ЗАРПЛАТА МОНТАЖНИКОВ (Owner, 2026-10-30): «смарт $5, защитка $3, солнцезащитная

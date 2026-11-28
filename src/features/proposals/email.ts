@@ -5,6 +5,19 @@ type ProposalEmailInput = {
   publicUrl: string;
 };
 
+/**
+ * The same proposal link by SMS / WhatsApp. Owner, 2026-11-26: the proposal must
+ * reach the client's phone, not only a mailbox — the link is what gets opened.
+ */
+export function buildProposalSms(input: ProposalEmailInput & { language?: "en" | "ru" | null }) {
+  const name = input.clientName?.trim().split(/\s+/)[0] || "";
+  const reference = input.proposalCode?.trim() || input.proposalTitle.trim();
+  if (input.language === "ru") {
+    return `${name ? `Здравствуйте, ${name}! ` : "Здравствуйте! "}Ваше предложение Rolan PRO${reference ? ` ${reference}` : ""}: ${input.publicUrl} — выберите услуги и нажмите «Согласовать». Вопросы: (424) 325-0512.`;
+  }
+  return `${name ? `Hi ${name}, ` : "Hi, "}your Rolan PRO proposal${reference ? ` ${reference}` : ""} is ready: ${input.publicUrl} — pick the services and tap Approve. Questions? Call (424) 325-0512.`;
+}
+
 export function buildProposalEmail(input: ProposalEmailInput) {
   const greeting = input.clientName?.trim() ? `Hi ${input.clientName.trim()},` : "Hello,";
   const reference = input.proposalCode?.trim() || input.proposalTitle.trim();
