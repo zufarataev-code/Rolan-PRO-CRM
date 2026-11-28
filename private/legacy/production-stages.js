@@ -1151,6 +1151,39 @@ function financeSystemRows() {
   return rows;
 }
 
+// Owner, 2026-11-27: «у монтажников не должно быть "Электромонтажа 300" — 300 в день
+// они не должны видеть». A price typed into a service name is dropped for anyone who does
+// not see the project's money; the installer sees his own payout on his task card.
+function calendarServiceName(name) {
+  const text = String(name || '').trim();
+  let role = '';
+  try { role = currentUser()?.role || ''; } catch (_) { role = ''; }
+  if (['owner', 'manager'].includes(role)) return text;
+  const cleaned = text.replace(/(^|\s)\$?\d+(?:[.,]\d+)?\s*\$?(?=\s|$)/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  return cleaned || 'Работы по проекту';
+}
+// Owner, 2026-11-27: one visit showed four times on the 12th. Services of one project
+// booked for the same moment with the same crew are one trip: one card, names joined.
+function calendarMergeSameVisit(events) {
+  const merged = new Map();
+  for (const ev of events) {
+    const crew = [...(ev.o?.installerIds || [])].map(String).sort().join(',');
+    const key = `${ev.dt.getTime()}|${crew}`;
+    const first = merged.get(key);
+    if (!first) { merged.set(key, { ...ev, service: ev.service ? { ...ev.service } : ev.service }); continue; }
+    const names = new Set(String(first.service?.name || first.note || '').split(' · ').filter(Boolean));
+    String(ev.service?.name || ev.note || '').split(' · ').filter(Boolean).forEach(n => names.add(n));
+    const joined = [...names].join(' · ');
+    first.note = joined;
+    if (first.service) {
+      first.service.name = joined;
+      first.service.days = Math.max(first.service.days || 1, ev.service?.days || 1);
+      if (ev.service?.kind && ev.service.kind !== 'film') first.service.kind = ev.service.kind;
+    }
+  }
+  return [...merged.values()];
+}
+
 function calendarEventsForOrder(o, type) {
   const info = orderEventInfo(type);
   if(type==='install' && projectStages(o).length && o.status!=='proposal_accepted') {
@@ -1162,7 +1195,7 @@ function calendarEventsForOrder(o, type) {
   // A plan at «КП принято» is a draft until «Подтвердить монтаж».
   if (type === 'install' && o.status === 'proposal_accepted' && o.serviceSchedules?.length) return [];
   if (type === 'install' && o.serviceSchedules?.length) {
-    return projectServiceGroups(o).flatMap(group => {
+    return calendarMergeSameVisit(projectServiceGroups(o).flatMap(group => {
       const assignment = projectServiceAssignment(o, group);
       const dt = new Date(assignment.installationAt);
       if (!assignment.installationAt || Number.isNaN(dt.getTime())) return [];
@@ -1179,8 +1212,9 @@ function calendarEventsForOrder(o, type) {
         if (dayKey(cursor) > dayKey(end)) break;
         days.push(new Date(cursor));
       }
-      return days.map((day, index) => ({ id: `${o.id}_service_${group.id}${index ? `_${index}` : ''}`, o: scoped, kind: type, dt: day, info, note: group.name, service: { name: group.name, kind, end, day: index + 1, days: days.length } }));
-    });
+      const name = calendarServiceName(group.name);
+      return days.map((day, index) => ({ id: `${o.id}_service_${group.id}${index ? `_${index}` : ''}`, o: scoped, kind: type, dt: day, info, note: name, service: { name, kind, end, day: index + 1, days: days.length } }));
+    }));
   }
   return calendarEventDatesForOrder(o, type).map((x, idx) => ({
     id: `${o.id}_${type}_${x.source || idx}`,
