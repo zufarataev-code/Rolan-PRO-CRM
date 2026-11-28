@@ -20143,6 +20143,8 @@ function parseHash() {
   if (/^#\/installer-operations\/?$/.test(h)) { state.view = 'installerOps'; }
   // The new interface (/crm) has one menu for every section; a section it has
   // not redrawn yet opens here by its address: #/section/<key>.
+  // The agent panel of the new interface (/crm): the same agent, open, alone on the page.
+  if (/^#\/ai\/?$/.test(h)) { state.aiSidebarOpen = true; if (!state.aiSidebarTab) state.aiSidebarTab = 'pulse'; }
   const section = h.match(/^#\/section\/([A-Za-z]+)\/?$/);
   if (section && crmSectionOpenAllowed(section[1])) { state.view = section[1]; state.openOrderId = null; state.modal = null; }
 }

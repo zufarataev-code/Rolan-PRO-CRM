@@ -12,6 +12,8 @@
  * Opened directly (not inside /crm) the working CRM is exactly as before.
  */
 const ON = 'html[data-rp-embed="1"]';
+// The agent panel of /crm: the working CRM shows only its agent (Owner, 2026-11-27).
+const AI = `${ON}[data-rp-embed-ai="1"]`;
 
 export const EMBED_FRAME_CSS = `
 ${ON} .app-shell, ${ON} .app-shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr) !important; }
@@ -23,6 +25,10 @@ ${ON} .app-topbar > .topbar-icon-btn:first-child,
 ${ON} .app-topbar .topbar-user-pill,
 ${ON} .app-topbar button[onclick="logout()"],
 ${ON} .app-topbar button[onclick="openRoleTesting()"] { display: none !important; }
+${AI} body * { visibility: hidden !important; }
+${AI} .ai-agent-panel, ${AI} .ai-agent-panel * { visibility: visible !important; }
+${AI} .ai-agent-panel { width: 100% !important; inset: 0 !important; }
+${AI} .ai-agent-header, ${AI} .ai-agent-launcher { display: none !important; }
 `;
 
 export const EMBED_FRAME_SCRIPT = `
@@ -31,6 +37,9 @@ export const EMBED_FRAME_SCRIPT = `
         let embedded = false;
         try { embedded = window.self !== window.top && /^\\/crm(\\/|$)/.test(window.parent.location.pathname); } catch (error) { embedded = false; }
         if (embedded) document.documentElement.setAttribute('data-rp-embed', '1');
+        let hash = '';
+        try { hash = String(window.location && window.location.hash || ''); } catch (error) { hash = ''; }
+        if (embedded && /^#\\/ai\\/?$/.test(hash)) document.documentElement.setAttribute('data-rp-embed-ai', '1');
       })();
     </script>`;
 

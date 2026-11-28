@@ -8,6 +8,7 @@ import { CalendarDaysIcon, KanbanSquareIcon, LayoutDashboardIcon, MenuIcon } fro
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { CrmAiAgent } from "@/features/crm-shell/ai-agent";
 import { crmNavActive, crmNavFor, crmSectionSrc, type CrmNavItem } from "@/features/crm-shell/nav";
 import { allFramesSaved, signedOut } from "@/features/crm-shell/logout";
 import { saveWorkingFrame, WorkingSections } from "@/features/crm-shell/working-frame";
@@ -202,6 +203,7 @@ export function CrmShell({ role, userName, children }: { role: Role; userName: s
       </Sheet>
 
       <WorkingSections src={section?.src ?? null} title={section?.title ?? "Раздел CRM"} visible={Boolean(section)} />
+      <CrmAiAgent hidden={Boolean(section)} />
 
       <div className="lg:pl-64">
         <div className="mx-auto w-full max-w-[1400px] px-3 pt-4 pb-24 sm:px-5 lg:px-8 lg:pt-6 lg:pb-10">{children}</div>
