@@ -338,6 +338,7 @@ function projectEditGrantActive(o, u) {
 /** True when this user may not change the project without the owner's approval. */
 function projectEditLocked(o, u) {
   if (!o || !u || u.role !== 'manager') return false;
+  if (typeof crmTestingMode === 'function' && crmTestingMode()) return false; // Owner, 2026-11-27: режим наладки
   if (!PROJECT_EDIT_LOCKED_STATUSES.includes(o.status)) return false;
   return !projectEditGrantActive(o, u);
 }

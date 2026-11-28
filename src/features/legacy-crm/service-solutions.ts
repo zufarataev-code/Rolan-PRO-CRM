@@ -87,23 +87,6 @@ function historicalCostFacts(order: Row): Row[] {
   }));
 }
 
-/**
- * Facts entered through the historical-project workspace. They determine
- * revenue, direct cost, payroll and production history, so another manager
- * cannot edit them and a completed import is owner-corrected only.
- */
-const historicalProjectFacts = (order: Row) => Object.fromEntries([
-  'managerId', 'clientId', 'measurerId', 'historicalMeasurementDate', 'status', 'createdAt',
-  'serviceType', 'offeringId', 'offeringIds', 'offeringCatalogIds', 'offeringUnits',
-  'measurements', 'extraServices', 'extraExpenses', 'serviceSchedules', 'serviceProgress',
-  'installerIds', 'installationAt', 'installationDoneAt', 'measurementDoneAt', 'actSignedAt',
-  'complexity', 'distanceKm', 'paid', 'paidAt', 'payments', 'depositReceived',
-  'depositReceivedAt', 'payouts', 'projectEstimateApprovedAt', 'projectEstimateApprovedBy',
-  'projectEstimateUpdatedAt', 'projectEstimateSnapshot', 'timeline', 'quickEntry', 'quickEntryDraft',
-  'quickProjectImportedCompleted', 'quickProjectImportedCompletedAt', 'quickProjectImportedCompletedBy',
-  ...HISTORICAL_INVENTORY_FIELDS,
-].filter(field => Object.prototype.hasOwnProperty.call(order, field)).map(field => [field, order[field]]));
-
 // Five customer-facing directions plus the internal bucket for object-wide work.
 export const SERVICE_DIRECTIONS = ['solar', 'smart', 'protective', 'decorative', 'privacy', 'general'] as const;
 export const SERVICE_UNITS = ['sqft', 'lft', 'piece', 'zone', 'fixed', 'custom'] as const;
@@ -354,7 +337,7 @@ export function serviceSolutionsForViewer(payload: Row, owner: boolean, ownInsta
   return copy;
 }
 
-export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = [], fieldSave = false): string | null {
+export function prepareServiceSolutions(current: Row, next: Row, owner: boolean, managerIds: readonly string[] = [], _fieldSave = false): string | null {
   const currentOfferings = rows(object(current.settings).serviceOfferings);
   const settings = object(next.settings);
   // Owner, 2026-10-27: «режим внедрения» — old projects are entered backdated,
@@ -905,22 +888,10 @@ export function prepareServiceSolutions(current: Row, next: Row, owner: boolean,
       order.installerIds = [...new Set(rows(order.serviceSchedules).flatMap(plan => Array.isArray(plan.installerIds) ? plan.installerIds : []))];
       order.installationAt = rows(order.serviceSchedules).map(plan => plan.installationAt).filter(value => typeof value === 'string' && value !== '').sort()[0];
     }
-    if (!owner && historicalImportExisting
-      && stableJson(historicalProjectFacts(order)) !== stableJson(historicalProjectFacts(oldOrder))) {
-      // A field save was already cut down by mergeFieldWorkspace to the
-      // assigned surveyor's or installer's own operational fields (sizes,
-      // photos, notes, their stage marks), so the surveyor sent to the object
-      // enters measurements without being the project's manager (Owner, 2026-11-23).
-      if (!fieldSave && !managerIds.includes(String(oldOrder.managerId))) {
-        return 'Исторический проект может менять только назначенный менеджер.';
-      }
-      if (order.managerId !== oldOrder.managerId) {
-        return 'Ответственного менеджера исторического проекта меняет только владелец.';
-      }
-      if (oldOrder.quickProjectImportedCompleted === true) {
-        return 'Завершённый исторический проект может исправлять только владелец.';
-      }
-    }
+    // Owner, 2026-11-27: «убери эти ограничения». Historical (imported) projects are
+    // edited like any other: the manager, surveyor and installer on the project can
+    // correct them, also after completion. Field saves are still cut down by
+    // mergeFieldWorkspace to the person's own projects and working fields.
   }
   return null;
 }

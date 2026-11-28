@@ -600,7 +600,7 @@ test('server: an owner can close only a persisted historical draft with a concre
   assert.equal(prepareServiceSolutions(ordinaryCurrent, forgeImport, false), 'Исторические признаки проекта нельзя изменять вне завершения переноса владельцем.');
 });
 
-test('server: managers own only their historical drafts and completed imports are owner-corrected', () => {
+test('server: historical projects are edited like any other (Owner, 2026-11-27: «убери эти ограничения»)', () => {
   const settings = { serviceOfferings: [{ id: 'a1', direction: 'protective', name: 'A1', unit: 'sqft' }] };
   const users = [{ id: 'i1', role: 'installer' }];
   const draft: Row = {
@@ -620,12 +620,12 @@ test('server: managers own only their historical drafts and completed imports ar
   assert.equal(prepareServiceSolutions(current, structuredClone(current), false, ['manager-b']), null, 'unchanged rows owned by colleagues round-trip');
   const colleagueEdit = structuredClone(current);
   colleagueEdit.orders[0].extraServices[0].qty = 20;
-  assert.equal(prepareServiceSolutions(current, colleagueEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.');
+  assert.equal(prepareServiceSolutions(current, colleagueEdit, false, ['manager-b']), null);
 
   const surveyorEdit = structuredClone(current);
   surveyorEdit.orders[0].measurements = { rooms: [{ id: 'room', windows: [{ id: 'w', width: 43, height: 93, qty: 2 }] }] };
   assert.equal(prepareServiceSolutions(current, surveyorEdit, false, [], true), null, 'the assigned surveyor enters sizes on an unfinished historical project');
-  assert.equal(prepareServiceSolutions(current, surveyorEdit, false, ['manager-b']), 'Исторический проект может менять только назначенный менеджер.', 'a colleague manager is still refused');
+  assert.equal(prepareServiceSolutions(current, surveyorEdit, false, ['manager-b']), null);
 
   const ownEdit = structuredClone(current);
   ownEdit.orders[0].extraServices[0].qty = 20;
@@ -651,7 +651,7 @@ test('server: managers own only their historical drafts and completed imports ar
   const managerCorrection = structuredClone(completedCurrent);
   managerCorrection.orders[0].extraServices[0].qty = 25;
   managerCorrection.orders[0].extraServices[0].supplyItems[0].qty = 2;
-  assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, false, ['manager-a']), 'Завершённый исторический проект может исправлять только владелец.');
+  assert.equal(prepareServiceSolutions(completedCurrent, structuredClone(managerCorrection), false, ['manager-a']), null, 'the measurer or manager corrects a completed import');
   assert.equal(prepareServiceSolutions(completedCurrent, managerCorrection, true), null, 'the owner keeps an explicit correction path');
   assert.equal(managerCorrection.orders[0]._historicalMaterialCost, 125, 'an owner correction refreshes the frozen film cost on the server');
   assert.equal(managerCorrection.orders[0]._historicalSupplyCost, 6, 'an owner correction refreshes the frozen supply cost on the server');
