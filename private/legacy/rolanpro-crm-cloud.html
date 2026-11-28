@@ -33437,14 +33437,6 @@ function openManagerMeasureModal(oid) {
   // leave the film to the manager (completeManagerMeasurement).
   const o = getOrder(oid);
   if (orderIsHistoricalDraft(o)) { alert('Замер не назначается из черновика переноса. Продолжите перенос старого проекта.'); openQuickProjectEntry(oid); return; }
-  // A project closed through «Выполненные проекты» is corrected by the owner only, and
-  // the server refuses anyone else's save (Owner, 2026-11-27 22:40, R-261122-165: the
-  // measurer opened the window, started the visit and got «Не сохранено»). Say so before
-  // the window opens instead of letting the measurement fail on the object.
-  if (o?.quickProjectImportedCompleted === true && currentUser()?.role !== 'owner') {
-    alert('Этот проект перенесён через «Выполненные проекты» и уже закрыт. Менять его может только владелец. Для нового замера заведите обычный проект.');
-    return;
-  }
   state.modal = renderManagerMeasureModal(oid);
   render();
   if (typeof measureVisitStartTicker === 'function') measureVisitStartTicker(oid);

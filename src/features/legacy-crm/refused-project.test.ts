@@ -4,9 +4,10 @@ import { prepareServiceSolutions } from './service-solutions';
 import { changedProjectIds, findRefusedProject, refusalNamingProject } from './refused-project';
 
 // Owner, 2026-11-27 10:15, on the object: the measurement of the new project
-// R-261127-179 was refused with «Завершённый исторический проект может исправлять
-// только владелец». A change to the closed import R-261122-165, refused the night
-// before, was still on the phone and went with every save.
+// R-261127-179 was refused because a change to R-261122-165, refused the night
+// before, was still on the phone and went with every save. The historical lock
+// that refused it then is gone (#636); any refusal that remains on one project
+// (here an owner-only manual total) must still not block the others.
 
 type Row = Record<string, any>;
 const settings = { serviceOfferings: [{ id: 'a1', direction: 'smart', name: 'Smart', unit: 'sqft' }] };
@@ -33,16 +34,16 @@ const validate = (current: Row, candidate: Row) => prepareServiceSolutions(curre
 test('a stale change to a closed import is named, the new measurement on another project is not', () => {
   const current = workspace();
   const next = structuredClone(current);
-  next.orders[0].measurements = { rooms: [{ id: 'r', name: 'Office', windows: [] }] }; // last night, refused
+  next.orders[0].manualProjectTotal = 9000; // last night, refused (owner-only field)
   next.orders[1].measurements = { rooms: [{ id: 'b', name: 'Bathroom', windows: [{ id: 'w', width: 35, height: 60, qty: 1 }] }] };
 
-  assert.equal(validate(structuredClone(current), structuredClone(next)), 'Завершённый исторический проект может исправлять только владелец.',
+  assert.equal(validate(structuredClone(current), structuredClone(next)), 'Итог проекта вручную может менять только владелец.',
     'the whole save is refused as before');
   assert.deepEqual(changedProjectIds(current, next).sort(), ['closed-import', 'daniel']);
 
   const refused = findRefusedProject(current, next, validate);
-  assert.deepEqual(refused, { id: 'closed-import', number: 'R-261122-165', message: 'Завершённый исторический проект может исправлять только владелец.' });
-  assert.equal(refusalNamingProject(refused!.message, refused), 'R-261122-165: Завершённый исторический проект может исправлять только владелец.');
+  assert.deepEqual(refused, { id: 'closed-import', number: 'R-261122-165', message: 'Итог проекта вручную может менять только владелец.' });
+  assert.equal(refusalNamingProject(refused!.message, refused), 'R-261122-165: Итог проекта вручную может менять только владелец.');
 
   // Set aside the refused project and the rest goes through.
   const rest = structuredClone(next);
