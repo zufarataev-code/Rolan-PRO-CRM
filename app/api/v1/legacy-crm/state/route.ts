@@ -26,6 +26,7 @@ import { prepareServiceSolutions, serviceSolutionsForViewer } from "@/features/l
 import { validateProjectDirectExpenses } from "@/features/legacy-crm/project-direct-expenses";
 import { prepareProductionStages, settleProductionProject } from "@/features/legacy-crm/production-stages";
 import { prepareServiceScopeApprovals } from "@/features/legacy-crm/service-scope-approvals";
+import { findRefusedProject, refusalNamingProject } from "@/features/legacy-crm/refused-project";
 import { buildLeadScopeWhere } from "@/features/sales/access";
 import { pushAfterLegacySave } from "@/features/push/dispatcher";
 
@@ -198,32 +199,51 @@ export async function PUT(request: NextRequest) {
   const testingMode = (currentSettings.testingMode as { on?: unknown } | undefined)?.on === true;
   const rule = (error: string | null) => (testingMode ? null : error);
 
+  const managerLegacyIds = auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [];
+  const sessionUserId = auth.session.user.user_id;
+  // The same checks, in the same order, as below; used only after a refusal to find
+  // the one project it is about (see refused-project.ts).
+  const validateProjects = (current: Record<string, unknown>, candidate: Record<string, unknown>): string | null =>
+    prepareServiceScopeApprovals(current, candidate, isOwner, managerLegacyIds, sessionUserId)
+    ?? prepareProductionStages(current, candidate, isOwner, managerLegacyIds, !isPrivileged, sessionUserId)
+    ?? prepareServiceSolutions(current, candidate, isOwner, managerLegacyIds, !isPrivileged)
+    ?? validateProjectDirectExpenses(current, candidate, isOwner, managerLegacyIds);
+  // Owner, 2026-11-27: one refused project must not block every other save from the
+  // device. Name the project, so the browser sets only its change aside.
+  const refuseSave = (code: string, message: string) => {
+    const project = findRefusedProject(
+      currentWorkspace.payload as Record<string, unknown>, nextPayload as Record<string, unknown>, validateProjects);
+    return apiError(400, code, refusalNamingProject(message, project),
+      project ? { refused_project_id: project.id, refused_project_number: project.number } : {});
+  };
+
   const scopeError = prepareServiceScopeApprovals(currentWorkspace.payload as Record<string, unknown>,nextPayload as Record<string, unknown>,
-    auth.session.roles.includes(ROLE_CODES.OWNER),auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],auth.session.user.user_id);
-  if(rule(scopeError)) return apiError(400,"invalid_service_approval",scopeError as string);
+    isOwner, managerLegacyIds, sessionUserId);
+  if (rule(scopeError)) return refuseSave("invalid_service_approval", scopeError as string);
   const stageError = prepareProductionStages(currentWorkspace.payload as Record<string, unknown>,
-    nextPayload as Record<string, unknown>, auth.session.roles.includes(ROLE_CODES.OWNER),
-    auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [], !isPrivileged, auth.session.user.user_id);
-  if (rule(stageError)) return apiError(400, "invalid_production_stage", stageError as string);
+    nextPayload as Record<string, unknown>, isOwner, managerLegacyIds, !isPrivileged, sessionUserId);
+  if (rule(stageError)) return refuseSave("invalid_production_stage", stageError as string);
 
   const solutionError = prepareServiceSolutions(
     currentWorkspace.payload as Record<string, unknown>,
     nextPayload as Record<string, unknown>,
-    auth.session.roles.includes(ROLE_CODES.OWNER),
-    auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],
+    isOwner,
+    managerLegacyIds,
     !isPrivileged,
   );
-  if (rule(solutionError)) return apiError(400, "invalid_service_solution", solutionError as string);
+  if (rule(solutionError)) return refuseSave("invalid_service_solution", solutionError as string);
   for (const order of (nextPayload as Record<string, any>).orders || []) {
     const previous = ((currentWorkspace.payload as Record<string, any>).orders || []).find((item: Record<string, any>) => item.id === order.id) || {};
     if (!testingMode && !auth.session.roles.includes(ROLE_CODES.OWNER) && (JSON.stringify(order.googleAdsCostsReview) !== JSON.stringify(previous.googleAdsCostsReview) || JSON.stringify(order.googleAdsPayrollReview) !== JSON.stringify(previous.googleAdsPayrollReview))) {
-      return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.");
+      return apiError(403, "owner_cost_review_required", "Only the owner can confirm actual project costs.",
+        { refused_project_id: String(order.id ?? ''), refused_project_number: String(order.number ?? '') });
     }
     if (!testingMode && !auth.session.roles.includes(ROLE_CODES.OWNER) && (order.canonicalLeadId ?? null) !== (previous.canonicalLeadId ?? null)) {
       if (previous.id || !auth.session.roles.includes(ROLE_CODES.MANAGER) || typeof order.canonicalLeadId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.canonicalLeadId)
         || [...legacyProjectsIncludingArchive(currentWorkspace.payload as Record<string, unknown>), ...legacyProjectsIncludingArchive(nextPayload as Record<string, unknown>)].some(other => other.id !== order.id && other.canonicalLeadId === order.canonicalLeadId)
         || !await prisma.lead.findFirst({ where: { lead_id: order.canonicalLeadId, ...buildLeadScopeWhere(auth.session.user.user_id) }, select: { lead_id: true } })) {
-        return apiError(403, "original_lead_protected", "The original project lead cannot be replaced; new projects require an accessible lead.");
+        return apiError(403, "original_lead_protected", "The original project lead cannot be replaced; new projects require an accessible lead.",
+          { refused_project_id: String(order.id ?? ''), refused_project_number: String(order.number ?? '') });
       }
     }
     settleProductionProject(previous, order, nextPayload as Record<string, any>, auth.session.user.user_id);
@@ -234,7 +254,7 @@ export async function PUT(request: NextRequest) {
     auth.session.roles.includes(ROLE_CODES.OWNER),
     auth.session.roles.includes(ROLE_CODES.MANAGER) ? auth.session.user.legacy_user_ids : [],
   );
-  if (rule(expenseError)) return apiError(400, "invalid_project_expense", expenseError as string);
+  if (rule(expenseError)) return refuseSave("invalid_project_expense", expenseError as string);
 
   const introducedDuplicate = findIntroducedClientIdentityDuplicate(
     workspaceClients(currentWorkspace.payload),

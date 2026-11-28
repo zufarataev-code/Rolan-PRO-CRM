@@ -15,7 +15,7 @@ test("only the owner switches the testing mode; the saved switch decides", () =>
 
 test("while it is on, the business-rule checks do not reject a save", () => {
   for (const code of ["invalid_service_approval", "invalid_production_stage", "invalid_service_solution", "invalid_project_expense"]) {
-    assert.match(route, new RegExp(`if ?\\(rule\\(\\w+\\)\\) return apiError\\(400, ?"${code}"`));
+    assert.match(route, new RegExp(`if ?\\(rule\\(\\w+\\)\\) return (?:apiError\\(400, ?|refuseSave\\()"${code}"`));
   }
   assert.match(route, /if \(!testingMode && !auth\.session\.roles\.includes\(ROLE_CODES\.OWNER\) && \(JSON\.stringify\(order\.googleAdsCostsReview\)/);
   assert.match(route, /if \(!testingMode && !auth\.session\.roles\.includes\(ROLE_CODES\.OWNER\) && \(order\.canonicalLeadId/);

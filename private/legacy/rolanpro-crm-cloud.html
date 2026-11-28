@@ -1727,6 +1727,7 @@
   .project-feed-next .order-action-card { width:auto; flex:1; min-height:44px; padding:.45rem .75rem; grid-template-columns:26px minmax(0,1fr); align-items:center; gap:.5rem; }
   .project-feed-next .order-action-card .order-action-title { font-size:14px; }
   .project-feed-next .order-action-card .order-action-sub { font-size:11.5px; opacity:.9; }
+  .project-feed-next .project-feed-install { flex:0 0 auto; white-space:nowrap; }
   @media (max-width:720px) { .project-feed-top { grid-template-columns:1fr; } .project-feed-top > .project-feed-gate { max-width:none; } .project-feed-next { flex-wrap:wrap; } }
   /* Чек-лист «до монтажа» + разблокировка владельцу (Owner, 2026-10-26) */
   .project-feed-gate { background:#fff; border:1px solid #D9DEE6; border-radius:6px; padding:12px 14px; } details.project-feed-gate > summary { cursor:pointer; list-style:none; } details.project-feed-gate > summary::-webkit-details-marker { display:none; } details.project-feed-gate[open] > summary { margin-bottom:8px; } details.project-feed-gate .project-feed-gate-list { margin-top:4px; }
@@ -19728,6 +19729,8 @@ function projectServicesNextAction(o) {
   // project; a measurer keeps the measurement actions.
   if (!orderUserCanSeeMoney(o, currentUser())) return null;
   if (!projectHasServices(o)) return { key: 'add_services', icon: '🧩', title: 'Добавить услуги проекта', sub: 'Что делаем у клиента — от услуг зависит, нужен ли замер и что войдёт в КП.', variant: 'primary', onclick: `document.querySelector('[data-project-card-services]')?.scrollIntoView({behavior:'smooth',block:'start'})` };
+  // Money received is the client's yes: it goes before the measurement step (audit, 2026-11-17).
+  if (typeof projectPaidShortcutReady === 'function' && projectPaidShortcutReady(o)) return projectPaidWithoutProposalAction(o);
   if (!projectMeasurementSettled(o)) {
     // A measurement already booked keeps its own step (the measurer's work);
     // a finished one is completed in the measurement editor, not booked again.
@@ -19735,7 +19738,6 @@ function projectServicesNextAction(o) {
     if (o.status === 'measurement_done') return { icon: '📏', title: 'Дополнить замер', sub: `Замер не закончен: ${orderMeasurementCompletionIssues(o).slice(0, 3).join(', ')}.`, variant: 'warning', onclick: `openManagerMeasureModal('${o.id}')` };
     return { icon: '📐', title: 'Замер: выезд замерщика или размеры сейчас', sub: 'Услугам за sq ft нужны размеры окон — один шаг, два пути.', variant: 'primary', onclick: `scheduleMeasurementPrompt('${o.id}')` };
   }
-  if (typeof projectPaidWithoutProposal === 'function' && projectPaidWithoutProposal(o)) return projectPaidWithoutProposalAction(o);
   if (!projectEstimateIsApproved(o)) return { icon: '✅', title: 'Расчёт готов → КП', sub: orderNeedsMeasurements(o) ? 'Размеры внесены. Проверьте количество и цены в «Услугах проекта» — и сформируйте КП.' : 'Замер не нужен: услуги без размеров. Проверьте количество и цены — и сформируйте КП.', variant: 'primary', onclick: `openProposalWizard('${o.id}')` };
   return projectProposalNextAction(o);
 }
@@ -19760,7 +19762,7 @@ function orderPrimaryNextAction(o) {
     ? { icon: '🧭', title: 'Контроль замера', sub: 'Замерщик видит заказ без денег. Замер работает в CRM на телефоне и планшете.', variant: 'soft', onclick: `openMeasurerV25ForOrder('${o.id}')` }
     : { icon: '👷', title: 'Назначить замерщика', sub: 'Без ответственного замерщик не увидит задачу в своём кабинете.', variant: 'warning', onclick: `openAssignTeam('${o.id}')` };
   if (o.status === 'measurement_done' && !projectEstimateIsApproved(o)) return { icon: '🧮', title: 'Рассчитать проект', sub: orderUserCanSeeInternalEconomics(o, currentUser()) ? 'Проверьте цену, расходы и маржу до формирования КП.' : 'Проверьте размеры, услуги и цену клиенту до формирования КП.', variant: 'primary', onclick: `openProjectEstimateWorkspace('${o.id}')` };
-  if (['measurement_done', 'proposal_sent'].includes(o.status) && typeof projectPaidWithoutProposal === 'function' && projectPaidWithoutProposal(o)) return projectPaidWithoutProposalAction(o);
+  if (['measurement_done', 'proposal_sent'].includes(o.status) && typeof projectPaidShortcutReady === 'function' && projectPaidShortcutReady(o)) return projectPaidWithoutProposalAction(o);
   if (o.status === 'measurement_done') return projectProposalNextAction(o);
   if (o.status === 'proposal_sent') return { icon: '✅', title: 'Отметить КП принятым', sub: 'Используйте, если клиент подтвердил предложение вне портала.', variant: 'primary', onclick: `if (confirm('Клиент подтвердил КП (по телефону, в переписке)? Подписанное КП нельзя будет изменить — только новой версией.')) changeStatus('${o.id}','proposal_accepted')` };
   if (o.status === 'proposal_accepted' && !orderPaymentReadyForProduction(o)) return { icon: '💰', title: 'Отметить аванс', sub: 'Либо подтвердите в расчёте согласованную оплату после выполнения.', variant: 'warning', onclick: `markDepositReceived('${o.id}')` };

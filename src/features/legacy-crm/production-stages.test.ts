@@ -312,3 +312,11 @@ test('a manager saves a closed project although completed-stage payroll is hidde
   const moved=structuredClone(managerView);moved.orders[0].productionStages[0].startsAt='2026-10-13T16:00:00Z';
   assert.match(prepareProductionStages(done,moved,false,['m'])!,/после принятия КП/);
 });
+
+test('stages that are not a list are rejected even when the project had none',()=>{
+  const before=fixture('proposal_accepted');before.orders[0].productionStages=[];
+  for(const bad of ['stages',{id:'x'},7]){
+    const next=structuredClone(before);next.orders[0].productionStages=bad;
+    assert.equal(prepareProductionStages(before,next,true,[]),'Некорректные этапы проекта.');
+  }
+});

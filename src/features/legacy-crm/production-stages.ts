@@ -13,9 +13,10 @@ const money = (value: number) => Math.round(value * 100) / 100;
  * Stages as the browser can change them. Payroll snapshots and own-earnings
  * summaries are server-owned and hidden from managers, so a manager's save
  * never carries them; comparing them would read every completed stage as an
- * edit and reject the whole workspace save.
+ * edit and reject the whole workspace save. A value that is not a list stays
+ * as it is, so the malformed-stages check below still sees it.
  */
-const editableStages = (value: unknown) => stable(rows(value).map(stage => {
+const editableStages = (value: unknown) => value != null && !Array.isArray(value) ? stable(value) : stable(rows(value).map(stage => {
   if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage;
   const { payroll: _payroll, ownEarnings: _ownEarnings, ...editable } = stage;
   return editable;
