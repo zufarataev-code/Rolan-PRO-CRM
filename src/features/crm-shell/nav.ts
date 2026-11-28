@@ -83,7 +83,7 @@ export const CRM_NAV: CrmNavGroup[] = [
   {
     title: "Компания",
     items: [
-      section("Команда", "team", UsersRoundIcon),
+      section("Команда", "team", UsersRoundIcon, true),
       section("Академия", "academy", GraduationCapIcon),
       section("Рефералы", "referrals", GiftIcon),
       section("Отзывы", "reviews", StarIcon),

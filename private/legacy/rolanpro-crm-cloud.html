@@ -19671,18 +19671,29 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey, opts 
   }
   await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
-function notifyClientEventScheduled(orderId, type) {
+// Owner, 2026-11-27: the link in the notice opens the client's visit page — who is
+// coming (photo, name), when, and «Перенести» — even before there is a proposal.
+async function clientVisitLink(orderId) {
+  try {
+    const response = await fetch(`/api/v1/legacy-crm/visit-link?order=${encodeURIComponent(orderId)}`, { credentials: 'same-origin', cache: 'no-store' });
+    const payload = response.ok ? await response.json() : null;
+    return payload?.data?.url || '';
+  } catch (_) { return ''; }
+}
+async function notifyClientEventScheduled(orderId, type) {
   if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   const info = orderEventInfo(type);
   if (!o || !c || !info.field || !o[info.field]) return;
+  const link = await clientVisitLink(orderId);
   const when = fmtDateTime(o[info.field]);
   const subject = `${info.title} RolanPRO назначен(а) — ${o.number}`;
-  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\nВы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}\n\nRolanPRO`;
+  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\n${link ? `Кто к вам приедет и перенос времени: ${link}` : `Вы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}`}\n\nRolanPRO`;
   const statusKey = type === 'consultation' ? 'consultation_scheduled' : type === 'measure' ? 'measurement_scheduled' : 'installation_scheduled';
   const smsTemplate = getSmsTemplate(statusKey);
-  const smsBody = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
+  const smsText = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
+  const smsBody = link && !smsText.includes(link) ? `${smsText} Details / reschedule: ${link}` : smsText;
   sendClientOperationalMessage(o, subject, body, `${type}_client_notice`, { smsBody, emailBody: body });
 }
 function notifyClientRequestResolved(orderId, requestId, accepted) {
@@ -20132,6 +20143,8 @@ function parseHash() {
   if (/^#\/installer-operations\/?$/.test(h)) { state.view = 'installerOps'; }
   // The new interface (/crm) has one menu for every section; a section it has
   // not redrawn yet opens here by its address: #/section/<key>.
+  // The agent panel of the new interface (/crm): the same agent, open, alone on the page.
+  if (/^#\/ai\/?$/.test(h)) { state.aiSidebarOpen = true; if (!state.aiSidebarTab) state.aiSidebarTab = 'pulse'; }
   const section = h.match(/^#\/section\/([A-Za-z]+)\/?$/);
   if (section && crmSectionOpenAllowed(section[1])) { state.view = section[1]; state.openOrderId = null; state.modal = null; }
 }
@@ -20139,7 +20152,7 @@ function parseHash() {
 function crmSectionOpenAllowed(key) {
   const role = currentUser()?.role;
   if (!['owner', 'manager'].includes(role)) return false;
-  if (['ratesCosts', 'paymentsdue', 'accounting', 'settings'].includes(key)) return role === 'owner';
+  if (['ratesCosts', 'paymentsdue', 'accounting', 'settings', 'team'].includes(key)) return role === 'owner';
   return ['leads', 'coldcalls', 'orders', 'quickEntry', 'proposals', 'calendar', 'tasks', 'academy', 'clients', 'inventory', 'payroll', 'reports', 'team', 'referrals', 'reviews'].includes(key);
 }
 window.addEventListener('hashchange', () => { parseHash(); render(); });
@@ -20614,7 +20627,8 @@ function renderAppShell() {
     ...(role === 'owner' ? [['paymentsdue', 'Ожидают оплаты', '💵']] : []),
     ...(role === 'owner' ? [['accounting', 'Деньги', '💵']] : []),
     ['reports', T('reports'), '📈'],
-    ['team', T('team'), '🧑‍🔧'],
+    // Owner, 2026-11-27: «доступ к команде менеджеру не нужен».
+    ...(role === 'owner' ? [['team', T('team'), '🧑‍🔧']] : []),
     ['referrals', T('referralProgram'), '🎁'],
     ['reviews', T('reviews'), '⭐'],
     ...(role === 'owner' ? [['roleTesting', 'Проверка ролей', '👁'], ['settings', T('settings'), '⚙️']] : []),
@@ -20848,7 +20862,7 @@ function renderView() {
       case 'accounting': return u.role === 'owner' ? renderAccounting() : `<div class="card">Доступ только владельцу</div>`;
       case 'paymentsdue': return u.role === 'owner' ? renderPaymentsDue() : `<div class="card">Доступ только владельцу</div>`;
       case 'reports': return renderReports();
-      case 'team': return renderTeam();
+      case 'team': return u.role === 'owner' ? renderTeam() : `<div class="card">Доступ только для владельца</div>`;
       case 'referrals': return renderReferrals();
       case 'reviews': return renderReviews();
       case 'settings': return u.role === 'owner' ? renderSettings() : `<div class="card">${T('empty')}</div>`;
@@ -43914,7 +43928,9 @@ function renderPayroll() {
   } else { start = new Date(now.getFullYear(), now.getMonth(), 1); end = now; }
   ({ start, end } = payrollShiftedRange(period, start, end, state.payrollShift || 0));
 
-  const users = db.users.filter(u => u.role !== 'owner' && u.active !== false);
+  // Owner, 2026-11-27: «у менеджера не должно быть доступа к зарплате — только к своей».
+  const viewer = currentUser();
+  const users = db.users.filter(u => u.role !== 'owner' && u.active !== false && (viewer?.role === 'owner' || u.id === viewer?.id));
   const payouts = users.map(u => {
     const calc = calcUserPayoutForPeriod(u.id, start, end);
     return { user: u, ...calc, total: Math.max(0, calc.total - payrollPaidForPeriod(u.id, start, end)) };
@@ -44143,7 +44159,33 @@ function openProjectPurchaseRequests() {
   state.inventoryTab = 'purchases';
   render();
 }
+// Owner, 2026-11-27: «у менеджера доступ к складу частичный — плёнка, что в наличии;
+// за закупку отвечаю я, общий доступ давать смысла нет». The manager sees what film
+// is on the shelf (model, rolls, length, sq ft) — no costs, purchases or receipts.
+function renderManagerFilmStock() {
+  const rows = {};
+  (db.inventory || []).forEach(roll => {
+    const remainingM = Math.max(0, Number(roll.remainingLengthM) || 0);
+    if (!remainingM) return;
+    const row = rows[roll.catalogId] || (rows[roll.catalogId] = { rolls: 0, lengthM: 0, sqft: 0, widths: new Set() });
+    row.rolls += 1;
+    row.lengthM += remainingM;
+    const widthMm = Math.max(0, Number(roll.widthMm) || 0);
+    if (widthMm) { row.sqft += mm2_to_sqft(widthMm * remainingM * 1000); row.widths.add(Math.round(widthMm)); }
+  });
+  const list = Object.entries(rows).map(([id, row]) => ({ id, item: getCatalogItem(id), ...row }))
+    .sort((a, b) => String(a.item?.name || '').localeCompare(String(b.item?.name || '')));
+  return `<div class="card mb-4" data-manager-film-stock>
+    <h2 class="font-semibold text-lg">🎞 Плёнка в наличии</h2>
+    <p class="text-sm text-gray-500 mb-3">Что сейчас лежит на складе. Закупку ведёт владелец.</p>
+    ${list.length ? `<div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="text-xs text-gray-500"><th class="text-left p-2">Плёнка</th><th class="text-left p-2">Рулонов</th><th class="text-left p-2">Ширина</th><th class="text-left p-2">Остаток</th></tr></thead>
+      <tbody>${list.map(row => `<tr class="border-t"><td class="p-2 font-medium">${academyEsc(row.item?.name || 'Плёнка без карточки')}</td><td class="p-2">${row.rolls}</td><td class="p-2">${[...row.widths].sort((a, b) => a - b).map(w => `${(w / 25.4).toFixed(0)}″`).join(', ') || '—'}</td><td class="p-2">${row.lengthM.toFixed(1)} м${row.sqft ? ` · ${Math.round(row.sqft)} sq ft` : ''}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="text-sm text-gray-500">Плёнки на складе нет.</div>'}
+  </div>`;
+}
 function renderInventory() {
+  if (currentUser()?.role === 'manager') return renderManagerFilmStock();
   const tab = state.inventoryTab || 'overview';
   const needs = warehouseNeedItems();
   const activePurchases = (db.purchaseRequests||[]).filter(x => !['received','cancelled'].includes(x.status)).length;
