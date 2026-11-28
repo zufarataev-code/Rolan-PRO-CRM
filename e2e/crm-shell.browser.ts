@@ -62,6 +62,8 @@ async function sideways(target: any) {
           break;
         }
       }
+      // A table wider than the phone makes the person scroll it sideways: on a phone it is laid out as cards.
+      if (scrolls && el.tagName === 'TABLE' && shown(el)) { offenders.push(describe(el, box, 'table')); if (offenders.length >= 8) break; continue; }
       if (scrolls || !shown(el)) continue;
       offenders.push(describe(el, box, cut ? 'cut' : 'wide'));
       if (offenders.length >= 8) break;
@@ -91,6 +93,8 @@ async function main() {
   const {chromium} = createRequire(process.cwd() + '/package.json')(process.env.E2E_PLAYWRIGHT_MODULE || 'playwright');
   const owner = await prisma.user.findFirstOrThrow({where: {is_active: true, user_accesses: {some: {role: {code: ROLE_CODES.OWNER}}}}});
   const failures: string[] = [];
+  const original = await prisma.legacyWorkspace.findUnique({where: {workspace_id: 'primary'}});
+  let seeded = false;
   let browser: any;
   try {
     const password = randomUUID();
@@ -131,8 +135,29 @@ async function main() {
         await installOffer.waitFor({state: 'hidden'});
       }
 
+      if (!seeded) {
+        // Real projects have long names, addresses and e-mails; the empty CI workspace has none.
+        let response = await context.request.get(base + '/api/v1/legacy-crm/state');
+        if (response.status() === 404) {
+          assert.equal((await context.request.put(base + '/api/v1/legacy-crm/state', {data: {revision: 0, payload: {users: [], clients: [], orders: [], settings: {}}}})).status(), 200);
+          response = await context.request.get(base + '/api/v1/legacy-crm/state');
+        }
+        const state = (await response.json()).data;
+        const now = new Date().toISOString();
+        const owner = (state.payload.users || []).find((u: any) => u.role === 'owner')?.id || null;
+        state.payload.clients = (state.payload.clients || []).filter((c: any) => c.id !== 'e2e-phone-client').concat({id: 'e2e-phone-client', name: 'Константин Александрович Великолепный-Широкоформатный', phone: '+13105550199', email: 'konstantin.aleksandrovich.velikolepny.office.manager@verylongcompanydomain-example.com', source: 'google', createdAt: now, address: '23456 Ventura Boulevard Building C Suite 1200, Woodland Hills, CA 91364-1234'});
+        const win = (id: string, name: string) => ({id, name, width: 254, height: 254, qty: 1, pricePerSqft: 14});
+        state.payload.orders = (state.payload.orders || []).filter((o: any) => o.id !== 'e2e-phone-order').concat({id: 'e2e-phone-order', number: 'R-261128-999', clientId: 'e2e-phone-client', status: 'measurement_done', createdAt: now, managerId: owner,
+          serviceType: 'solar_film', serviceTypes: ['solar_film', 'privacy_film'], installerIds: [], extraServices: [], extraExpenses: [], timeline: [],
+          comment: 'Клиент просит позвонить заранее за час до приезда, ворота с кодом, парковка только на улице напротив дома',
+          measurements: {rooms: [{id: 'r1', name: 'Гостиная с панорамными окнами на втором этаже', windows: [win('w1', 'Большое панорамное окно слева от камина'), win('w2', 'Раздвижная дверь во двор')]}]}});
+        assert.equal((await context.request.put(base + '/api/v1/legacy-crm/state', {data: state})).status(), 200);
+        seeded = true;
+      }
       const projects = await (await context.request.get(base + '/api/v1/crm-ui/projects')).json().catch(() => null);
-      const firstProject = projects?.data?.columns?.flatMap?.((column: any) => column.cards || [])?.[0]?.id;
+      const cards = projects?.data?.columns?.flatMap?.((column: any) => column.cards || []) || [];
+      const firstProject = (cards.find((card: any) => card.id === 'e2e-phone-order') || cards[0])?.id;
+      if (!cards.some((card: any) => card.id === 'e2e-phone-order')) failures.push(`${label}: the long-named test project is not on the board`);
       const screens: Array<[string, string]> = [['home', '/crm'], ['projects', '/crm/projects'], ['leads', '/crm/leads'], ['calendar', '/crm/calendar'], ['clients', '/crm/clients'], ['tasks', '/crm/tasks'], ['inventory', '/crm/inventory']];
       if (firstProject) screens.push(['project', `/crm/projects/${encodeURIComponent(firstProject)}`]);
       for (const [name, path] of screens) {
@@ -148,6 +173,13 @@ async function main() {
         await shot(page, `${name}-${label}`);
       }
       if (phone) {
+        // «Список» on a phone: one card per project, nothing wider than the screen.
+        await page.goto(base + '/crm/projects', {waitUntil: 'networkidle'});
+        await page.getByRole('tab', {name: /Список/}).click();
+        const list = await sideways(page);
+        if (list.scroll > list.inner || list.offenders.length) failures.push(`projects-list@${label} scrolls sideways: ${JSON.stringify(list)}`);
+        await shot(page, `projects-list-${label}`);
+        await page.getByRole('tab', {name: /Доска/}).click();
         // Every working section of the menu, shown inside the frame.
         const sections = crmNavFor('owner').flatMap((group) => group.items).filter((item) => item.section);
         for (const item of sections) {
@@ -197,6 +229,8 @@ async function main() {
     console.log('New /crm interface is the landing page and its screens load on computer and phone: passed');
   } finally {
     await browser?.close();
+    if (original) await prisma.legacyWorkspace.update({where: {workspace_id: 'primary'}, data: {payload: original.payload as any, revision: {increment: 1}}});
+    else await prisma.legacyWorkspace.deleteMany({where: {workspace_id: 'primary'}});
     await prisma.user.update({where: {user_id: owner.user_id}, data: {password_hash: owner.password_hash, must_change_password: owner.must_change_password}});
     await prisma.$disconnect();
   }
