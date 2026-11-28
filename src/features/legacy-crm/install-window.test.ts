@@ -53,7 +53,7 @@ test('quick durations: «2 дня» is the start day and the next, 8 working hou
 
 test('a multi-day service shows on every day of the calendar, labelled', () => {
   const cal = fn(stages, 'calendarEventsForOrder');
-  assert.match(cal, /service: \{ name: group\.name, kind, end, day: index \+ 1, days: days\.length \}/);
+  assert.match(cal, /service: \{ name, kind, end, day: index \+ 1, days: days\.length \}/);
   assert.match(fn(html, 'renderCalendarEventCard'), /calendar-service-stripe/);
   assert.match(fn(html, 'renderCalendarEventCard'), /день \$\{/);
 });

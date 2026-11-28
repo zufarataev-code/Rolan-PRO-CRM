@@ -19671,18 +19671,29 @@ async function sendClientOperationalMessage(o, subject, body, timelineKey, opts 
   }
   await dispatchClientCommunication(o, subject, body, timelineKey, { ...opts, kind: 'operational' });
 }
-function notifyClientEventScheduled(orderId, type) {
+// Owner, 2026-11-27: the link in the notice opens the client's visit page — who is
+// coming (photo, name), when, and «Перенести» — even before there is a proposal.
+async function clientVisitLink(orderId) {
+  try {
+    const response = await fetch(`/api/v1/legacy-crm/visit-link?order=${encodeURIComponent(orderId)}`, { credentials: 'same-origin', cache: 'no-store' });
+    const payload = response.ok ? await response.json() : null;
+    return payload?.data?.url || '';
+  } catch (_) { return ''; }
+}
+async function notifyClientEventScheduled(orderId, type) {
   if (typeof crmImportMode === 'function' && crmImportMode()) return;
   const o = getOrder(orderId);
   const c = getClient(o?.clientId);
   const info = orderEventInfo(type);
   if (!o || !c || !info.field || !o[info.field]) return;
+  const link = await clientVisitLink(orderId);
   const when = fmtDateTime(o[info.field]);
   const subject = `${info.title} RolanPRO назначен(а) — ${o.number}`;
-  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\nВы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}\n\nRolanPRO`;
+  const body = `Здравствуйте, ${c.name || ''}!\n\n${info.title} по заказу ${o.number} назначен(а) на ${when}.\nАдрес: ${orderAddress(o, c) || 'уточняется'}.\n\n${link ? `Кто к вам приедет и перенос времени: ${link}` : `Вы можете попросить перенос или отмену через кабинет заказа.${clientNoticePortalText(o)}`}\n\nRolanPRO`;
   const statusKey = type === 'consultation' ? 'consultation_scheduled' : type === 'measure' ? 'measurement_scheduled' : 'installation_scheduled';
   const smsTemplate = getSmsTemplate(statusKey);
-  const smsBody = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
+  const smsText = smsTemplate ? fillTemplate(smsTemplate, smsVars(o, statusKey)) : `ROLANPRO: ${info.title} for ${o.number} is scheduled for ${when}.`;
+  const smsBody = link && !smsText.includes(link) ? `${smsText} Details / reschedule: ${link}` : smsText;
   sendClientOperationalMessage(o, subject, body, `${type}_client_notice`, { smsBody, emailBody: body });
 }
 function notifyClientRequestResolved(orderId, requestId, accepted) {
