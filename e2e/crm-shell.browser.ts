@@ -28,16 +28,22 @@ async function shot(page: any, name: string) {
 // stick out past the right edge: not the new screens, not a working section shown in the
 // frame, not the project's working card. Something cut off by a box that hides overflow
 // counts too, because the person cannot reach it.
-async function sideways(target: any) {
-  return target.evaluate(() => {
-    const inner = window.innerWidth;
+// The phone's own width, not window.innerWidth: on a phone a page wider than the screen
+// widens the layout itself (innerWidth grows with it) and only the screenshot shows the cut.
+async function sideways(target: any, phoneWidth: number) {
+  return target.evaluate((limit: number) => {
+    const inner = Math.min(limit, window.innerWidth);
     const offenders: string[] = [];
+    if (window.innerWidth > limit + 1) offenders.push(`layout ${window.innerWidth}px wide on a ${limit}px phone`);
     const describe = (el: Element, box: DOMRect, why: string) => {
       const html = el as HTMLElement;
       const name = `${el.tagName.toLowerCase()}${html.id ? '#' + html.id : ''}.${String(html.className || '').split(/\s+/).filter(Boolean).slice(0, 3).join('.')}`;
       return `${why} ${name} w=${Math.round(box.width)} right=${Math.round(box.right)} «${(html.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40)}»`;
     };
     const shown = (el: Element) => {
+      // The content of a closed «details» is laid out but not on screen.
+      const closed = el.closest('details:not([open])');
+      if (closed && !el.closest('summary')) return false;
       for (let node: Element | null = el; node; node = node.parentElement) {
         const style = getComputedStyle(node);
         if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
@@ -69,7 +75,7 @@ async function sideways(target: any) {
       if (offenders.length >= 8) break;
     }
     return {scroll: document.documentElement.scrollWidth, inner, offenders};
-  });
+  }, phoneWidth);
 }
 
 /** The working CRM inside the visible frame, once it has drawn its screen. */
@@ -166,7 +172,9 @@ async function main() {
         const broken = await page.getByText(/Не удалось|Ошибка загрузки/).count();
         if (broken) failures.push(`${name}@${label}: the screen shows a load error`);
         if (phone) {
-          const result = await sideways(page);
+          // Folded blocks («Дозвон по источникам») must fit too once opened.
+          await page.evaluate(() => document.querySelectorAll('main details, .rp-crm details').forEach((details) => ((details as HTMLDetailsElement).open = true)));
+          const result = await sideways(page, viewport.width);
           if (result.scroll > result.inner || result.offenders.length) failures.push(`${name}@${label} scrolls sideways: ${JSON.stringify(result)}`);
         }
         if (await installOffer.count()) failures.push(`${name}@${label}: the one-time install offer came back after «Не сейчас»`);
@@ -176,7 +184,7 @@ async function main() {
         // «Список» on a phone: one card per project, nothing wider than the screen.
         await page.goto(base + '/crm/projects', {waitUntil: 'networkidle'});
         await page.getByRole('tab', {name: /Список/}).click();
-        const list = await sideways(page);
+        const list = await sideways(page, viewport.width);
         if (list.scroll > list.inner || list.offenders.length) failures.push(`projects-list@${label} scrolls sideways: ${JSON.stringify(list)}`);
         await shot(page, `projects-list-${label}`);
         await page.getByRole('tab', {name: /Доска/}).click();
@@ -187,8 +195,8 @@ async function main() {
           await page.goto(base + item.href, {waitUntil: 'networkidle'});
           const frame = await visibleFrame(page).catch(() => null);
           if (!frame) { failures.push(`${name}@${label}: the working section did not show`); continue; }
-          const outer = await sideways(page);
-          const inside = await sideways(frame);
+          const outer = await sideways(page, viewport.width);
+          const inside = await sideways(frame, viewport.width);
           if (outer.scroll > outer.inner || outer.offenders.length) failures.push(`${name}@${label} scrolls sideways: ${JSON.stringify(outer)}`);
           if (inside.scroll > inside.inner + 1 || inside.offenders.length) failures.push(`${name}@${label} inside the frame: ${JSON.stringify(inside)}`);
           await shot(page, `${name}-${label}`);
@@ -200,7 +208,7 @@ async function main() {
           const frame = await visibleFrame(page).catch(() => null);
           if (!frame) failures.push(`project-card@${label}: the working card did not show`);
           else {
-            const inside = await sideways(frame);
+            const inside = await sideways(frame, viewport.width);
             if (inside.scroll > inside.inner + 1 || inside.offenders.length) failures.push(`project-card@${label} inside the frame: ${JSON.stringify(inside)}`);
             await shot(page, `project-card-${label}`);
           }
@@ -211,7 +219,7 @@ async function main() {
         const agent = await visibleFrame(page).catch(() => null);
         if (!agent) failures.push(`agent@${label}: the agent panel did not show`);
         else {
-          const inside = await sideways(agent);
+          const inside = await sideways(agent, viewport.width);
           if (inside.scroll > inside.inner + 1 || inside.offenders.length) failures.push(`agent@${label} inside the frame: ${JSON.stringify(inside)}`);
           await shot(page, `agent-${label}`);
         }

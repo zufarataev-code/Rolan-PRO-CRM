@@ -50,7 +50,36 @@ function ProjectList({ columns, canArchive, onArchive }: { columns: Column[]; ca
   const rows = columns.flatMap((column) => column.cards.map((card) => ({ card, column })));
   if (!rows.length) return <p className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">Проектов нет.</p>;
   return (
-    <div className="bg-card overflow-x-auto rounded-xl border">
+    <>
+    {/* Phone (Owner, 2026-11-28: «на телефоне заезжает за экран»): one card per project instead of a wide table. */}
+    <ul className="flex flex-col gap-2 md:hidden">
+      {rows.map(({ card, column }) => (
+        <li key={card.id} className="bg-card flex items-start gap-2 rounded-xl border p-3">
+          <Link href={`/crm/projects/${encodeURIComponent(card.id)}`} className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <b>{card.number}</b>
+              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs"><i className="size-2 rounded-full" style={{ background: column.color }} />{column.title}</span>
+              {card.accent ? <Pill tone="muted">{card.accent.label}</Pill> : null}
+            </div>
+            <div className="mt-1 font-medium break-words">{card.client}</div>
+            {card.address ? <div className="text-muted-foreground text-xs break-words">{card.address}</div> : null}
+            {card.sum > 0 || card.debt > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-x-3 text-xs tabular-nums">
+                {card.sum > 0 ? <span>{moneyShort(card.sum)}</span> : null}
+                {card.debt > 0 ? <span className="text-destructive">Долг {moneyShort(card.debt)}</span> : null}
+              </div>
+            ) : null}
+            {card.next ? <div className="text-muted-foreground mt-1 text-xs break-words">{card.next}</div> : null}
+          </Link>
+          {canArchive ? (
+            <Button variant="ghost" size="sm" className="shrink-0" aria-label={`Удалить проект ${card.number} в архив`} onClick={() => onArchive(card)}>
+              <Trash2Icon className="size-4" />
+            </Button>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+    <div className="bg-card overflow-x-auto rounded-xl border max-md:hidden">
       <table className="w-full min-w-[720px] text-sm">
         <thead className="text-muted-foreground text-xs">
           <tr className="text-left">
@@ -92,6 +121,7 @@ function ProjectList({ columns, canArchive, onArchive }: { columns: Column[]; ca
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
