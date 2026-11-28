@@ -287,3 +287,67 @@ test("Worker answers a same-delivery message burst once and never shows a techni
   assert.match(source, /Do not announce or repeat that you are an AI/);
   assert.match(source, /answer honestly/);
 });
+
+test("Worker treats stop requests as an opt-out without the language model", async () => {
+  const { isOptOut, optOutConfirmation } = await import(
+    "../../../integrations/facebook-messenger-worker/src/booking"
+  );
+  for (const text of ["stop", "Stop.", "STOP", "Stop soliciting", "unsubscribe", "not interested", "No, not interested, thanks", "don't message me", "remove me from your list", "стоп", "не пишите мне", "no me interesa"]) {
+    assert.equal(isOptOut(text), true, text);
+  }
+  for (const text of ["No thank you", "Не интересно?", "I'm not interested in solar, I want smart film", "can you stop the glare?", "cancel", "Home", "Do you not have Black Friday sale?"]) {
+    assert.equal(isOptOut(text), false, text);
+  }
+  assert.match(optOutConfirmation("en"), /won't message you again/);
+  assert.match(optOutConfirmation("ru"), /больше не пишем/);
+  const source = workerSource();
+  assert.match(source, /event: "customer_opted_out"/);
+  assert.match(source, /if \(!alreadyOptedOut\) await sendMessage/);
+});
+
+test("Worker recognizes a call request, a typed phone, and the local service area", async () => {
+  const { asksForCall, extractPhone, inLocalServiceArea, leadReadyForBooking: ready } = await import(
+    "../../../integrations/facebook-messenger-worker/src/booking"
+  );
+  assert.equal(asksForCall("if the price fits within my budget you can reach me at 619-954-0963"), true);
+  assert.equal(asksForCall("I am on a flight all day so please call tomorrow"), true);
+  assert.equal(asksForCall("перезвоните мне после 5"), true);
+  assert.equal(asksForCall("Heat and privacy"), false);
+  assert.equal(extractPhone("you can reach me at 619-954-0963"), "619-954-0963");
+  assert.equal(extractPhone("714 251 3037"), "714 251 3037");
+  assert.equal(extractPhone("2 windows and 3 size small"), undefined);
+  assert.equal(inLocalServiceArea({ zip: "91352" }), true);
+  assert.equal(inLocalServiceArea({ zip: "92683" }), true);
+  assert.equal(inLocalServiceArea({ zip: "92129" }), false);
+  assert.equal(inLocalServiceArea({}), true);
+  // A Meta form lead (name, phone, service, ZIP) goes straight to real slots.
+  assert.equal(ready({ name: "Elyse", phone: "(619) 905-6544", serviceType: "Decorative Film", zip: "90805" }), true);
+});
+
+test("Worker steps back when a manager writes, and ignores its own and Meta's automatic messages", async () => {
+  const { humanTakeoverActive, isAutomatedPageMessage } = await import(
+    "../../../integrations/facebook-messenger-worker/src/booking"
+  );
+  const now = Date.parse("2026-11-26T16:00:00.000Z");
+  assert.equal(humanTakeoverActive("2026-11-26T20:00:00.000Z", now), true);
+  assert.equal(humanTakeoverActive("2026-11-26T10:00:00.000Z", now), false);
+  assert.equal(humanTakeoverActive(undefined, now), false);
+  assert.equal(isAutomatedPageMessage("Rolan Pro will contact you by phone or email to discuss your window film project and quote."), true);
+  assert.equal(isAutomatedPageMessage("Hi Chris, this is Daniel, the General Manager."), false);
+  const source = workerSource();
+  assert.match(source, /message\.metadata === BOT_METADATA/);
+  assert.match(source, /event: "manager_took_over"/);
+  assert.match(source, /event: "bot_silent_manager_active"/);
+});
+
+test("Worker prompt comes from the repository and encodes the transcript-review rules", () => {
+  const source = workerSource();
+  assert.doesNotMatch(source, /sys_prompt/);
+  assert.doesNotMatch(source, /SYS_PROMPT/);
+  assert.match(source, /never use slang openers such as "Hey" or "what's up"/);
+  assert.match(source, /never write a dollar amount, a range, "starting from", or a minimum/);
+  assert.match(source, /In the frosted state it gives privacy both day and night/);
+  assert.match(source, /never use the names Daniel, Daniil/);
+  assert.match(source, /Asking the same thing again in different words is forbidden/);
+  assert.match(source, /outside_local_area/);
+});
