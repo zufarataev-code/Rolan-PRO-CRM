@@ -163,7 +163,7 @@ export default function CrmTasksPage() {
           ) : null}
 
           <div className="mt-4 flex justify-center">
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm" className="h-auto min-h-8 max-w-full py-1.5 text-center whitespace-normal">
               <Link href={LEGACY_TASKS}>Прежний экран: отметить, назначить, удалить</Link>
             </Button>
           </div>

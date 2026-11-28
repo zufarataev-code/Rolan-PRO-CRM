@@ -69,6 +69,26 @@
   .rp-crm * {
     border-color: var(--border);
   }
+
+  /*
+   * Owner, 2026-11-28: «нет мобильной версии, снова заезжать за экран». Real
+   * names, addresses and e-mails are long; on a phone none of them may push a
+   * screen wider than the phone:
+   * - a long word or e-mail breaks onto the next line instead of sticking out;
+   * - a one-line text cut with «…» may shrink inside a row;
+   * - a grid without its own columns is one column exactly as wide as the
+   *   screen (an implicit column would grow to the longest one-line text).
+   * Utilities with their own min-width or columns still win.
+   */
+  .rp-crm {
+    overflow-wrap: anywhere;
+  }
+  .rp-crm .truncate {
+    min-width: 0;
+  }
+  .rp-crm .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

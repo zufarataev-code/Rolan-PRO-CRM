@@ -340,7 +340,26 @@ export default function CrmLeadsPage() {
           {sources.length ? (
             <details className="bg-card mb-4 rounded-lg border px-3 py-2 text-sm">
               <summary className="cursor-pointer font-semibold">Дозвон по источникам · {rows.filter((row) => row.contactTag).length} из {rows.length} отмечено</summary>
-              <div className="mt-2 overflow-x-auto">
+              {/* Phone: one line per source instead of a table wider than the screen. */}
+              <ul className="mt-2 grid gap-2 text-xs md:hidden">
+                {sources.map((item) => (
+                  <li key={item.source} className="border-t pt-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <b className="min-w-0 break-words">{item.label}</b>
+                      <span className="shrink-0 tabular-nums">{item.total} лид.</span>
+                    </div>
+                    <div className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {LEAD_CONTACT_TAGS.filter((tag) => item.byTag[tag.code]).map((tag) => (
+                        <span key={tag.code}>
+                          {tag.name}: <b className="text-foreground tabular-nums">{item.byTag[tag.code]}</b>
+                        </span>
+                      ))}
+                      {item.untagged ? <span>Не звонили: <b className="text-foreground tabular-nums">{item.untagged}</b></span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 overflow-x-auto max-md:hidden">
               <table className="w-full min-w-[520px] text-xs">
                 <thead className="text-muted-foreground">
                   <tr className="text-left">

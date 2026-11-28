@@ -278,6 +278,51 @@ function crmShellClients(user) {
   };
 }
 
+/** Склад: the working «Склад и снабжение» overview, read with the working CRM's own helpers. */
+function crmShellInventory(user) {
+  const text = value => String(value || '').trim();
+  const num = value => Number(value) || 0;
+  const r2 = value => Math.round(num(value) * 100) / 100;
+  const vendorName = id => { const v = id ? (db.vendors || []).find(x => x.id === id) : null; return v ? text(v.name) : ''; };
+  const name = id => { const u = id ? getUser(id) : null; return u ? text(u.name) : ''; };
+  // A project card opens only for someone who can see that project; others get its name without a link.
+  const visible = new Set(visibleOrdersForUser(user).map(order => order.id));
+  const project = id => { const o = id ? getOrder(id) : null; return o ? { id: String(o.id), label: text(warehouseOrderLabel(o)), open: visible.has(o.id) } : null; };
+  const supplies = ensureSupplies();
+  const summary = inventorySummary();
+  // The same sum as the working overview: film left at its lot price plus supplies at their unit cost.
+  const stockValue = Object.values(summary).reduce((s, x) => s + num(x.value), 0) + supplies.reduce((s, x) => s + num(x.qty) * num(x.costPerUnit), 0);
+  const needs = warehouseNeedItems().map(x => {
+    const draft = activeReorderPurchaseRequest(x.kind, x.id, x.vendorId);
+    return { id: `${x.kind}:${x.id}`, kind: x.kind, name: text(x.name), qty: r2(x.qty), min: r2(x.min), target: r2(x.target), unit: text(x.unit), vendor: vendorName(x.vendorId), critical: Boolean(x.critical) || num(x.qty) <= 0, draft: draft ? text(draft.number) : '' };
+  });
+  const purchaseRow = p => {
+    const status = PURCHASE_STATUS[p.status] || PURCHASE_STATUS.requested;
+    return { id: String(p.id), number: text(p.number), createdAt: text(p.createdAt), item: text(p.itemNameSnapshot) || 'Материал', qty: r2(p.qty), unit: text(p.unit), project: project(p.orderId), responsible: name(p.responsibleId), vendor: vendorName(p.vendorId), status: p.status in PURCHASE_STATUS ? p.status : 'requested', statusLabel: status[0], neededBy: text(p.neededBy) };
+  };
+  const purchases = [...(db.purchaseRequests || [])].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const active = purchases.filter(p => !['received', 'cancelled'].includes(p.status));
+  const low = new Map(lowStockItems().map(x => [x.catalogId, x.status]));
+  const preferred = ['smart', 'solar', 'protective', 'privacy', 'decorative'];
+  const film = (db.settings.catalog || []).filter(c => c && filmWarehouseRolls(c.id).length).map(c => {
+    const stats = warehouseCatalogStockStats(c.id);
+    const category = canonicalCatalogCategory(c.category) || text(c.category);
+    return { id: String(c.id), name: text(catalogLabel(c)), category, categoryLabel: category ? text(catLabel(category)) : 'Прочее', rolls: stats.rolls, lengthM: r2(stats.lengthM), sqft: Math.round(stats.availableSqft), status: low.get(c.id) || 'ok', vendor: vendorName(c.vendorId) };
+  }).sort((a, b) => {
+    const ai = preferred.indexOf(a.category), bi = preferred.indexOf(b.category);
+    return ((ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)) || a.categoryLabel.localeCompare(b.categoryLabel, 'ru') || a.name.localeCompare(b.name, 'ru', { numeric: true });
+  });
+  const supplyRows = supplies.map(s => ({ id: String(s.id), name: text(s.name) || 'Расходник', qty: r2(s.qty), min: s.minQty == null ? null : r2(s.minQty), unit: text(supplyUnitLabel(s.unit)), location: text(s.location), status: s.minQty != null && num(s.qty) <= num(s.minQty) ? (num(s.qty) <= 0 ? 'critical' : 'low') : 'ok' }))
+    .sort((a, b) => (a.status === 'ok') - (b.status === 'ok') || a.name.localeCompare(b.name, 'ru'));
+  const tools = ensureTools().map(t => ({ id: String(t.id), name: text(t.name) || 'Инструмент', number: text(t.invNumber), condition: text(toolConditionInfo(t.condition).label), problem: t.condition !== 'good', tone: t.condition === 'good' ? 'ok' : t.condition === 'worn' ? 'warn' : 'danger', holder: name(t.holderId) }));
+  const movements = (db.inventoryMovements || []).slice(0, 30).map(m => ({ id: String(m.id), at: text(m.at), receipt: m.direction === 'receipt', item: text(m.itemName) || 'Материал', qty: r2(m.qty), unit: text(m.unit), project: project(m.orderId), who: name(m.createdBy) || name(m.responsibleId) }));
+  return {
+    user: crmShellUser(user),
+    kpi: { stockValue: Math.round(stockValue), needs: needs.length, out: needs.filter(x => x.qty <= 0).length, active: active.length },
+    needs, active: active.map(purchaseRow), purchasesTotal: purchases.length, film, supplies: supplyRows, tools, movements,
+  };
+}
+
 /** Entry point of the server calculation: one workspace in, one JSON model out. */
 /** Tasks: the working «Задачи» section's own list (renderTasksView), with each due day in the viewer's time zone. */
 function crmShellTasks(user) {
@@ -344,5 +389,6 @@ function crmShellRun(input) {
   if (request.model === 'calendar') return JSON.stringify(crmShellCalendar(user, request.from, request.to));
   if (request.model === 'clients') return JSON.stringify(crmShellClients(user));
   if (request.model === 'tasks') return JSON.stringify(crmShellTasks(user));
+  if (request.model === 'inventory') return JSON.stringify(crmShellInventory(user));
   return JSON.stringify({ error: 'unknown_model' });
 }
