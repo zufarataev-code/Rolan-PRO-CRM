@@ -5,10 +5,12 @@
 
 type Row = Record<string, any>;
 export type VisitType = "consultation" | "measure" | "install";
+export type VisitCrewMember = { name: string; role: string; photo: string | null };
 export type PublicVisit = {
   type: VisitType;
   at: string;
   address: string;
+  crew?: VisitCrewMember[];
   pending: { type: "reschedule" | "cancel"; requested_at: string | null; created_at: string } | null;
 };
 
@@ -90,3 +92,24 @@ export function applyVisitChange(payload: Row, orderId: string, input: VisitChan
   return { ...visit, address: orderAddress(order, client), pending: pendingRequest(order, visit.type) };
 }
 
+
+const ROLE_TITLE: Record<string, string> = { measurer: "Замерщик", installer: "Специалист по установке", manager: "Менеджер", owner: "Руководитель" };
+
+/** Who comes to the client: the surveyor for a measurement, the crew for an installation (Owner, 2026-11-27). */
+export function visitCrewFromPayload(payload: Row, orderId: string, type: VisitType): VisitCrewMember[] {
+  const order = (Array.isArray(payload?.orders) ? payload.orders : []).find((item: Row) => item?.id === orderId);
+  if (!order) return [];
+  const ids: string[] = type === "install"
+    ? (Array.isArray(order.installerIds) ? order.installerIds : [])
+    : type === "measure" ? [order.measurerId] : [order.managerId];
+  const users = Array.isArray(payload.users) ? payload.users : [];
+  return [...new Set(ids.filter(Boolean).map(String))]
+    .map(id => users.find((user: Row) => String(user?.id) === id))
+    .filter((user: Row | undefined): user is Row => !!user && user.active !== false)
+    .map(user => ({
+      name: String(user.name || "").split(" ")[0] || "RolanPRO",
+      role: ROLE_TITLE[String(user.role)] || "RolanPRO",
+      // Only a picture the browser can show without a staff sign-in.
+      photo: typeof user.photo === "string" && /^(data:image\/|https:\/\/)/.test(user.photo) ? user.photo : null,
+    }));
+}

@@ -6,6 +6,7 @@ type Visit = {
   type: "consultation" | "measure" | "install";
   at: string;
   address: string;
+  crew?: Array<{ name: string; role: string; photo: string | null }>;
   pending: { type: "reschedule" | "cancel"; requested_at: string | null; created_at: string } | null;
 };
 
@@ -23,8 +24,10 @@ function localInputValue(iso: string) {
 
 // Owner, 2026-11-01: the client sees the next visit on the proposal page and
 // asks to move or cancel it here; the manager confirms in the CRM.
-export function PublicVisitCard({ accessToken, language }: { accessToken: string; language: "ru" | "en" }) {
+export function PublicVisitCard({ accessToken, language, apiPath, standalone = false }: { accessToken: string; language: "ru" | "en"; apiPath?: string; standalone?: boolean }) {
   const ru = language === "ru";
+  const endpoint = apiPath || `/api/public/proposals/${encodeURIComponent(accessToken)}/visit`;
+  const [loaded, setLoaded] = useState(false);
   const [visit, setVisit] = useState<Visit | null>(null);
   const [mode, setMode] = useState<"" | "reschedule" | "cancel">("");
   const [when, setWhen] = useState("");
@@ -34,14 +37,18 @@ export function PublicVisitCard({ accessToken, language }: { accessToken: string
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/public/proposals/${encodeURIComponent(accessToken)}/visit`)
+    fetch(endpoint, { cache: "no-store" })
       .then(response => (response.ok ? response.json() : null))
       .then(payload => { if (alive) setVisit(payload?.data?.visit || null); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
-  }, [accessToken]);
+  }, [endpoint]);
 
-  if (!visit) return null;
+  if (!visit) {
+    if (!standalone || !loaded) return null;
+    return <section className="proposal-section"><h2 style={{ margin: 0 }}>{ru ? "Сейчас визитов не запланировано" : "No visit is scheduled right now"}</h2><p style={{ opacity: 0.75 }}>{ru ? "Менеджер RolanPRO свяжется с вами." : "Your RolanPRO manager will contact you."}</p></section>;
+  }
   const title = TITLES[visit.type][language];
   const at = new Date(visit.at).toLocaleString(ru ? "ru-RU" : "en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -52,7 +59,7 @@ export function PublicVisitCard({ accessToken, language }: { accessToken: string
     if (mode === "reschedule" && !when) return setError(ru ? "Выберите новое удобное время." : "Choose a new time that suits you.");
     setBusy(true);
     try {
-      const response = await fetch(`/api/public/proposals/${encodeURIComponent(accessToken)}/visit`, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: mode, reason, requested_at: mode === "reschedule" ? new Date(when).toISOString() : null }),
@@ -76,6 +83,20 @@ export function PublicVisitCard({ accessToken, language }: { accessToken: string
       <h2 style={{ margin: "6px 0 4px" }}>{title}</h2>
       <div style={{ fontSize: 17, fontWeight: 700 }}>{at}</div>
       {visit.address ? <div style={{ opacity: 0.75, marginTop: 4 }}>{visit.address}</div> : null}
+      {visit.crew?.length ? (
+        <div style={{ display: "grid", gap: 10, marginTop: 14 }} data-visit-crew>
+          <div style={{ fontWeight: 700 }}>{ru ? "К вам приедет" : "Who is coming"}</div>
+          {visit.crew.map((person, index) => (
+            <div key={index} style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, border: "1px solid #e2e8f0", background: "white" }}>
+              {person.photo
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={person.photo} alt={person.name} style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }} />
+                : <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#dcfce7", color: "#166534", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 22 }}>{(person.name || "R")[0]}</div>}
+              <div><div style={{ fontWeight: 800, fontSize: 17 }}>{person.name}</div><div style={{ opacity: 0.7 }}>{ru ? person.role : ({ "Замерщик": "Measurement specialist", "Специалист по установке": "Installation specialist", "Менеджер": "Manager", "Руководитель": "Owner" } as Record<string, string>)[person.role] || person.role}</div></div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {visit.pending ? (
         <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "#fffbeb", color: "#92400e" }}>
           {visit.pending.type === "cancel"
